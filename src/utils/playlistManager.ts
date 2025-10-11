@@ -241,8 +241,8 @@ export class PlaylistManager {
           bValue = b.album.toLowerCase();
           break;
         case 'dateAdded':
-          aValue = a.dateAdded.getTime();
-          bValue = b.dateAdded.getTime();
+          aValue = new Date(a.dateAdded).getTime();
+          bValue = new Date(b.dateAdded).getTime();
           break;
         case 'fileName':
           aValue = a.filePath.split('/').pop()?.toLowerCase() || '';

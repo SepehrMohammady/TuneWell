@@ -27,9 +27,10 @@ export interface AudioTrack {
   bitDepth?: number;
   filePath: string;
   fileSize: number;
-  dateAdded: Date;
+  dateAdded: string; // Changed from Date to string for serialization
   playCount: number;
   isFavorite: boolean;
+  albumArt?: string; // Optional album art URI
 }
 
 export interface Playlist {

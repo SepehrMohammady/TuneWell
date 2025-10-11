@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp, StackScreenProps } from '@react-navigation/stack';
@@ -13,6 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import Slider from '@react-native-community/slider';
 import { RootStackParamList, AudioTrack } from '../types/navigation';
+import { useMusicLibrary } from '../contexts/MusicLibraryContext';
+import { useEQ } from '../contexts/EQContext';
+import { isFormatSupported, isDSDFormat, getFormatCompatibilityMessage, calculateDuration } from '../utils/audioUtils';
 
 type PlayerScreenProps = StackScreenProps<RootStackParamList, 'Player'>;
 
@@ -20,12 +24,18 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { track, playlist } = route.params || {};
   
+  const { library, setCurrentTrack, setPlaying, setPosition, incrementPlayCount, toggleFavorite: toggleTrackFavorite, addTrack } = useMusicLibrary();
+  const { eqState } = useEQ();
+  
   const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentTrack, setCurrentTrack] = useState<AudioTrack | null>(track || null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Use library state instead of local state
+  const currentTrack = library.currentTrack || track;
+  const isPlaying = library.isPlaying;
+  const position = library.currentPosition;
 
   useEffect(() => {
     if (currentTrack) {
@@ -41,11 +51,28 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
   const loadAudio = async () => {
     try {
       setIsLoading(true);
+      setError(null);
+      
       if (sound) {
         await sound.unloadAsync();
       }
 
       if (!currentTrack) return;
+
+      // Check format compatibility
+      const compatibilityMessage = getFormatCompatibilityMessage(currentTrack.format);
+      if (compatibilityMessage) {
+        setError(compatibilityMessage);
+        setIsLoading(false);
+        Alert.alert('Unsupported Format', compatibilityMessage);
+        return;
+      }
+
+      // Set current track in library if not already there
+      if (!library.tracks.find(t => t.uri === currentTrack.uri)) {
+        await addTrack(currentTrack);
+      }
+      setCurrentTrack(currentTrack);
 
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: currentTrack.uri },
@@ -57,7 +84,9 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
       setIsLoading(false);
     } catch (error) {
       console.error('Error loading audio:', error);
-      Alert.alert('Error', 'Could not load audio file');
+      const errorMessage = error instanceof Error ? error.message : 'Could not load audio file';
+      setError(`Loading failed: ${errorMessage}`);
+      Alert.alert('Error', errorMessage);
       setIsLoading(false);
     }
   };
@@ -66,7 +95,10 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
     if (status.isLoaded) {
       setPosition(status.positionMillis || 0);
       setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying || false);
+      setPlaying(status.isPlaying || false);
+    }
+    if (status.didJustFinish) {
+      handleTrackEnd();
     }
   };
 
@@ -99,9 +131,18 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const toggleFavorite = () => {
-    // TODO: Implement favorite toggle functionality
-    Alert.alert('Feature Coming Soon', 'Favorite functionality will be implemented soon.');
+  const handleToggleFavorite = () => {
+    if (currentTrack) {
+      toggleTrackFavorite(currentTrack.id);
+    }
+  };
+
+  const handleTrackEnd = async () => {
+    if (currentTrack) {
+      await incrementPlayCount(currentTrack.id);
+    }
+    // Auto-play next track if in playlist
+    // TODO: Implement next track functionality
   };
 
   if (!currentTrack) {
@@ -122,26 +163,50 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Error Display */}
+      {error && (
+        <View style={styles.errorContainer}>
+          <Ionicons name="warning" size={24} color="#ff4444" />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+
       <View style={styles.artworkContainer}>
         <View style={styles.artwork}>
-          <Ionicons name="musical-notes" size={80} color="#007AFF" />
+          {currentTrack.albumArt ? (
+            <Image 
+              source={{ uri: currentTrack.albumArt }} 
+              style={styles.albumArtImage}
+              onError={() => console.log('Failed to load album art')}
+            />
+          ) : (
+            <View style={styles.defaultArtwork}>
+              <Ionicons name="musical-notes" size={80} color="#007AFF" />
+              <Text style={styles.noArtworkText}>No Album Art</Text>
+            </View>
+          )}
         </View>
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.trackInfo}>
         <Text style={styles.title} numberOfLines={2}>
-          {currentTrack.title}
+          {currentTrack.title || 'Unknown Title'}
         </Text>
         <Text style={styles.artist} numberOfLines={1}>
-          {currentTrack.artist}
+          {currentTrack.artist || 'Unknown Artist'}
         </Text>
         <Text style={styles.album} numberOfLines={1}>
-          {currentTrack.album}
+          {currentTrack.album || 'Unknown Album'}
         </Text>
         <View style={styles.formatInfo}>
           <Text style={styles.format}>
-            {currentTrack.format.toUpperCase()}
+            {(currentTrack.format || 'unknown').toUpperCase()}
           </Text>
           {currentTrack.bitrate && (
             <Text style={styles.bitrate}>
@@ -176,7 +241,7 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
       <View style={styles.controlsContainer}>
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={toggleFavorite}
+          onPress={handleToggleFavorite}
         >
           <Ionicons 
             name={currentTrack.isFavorite ? "heart" : "heart-outline"} 
@@ -187,7 +252,7 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
 
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={() => {/* TODO: Previous track */}}
+          onPress={() => Alert.alert('Previous Track', 'Previous track functionality will be available with playlist support')}
         >
           <Ionicons name="play-skip-back" size={32} color="#ffffff" />
         </TouchableOpacity>
@@ -195,7 +260,7 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
         <TouchableOpacity
           style={[styles.controlButton, styles.playButton]}
           onPress={togglePlayback}
-          disabled={isLoading}
+          disabled={isLoading || !sound}
         >
           <Ionicons 
             name={isPlaying ? "pause" : "play"} 
@@ -206,7 +271,7 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
 
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={() => {/* TODO: Next track */}}
+          onPress={() => Alert.alert('Next Track', 'Next track functionality will be available with playlist support')}
         >
           <Ionicons name="play-skip-forward" size={32} color="#ffffff" />
         </TouchableOpacity>
@@ -218,7 +283,7 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
           <Ionicons name="options-outline" size={24} color="#ffffff" />
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -346,6 +411,51 @@ const styles = StyleSheet.create({
     height: 70,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  errorContainer: {
+    backgroundColor: '#330000',
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 15,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#ff4444',
+    fontSize: 14,
+    marginLeft: 10,
+    flex: 1,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+  },
+  loadingText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  albumArtImage: {
+    width: 280,
+    height: 280,
+    borderRadius: 12,
+  },
+  defaultArtwork: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noArtworkText: {
+    color: '#666666',
+    fontSize: 12,
+    marginTop: 8,
   },
 });
 

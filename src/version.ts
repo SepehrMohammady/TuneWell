@@ -6,7 +6,7 @@
 export const APP_VERSION = {
   major: 0,
   minor: 0,
-  patch: 1,
+  patch: 2,
   get full(): string {
     return `${this.major}.${this.minor}.${this.patch}`;
   },
@@ -16,6 +16,22 @@ export const APP_VERSION = {
 };
 
 export const VERSION_HISTORY = [
+  {
+    version: '0.0.2',
+    date: '2025-10-11',
+    changes: [
+      'Enhanced metadata extraction system',
+      'Advanced filename pattern matching for collaborations',
+      'Support for "Artist1, Artist2 - Title" format',
+      'Comprehensive quality information extraction',
+      'Jacob\'s Note specific implementation',
+      'MX Player-level metadata accuracy',
+      'Multi-source extraction with fallbacks',
+      'Console logging for debugging metadata',
+      'Realistic demo tracks with proper metadata',
+      'Test suite for collaboration formats'
+    ]
+  },
   {
     version: '0.0.1',
     date: '2025-10-11',

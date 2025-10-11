@@ -13,12 +13,17 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { StackScreenProps, StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, AudioTrack, Playlist } from '../types/navigation';
+import { useMusicLibrary } from '../contexts/MusicLibraryContext';
+import { getMockPlaylist } from '../utils/mockAudio';
+import { createEnhancedDemoTracks } from '../utils/enhancedMetadata';
 
 type PlaylistScreenProps = StackScreenProps<RootStackParamList, 'Playlist'>;
 
 const PlaylistScreen: React.FC<PlaylistScreenProps> = ({ route }) => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { type, playlistId } = route.params || {};
+  
+  const { library, getFavorites, getMostPlayed, getRecentlyAdded } = useMusicLibrary();
   
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [tracks, setTracks] = useState<AudioTrack[]>([]);
@@ -59,8 +64,34 @@ const PlaylistScreen: React.FC<PlaylistScreenProps> = ({ route }) => {
         setPlaylists(mockPlaylists);
       } else {
         // Load tracks for specific playlist type
-        const mockTracks: AudioTrack[] = getMockTracksForType(type);
-        setTracks(mockTracks);
+        let playlistTracks: AudioTrack[] = [];
+        
+        if (library.tracks.length > 0) {
+          // Use real library data
+          switch (type) {
+            case 'favorites':
+              playlistTracks = getFavorites();
+              break;
+            case 'mostPlayed':
+              playlistTracks = getMostPlayed();
+              break;
+            case 'recentlyAdded':
+              playlistTracks = getRecentlyAdded();
+              break;
+            default:
+              playlistTracks = library.tracks;
+          }
+        } else {
+          // Use enhanced demo data with realistic metadata
+          playlistTracks = createEnhancedDemoTracks();
+          if (type === 'favorites') {
+            playlistTracks = playlistTracks.filter(track => track.isFavorite);
+          } else if (type === 'mostPlayed') {
+            playlistTracks = playlistTracks.sort((a, b) => b.playCount - a.playCount);
+          }
+        }
+        
+        setTracks(playlistTracks);
       }
     } catch (error) {
       console.error('Error loading content:', error);
@@ -85,9 +116,10 @@ const PlaylistScreen: React.FC<PlaylistScreenProps> = ({ route }) => {
         bitDepth: 16,
         filePath: '/music/sample1.flac',
         fileSize: 52428800,
-        dateAdded: new Date(),
+        dateAdded: new Date().toISOString(),
         playCount: 15,
         isFavorite: true,
+        albumArt: undefined,
       },
       {
         id: '2',
@@ -101,9 +133,10 @@ const PlaylistScreen: React.FC<PlaylistScreenProps> = ({ route }) => {
         sampleRate: 2822400,
         filePath: '/music/sample2.dsf',
         fileSize: 104857600,
-        dateAdded: new Date(Date.now() - 86400000),
+        dateAdded: new Date(Date.now() - 86400000).toISOString(),
         playCount: 8,
         isFavorite: false,
+        albumArt: undefined,
       },
     ];
 
@@ -113,7 +146,7 @@ const PlaylistScreen: React.FC<PlaylistScreenProps> = ({ route }) => {
       case 'mostPlayed':
         return baseTracks.sort((a, b) => b.playCount - a.playCount);
       case 'recentlyAdded':
-        return baseTracks.sort((a, b) => b.dateAdded.getTime() - a.dateAdded.getTime());
+        return baseTracks.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime());
       default:
         return baseTracks;
     }

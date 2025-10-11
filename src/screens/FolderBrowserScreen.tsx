@@ -14,6 +14,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { RootStackParamList, AudioTrack, SortOptions } from '../types/navigation';
+import { createRealAudioTrackFromFile } from '../utils/mockAudio';
+import { useMusicLibrary } from '../contexts/MusicLibraryContext';
+import { createAudioTrackWithMetadata } from '../utils/metadataExtractor';
+import { createEnhancedAudioTrack } from '../utils/enhancedMetadata';
+import { createAudioTrackWithComprehensiveMetadata } from '../utils/advancedMetadata';
 
 type FolderBrowserScreenProps = StackScreenProps<RootStackParamList, 'FolderBrowser'>;
 
@@ -31,6 +36,8 @@ const SUPPORTED_FORMATS = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'dsf', 'dff', 'og
 const FolderBrowserScreen: React.FC<FolderBrowserScreenProps> = ({ route }) => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { path } = route.params || {};
+  
+  const { addTrack, setCurrentTrack } = useMusicLibrary();
   
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -115,56 +122,102 @@ const FolderBrowserScreen: React.FC<FolderBrowserScreenProps> = ({ route }) => {
     });
   };
 
-  const handleFilePress = (file: FileItem) => {
+  const handleItemPress = async (file: FileItem) => {
     if (file.type === 'folder') {
       // Navigate to folder contents
       navigation.navigate('FolderBrowser', { path: file.uri });
     } else if (file.type === 'audio') {
-      // Create AudioTrack and navigate to player
-      const audioTrack: AudioTrack = {
-        id: file.id,
-        title: file.name.replace(/\.[^/.]+$/, ''), // Remove extension
-        artist: 'Unknown Artist',
-        album: 'Unknown Album',
-        duration: 0, // Will be loaded when playing
-        uri: file.uri,
-        format: file.name.split('.').pop() || 'unknown',
-        filePath: file.uri,
-        fileSize: file.size || 0,
-        dateAdded: file.dateAdded || new Date(),
-        playCount: 0,
-        isFavorite: false,
-      };
+      try {
+        console.log('🎵 Creating track with comprehensive metadata extraction...');
+        
+        // Use comprehensive metadata extraction for better results
+        const audioTrack = await createAudioTrackWithComprehensiveMetadata(
+          file.uri, 
+          file.name, 
+          file.size
+        );
+        
+        console.log('✅ Created track:', audioTrack);
+        
+        // Add to library and set as current
+        await addTrack(audioTrack);
+        setCurrentTrack(audioTrack);
 
-      navigation.navigate('Player', { track: audioTrack });
+        navigation.navigate('Player', { track: audioTrack });
+      } catch (error) {
+        console.error('❌ Error creating audio track:', error);
+        Alert.alert('Error', 'Failed to load audio file metadata');
+      }
     }
   };
 
   const handlePickFiles = async () => {
     try {
+      setIsLoading(true);
       const result = await DocumentPicker.getDocumentAsync({
         type: 'audio/*',
         multiple: true,
       });
 
       if (result.canceled) {
+        setIsLoading(false);
         return;
       }
 
-      // Process selected files
-      const newFiles: FileItem[] = result.assets.map((asset, index) => ({
-        id: `picked_${index}`,
-        name: asset.name,
-        uri: asset.uri,
-        type: 'audio' as const,
-        size: asset.size,
-        dateAdded: new Date(),
-      }));
+      // Process selected files with comprehensive metadata extraction
+      const newFiles: FileItem[] = await Promise.all(
+        result.assets.map(async (asset, index) => {
+          try {
+            console.log(`🔍 Processing file: ${asset.name}`);
+            
+            // Use comprehensive metadata extraction for each file
+            const audioTrack = await createAudioTrackWithComprehensiveMetadata(
+              asset.uri, 
+              asset.name, 
+              asset.size
+            );
+            
+            console.log(`✅ Extracted metadata: ${audioTrack.artist} - ${audioTrack.title}`);
+            
+            // Add to library immediately
+            await addTrack(audioTrack);
+            
+            return {
+              id: `picked_${index}`,
+              name: asset.name,
+              uri: asset.uri,
+              type: 'audio' as const,
+              size: asset.size,
+              dateAdded: new Date(),
+            };
+          } catch (error) {
+            console.warn(`❌ Failed to process ${asset.name}:`, error);
+            // Still add the file even if metadata extraction fails
+            return {
+              id: `picked_${index}`,
+              name: asset.name,
+              uri: asset.uri,
+              type: 'audio' as const,
+              size: asset.size,
+              dateAdded: new Date(),
+            };
+          }
+        })
+      );
 
       setFiles(prev => [...prev, ...newFiles]);
+      
+      if (newFiles.length > 0) {
+        Alert.alert(
+          'Success', 
+          `Added ${newFiles.length} audio file${newFiles.length > 1 ? 's' : ''} to your library`
+        );
+      }
     } catch (error) {
       console.error('Error picking files:', error);
       Alert.alert('Error', 'Could not access files');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -200,7 +253,7 @@ const FolderBrowserScreen: React.FC<FolderBrowserScreenProps> = ({ route }) => {
           styles.fileItem,
           !isSupported && item.type === 'audio' && styles.unsupportedFile,
         ]}
-        onPress={() => handleFilePress(item)}
+        onPress={() => handleItemPress(item)}
         disabled={item.type === 'audio' && !isSupported}
       >
         <View style={styles.fileIcon}>
