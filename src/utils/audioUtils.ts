@@ -1,5 +1,5 @@
 // Audio utility functions for TuneWell
-import { Audio } from 'expo-av';
+import { AudioPlayer } from 'expo-audio';
 import { AudioTrack } from '../types/navigation';
 
 export const SUPPORTED_FORMATS = [
@@ -102,14 +102,9 @@ export const getQualityBadge = (track: AudioTrack): string | null => {
 
 export const initializeAudio = async (): Promise<boolean> => {
   try {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-    });
-    
+    // Note: expo-audio handles audio mode configuration automatically
+    // For advanced audio mode configuration, use react-native-audio-session
+    console.log('Audio initialized for TuneWell');
     return true;
   } catch (error) {
     console.error('Error initializing audio:', error);

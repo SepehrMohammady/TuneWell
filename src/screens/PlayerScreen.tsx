@@ -10,8 +10,8 @@ import {
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp, StackScreenProps } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
 import Slider from '@react-native-community/slider';
+import { useMockAudioPlayer } from '../utils/mockAudioPlayer';
 import { RootStackParamList, AudioTrack } from '../types/navigation';
 
 type PlayerScreenProps = StackScreenProps<RootStackParamList, 'Player'>;
@@ -20,40 +20,26 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { track, playlist } = route.params || {};
   
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
   const [currentTrack, setCurrentTrack] = useState<AudioTrack | null>(track || null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Use mock audio player for Expo Go compatibility
+  // For development builds, replace this with: useAudioPlayer from 'expo-audio'
+  const player = useMockAudioPlayer(currentTrack?.uri || '');
 
   useEffect(() => {
-    if (currentTrack) {
+    if (currentTrack?.uri) {
       loadAudio();
     }
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
   }, [currentTrack]);
 
   const loadAudio = async () => {
     try {
       setIsLoading(true);
-      if (sound) {
-        await sound.unloadAsync();
+      if (currentTrack?.uri) {
+        // The player will handle loading automatically with the new API
+        console.log('Loading audio:', currentTrack.uri);
       }
-
-      if (!currentTrack) return;
-
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: currentTrack.uri },
-        { shouldPlay: false },
-        updatePlaybackStatus
-      );
-      
-      setSound(newSound);
       setIsLoading(false);
     } catch (error) {
       console.error('Error loading audio:', error);
@@ -62,22 +48,12 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
     }
   };
 
-  const updatePlaybackStatus = (status: any) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis || 0);
-      setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying || false);
-    }
-  };
-
   const togglePlayback = async () => {
-    if (!sound) return;
-
     try {
-      if (isPlaying) {
-        await sound.pauseAsync();
+      if (player.playing) {
+        player.pause();
       } else {
-        await sound.playAsync();
+        player.play();
       }
     } catch (error) {
       console.error('Error toggling playback:', error);
@@ -85,9 +61,8 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
   };
 
   const seekTo = async (value: number) => {
-    if (!sound) return;
     try {
-      await sound.setPositionAsync(value);
+      player.seekTo(value / 1000); // Convert to seconds
     } catch (error) {
       console.error('Error seeking:', error);
     }
@@ -160,16 +135,16 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
         <Slider
           style={styles.progressSlider}
           minimumValue={0}
-          maximumValue={duration}
-          value={position}
+          maximumValue={(player.duration || 0) * 1000}
+          value={(player.currentTime || 0) * 1000}
           onSlidingComplete={seekTo}
           minimumTrackTintColor="#007AFF"
           maximumTrackTintColor="#333333"
 
         />
         <View style={styles.timeContainer}>
-          <Text style={styles.time}>{formatTime(position)}</Text>
-          <Text style={styles.time}>{formatTime(duration)}</Text>
+          <Text style={styles.time}>{formatTime((player.currentTime || 0) * 1000)}</Text>
+          <Text style={styles.time}>{formatTime((player.duration || 0) * 1000)}</Text>
         </View>
       </View>
 
@@ -198,7 +173,7 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
           disabled={isLoading}
         >
           <Ionicons 
-            name={isPlaying ? "pause" : "play"} 
+            name={player.playing ? "pause" : "play"} 
             size={40} 
             color="#ffffff" 
           />

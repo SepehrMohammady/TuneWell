@@ -12,7 +12,6 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
-import { Audio } from 'expo-av';
 import { RootStackParamList, AudioTrack } from '../types/navigation';
 import { APP_VERSION } from '../version';
 
@@ -29,13 +28,8 @@ const HomeScreen: React.FC = () => {
 
   const requestAudioPermissions = async () => {
     try {
-      const audioPermission = await Audio.requestPermissionsAsync();
-      if (!audioPermission.granted) {
-        Alert.alert(
-          'Permission Required',
-          'TuneWell needs audio permissions to play music files.'
-        );
-      }
+      // Note: expo-audio handles audio permissions automatically when playing
+      console.log('Audio permissions will be requested automatically when playing audio');
 
       if (permissionResponse?.status !== 'granted') {
         const mediaPermission = await requestPermission();

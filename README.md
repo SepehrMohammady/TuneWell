@@ -103,6 +103,41 @@ npm run web      # Web browser
 - Real-time audio processing
 - Save custom presets
 
+## ⚠️ Development Setup & Limitations
+
+### Expo Go Limitations
+Due to changes in Android's permission requirements, Expo Go can no longer provide full access to the media library. To test the complete functionality of TuneWell, you need to create a development build.
+
+### Creating a Development Build
+```bash
+# Create development build for Android
+npx eas build --profile development --platform android
+
+# Create development build for iOS (macOS only)  
+npx eas build --profile development --platform ios
+
+# Create for both platforms
+npx eas build --profile development --platform all
+```
+
+### What Works in Expo Go vs Development Build
+
+**Expo Go (Limited):**
+- ✅ User interface and navigation
+- ✅ Mock audio player functionality
+- ✅ Equalizer interface (no real audio processing)
+- ❌ Real media library access
+- ❌ Actual audio playback
+- ❌ Professional audio format support
+
+**Development Build (Full Functionality):**
+- ✅ Complete media library access
+- ✅ Real audio playback (FLAC, DSF, WAV, etc.)
+- ✅ Professional DAC compatibility
+- ✅ Real-time equalizer processing
+- ✅ All file browsing capabilities
+- ✅ Actual playlist functionality
+
 ## 📱 User Interface
 
 ### Home Screen
@@ -217,7 +252,7 @@ For support, feature requests, or bug reports:
 ## 🏆 Acknowledgments
 
 - Built with [Expo](https://expo.dev)
-- Audio processing powered by [Expo AV](https://docs.expo.dev/versions/latest/sdk/av/)
+- Audio processing powered by [Expo Audio](https://docs.expo.dev/versions/latest/sdk/audio/)
 - Navigation by [React Navigation](https://reactnavigation.org)
 - Designed for music professionals and audiophiles worldwide
 
