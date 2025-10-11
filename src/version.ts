@@ -6,7 +6,7 @@
 export const APP_VERSION = {
   major: 0,
   minor: 0,
-  patch: 3,
+  patch: 4,
   get full(): string {
     return `${this.major}.${this.minor}.${this.patch}`;
   },
@@ -16,6 +16,21 @@ export const APP_VERSION = {
 };
 
 export const VERSION_HISTORY = [
+  {
+    version: '0.0.4',
+    date: '2025-10-12',
+    changes: [
+      'Successfully built first Android APK (debug build)',
+      'Configured EAS Build profiles for APK generation',
+      'Removed problematic react-native-track-player dependency',
+      'Fixed Android build configuration and SDK setup',
+      'Added local.properties for Android SDK location',
+      'Increased Gradle memory allocation (4GB heap, 1GB metaspace)',
+      'Updated Android package configuration (com.sepehrmohammady.tunewell)',
+      'Added comprehensive APK build instructions to README',
+      'Version management and GitHub synchronization'
+    ]
+  },
   {
     version: '0.0.3',
     date: '2025-10-11',

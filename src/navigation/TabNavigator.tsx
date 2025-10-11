@@ -124,14 +124,6 @@ const TabNavigator: React.FC = () => {
           headerShown: true,
         }}
       />
-      <Tab.Screen 
-        name="Equalizer" 
-        component={EqualizerScreen}
-        options={{
-          title: 'Equalizer',
-          headerShown: true,
-        }}
-      />
     </Tab.Navigator>
   );
 };

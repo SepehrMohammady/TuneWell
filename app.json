@@ -2,7 +2,7 @@
   "expo": {
     "name": "TuneWell",
     "slug": "tunewell",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "owner": "sepehrmohammady",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -27,7 +27,8 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_AUDIO",
         "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "package": "com.sepehrmohammady.tunewell"
     },
     "web": {
       "favicon": "./assets/favicon.png"

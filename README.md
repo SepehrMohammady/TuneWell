@@ -1,6 +1,6 @@
 # TuneWell - Professional Music Player
 
-![TuneWell Logo](https://img.shields.io/badge/TuneWell-v0.0.2-blue?style=for-the-badge&logo=music)
+![TuneWell Logo](https://img.shields.io/badge/TuneWell-v0.0.4-blue?style=for-the-badge&logo=music)
 
 TuneWell is a professional music player application built with Expo React Native, designed specifically for music enthusiasts and professionals who use DACs and high-end audio equipment. Features advanced metadata extraction, mood categorization, and tabbed navigation for an enhanced music experience.
 
@@ -156,9 +156,39 @@ npm run type-check # Run TypeScript type checking
 npm run build      # Build for production
 ```
 
+### Building APK
+```bash
+# Install EAS CLI (if not already installed)
+npm install -g @expo/eas-cli
+
+# Login to your Expo account
+eas login
+
+# Build preview APK (internal testing)
+eas build --platform android --profile preview
+
+# Build production APK
+eas build --platform android --profile production
+
+# Build development client (with full native modules)
+eas build --platform android --profile development
+
+# Alternative: Local Gradle build (when EAS build limits reached)
+cd android
+gradlew assembleDebug  # For debug APK
+gradlew assembleRelease  # For release APK
+```
+
+### APK Build Status
+- ✅ **Debug APK**: Successfully built (v0.0.4)
+- ✅ **Local Build**: Configured and tested
+- ✅ **EAS Profiles**: Preview, Production, Development
+- 📱 **Package**: com.sepehrmohammady.tunewell
+- 🔧 **Build Tools**: Gradle 8.14.3, Android SDK 36
+
 ### Version Management
 TuneWell uses centralized version management:
-- Current version: **0.0.1**
+- Current version: **0.0.4**
 - Semantic versioning (MAJOR.MINOR.PATCH)
 - Automatic version tracking in `src/version.ts`
 - Version history with changelog
@@ -225,7 +255,7 @@ For support, feature requests, or bug reports:
 
 ---
 
-**TuneWell v0.0.1** - Professional Audio Experience for Music Enthusiasts
+**TuneWell v0.0.4** - Professional Audio Experience for Music Enthusiasts
 
 ![Professional Audio](https://img.shields.io/badge/Professional-Audio-green)
 ![React Native](https://img.shields.io/badge/React_Native-blue)
