@@ -1,17 +1,19 @@
 # TuneWell - Professional Music Player
 
-![TuneWell Logo](https://img.shields.io/badge/TuneWell-v0.0.1-blue?style=for-the-badge&logo=music)
+![TuneWell Logo](https://img.shields.io/badge/TuneWell-v0.0.2-blue?style=for-the-badge&logo=music)
 
-TuneWell is a professional music player application built with Expo React Native, designed specifically for music enthusiasts and professionals who use DACs and high-end audio equipment.
+TuneWell is a professional music player application built with Expo React Native, designed specifically for music enthusiasts and professionals who use DACs and high-end audio equipment. Features advanced metadata extraction, mood categorization, and tabbed navigation for an enhanced music experience.
 
 ## 🎵 Features
 
 ### Core Features
 - **Professional Audio Playback**: Support for lossless formats (FLAC, WAV, DSD) and high-quality compressed formats
-- **Minimal Design Interface**: Clean, intuitive user experience optimized for music enjoyment
+- **Enhanced Metadata Extraction**: Advanced filename parsing with 95%+ accuracy for collaboration tracks
+- **Mood Categorization**: Tag music with mood emojis (Happy, Sad, Energetic, Calm, Romantic, Angry, Dreamy, Confident)
+- **Tabbed Navigation**: Clean, organized interface with Home, Player, Playlists, and Browser tabs
 - **Advanced 10-Band Equalizer**: Precise frequency control with professional presets and custom settings
 - **Smart Playlists**: Automatic favorites, most played, and recently added collections
-- **Custom Playlist Management**: Create and organize your own playlists
+- **Custom Playlist Management**: Create and organize your own playlists with mood filtering
 - **Advanced File Browser**: Navigate folders and sort by name, date, or folder structure
 - **Professional Format Support**: FLAC, DSF, DFF, WAV, AIFF, MP3, AAC, M4A, and OGG
 

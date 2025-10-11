@@ -2,7 +2,7 @@
   "expo": {
     "name": "TuneWell",
     "slug": "tunewell",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "owner": "sepehrmohammady",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

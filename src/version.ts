@@ -6,7 +6,7 @@
 export const APP_VERSION = {
   major: 0,
   minor: 0,
-  patch: 2,
+  patch: 3,
   get full(): string {
     return `${this.major}.${this.minor}.${this.patch}`;
   },
@@ -16,6 +16,22 @@ export const APP_VERSION = {
 };
 
 export const VERSION_HISTORY = [
+  {
+    version: '0.0.3',
+    date: '2025-10-11',
+    changes: [
+      'Redesigned Home screen with tabbed navigation',
+      'Removed Test Metadata functionality',
+      'Added mood categorization system with 8 mood types',
+      'Implemented mood selector in Now Playing screen',
+      'Added mood chips display for tagged tracks',
+      'Created bottom tab navigation with Home, Player, Playlists, Browse, Equalizer',
+      'Simplified Home screen with clean stats and recent tracks',
+      'Enhanced PlayerScreen with emoji mood selection',
+      'Added mood filtering and categorization for future playlist features',
+      'Consolidated documentation to single README.md'
+    ]
+  },
   {
     version: '0.0.2',
     date: '2025-10-11',

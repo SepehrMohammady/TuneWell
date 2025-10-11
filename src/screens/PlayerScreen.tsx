@@ -7,13 +7,15 @@ import {
   Image,
   Alert,
   SafeAreaView,
+  ScrollView,
+  Modal,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp, StackScreenProps } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import Slider from '@react-native-community/slider';
-import { RootStackParamList, AudioTrack } from '../types/navigation';
+import { RootStackParamList, AudioTrack, MoodType, MOOD_OPTIONS } from '../types/navigation';
 import { useMusicLibrary } from '../contexts/MusicLibraryContext';
 import { useEQ } from '../contexts/EQContext';
 import { isFormatSupported, isDSDFormat, getFormatCompatibilityMessage, calculateDuration } from '../utils/audioUtils';
@@ -31,6 +33,7 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showMoodSelector, setShowMoodSelector] = useState(false);
 
   // Use library state instead of local state
   const currentTrack = library.currentTrack || track;
@@ -144,6 +147,87 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
     // Auto-play next track if in playlist
     // TODO: Implement next track functionality
   };
+
+  const toggleMood = async (moodType: MoodType) => {
+    if (!currentTrack) return;
+
+    const currentMoods = currentTrack.moods || [];
+    const isMoodSelected = currentMoods.includes(moodType);
+    
+    let newMoods: MoodType[];
+    if (isMoodSelected) {
+      // Remove mood
+      newMoods = currentMoods.filter(mood => mood !== moodType);
+    } else {
+      // Add mood (limit to 3 moods max)
+      if (currentMoods.length >= 3) {
+        Alert.alert('Mood Limit', 'You can assign up to 3 moods per track');
+        return;
+      }
+      newMoods = [...currentMoods, moodType];
+    }
+
+    // Update the track with new moods
+    const updatedTrack = { ...currentTrack, moods: newMoods };
+    await addTrack(updatedTrack); // This will update existing track
+    setCurrentTrack(updatedTrack);
+  };
+
+  const renderMoodSelector = () => (
+    <Modal
+      visible={showMoodSelector}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowMoodSelector(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.moodSelectorContainer}>
+          <View style={styles.moodSelectorHeader}>
+            <Text style={styles.moodSelectorTitle}>Choose Mood(s)</Text>
+            <TouchableOpacity onPress={() => setShowMoodSelector(false)}>
+              <Ionicons name="close" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          
+          <Text style={styles.moodSubtitle}>
+            Select up to 3 moods that match this track
+          </Text>
+          
+          <ScrollView style={styles.moodOptions}>
+            {MOOD_OPTIONS.map((mood) => {
+              const isSelected = currentTrack?.moods?.includes(mood.type) || false;
+              return (
+                <TouchableOpacity
+                  key={mood.type}
+                  style={[
+                    styles.moodOption,
+                    isSelected && styles.moodOptionSelected
+                  ]}
+                  onPress={() => toggleMood(mood.type)}
+                >
+                  <Text style={styles.moodEmoji}>{mood.emoji}</Text>
+                  <View style={styles.moodInfo}>
+                    <Text style={styles.moodDescription}>{mood.description}</Text>
+                    <Text style={styles.moodVibe}>{mood.musicVibe}</Text>
+                  </View>
+                  {isSelected && (
+                    <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          
+          <TouchableOpacity
+            style={styles.moodDoneButton}
+            onPress={() => setShowMoodSelector(false)}
+          >
+            <Text style={styles.moodDoneButtonText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (!currentTrack) {
     return (
@@ -278,11 +362,39 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
 
         <TouchableOpacity
           style={styles.controlButton}
+          onPress={() => setShowMoodSelector(true)}
+        >
+          <Ionicons name="happy-outline" size={24} color="#ffffff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.controlButton}
           onPress={() => navigation.navigate('Equalizer')}
         >
           <Ionicons name="options-outline" size={24} color="#ffffff" />
         </TouchableOpacity>
       </View>
+
+      {/* Current Track Moods Display */}
+      {currentTrack?.moods && currentTrack.moods.length > 0 && (
+        <View style={styles.moodsDisplay}>
+          <Text style={styles.moodsLabel}>Moods:</Text>
+          <View style={styles.moodsContainer}>
+            {currentTrack.moods.map((moodType) => {
+              const mood = MOOD_OPTIONS.find(m => m.type === moodType);
+              return mood ? (
+                <View key={moodType} style={styles.moodChip}>
+                  <Text style={styles.moodChipEmoji}>{mood.emoji}</Text>
+                  <Text style={styles.moodChipText}>{mood.description.split(' / ')[0]}</Text>
+                </View>
+              ) : null;
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* Modal */}
+      {renderMoodSelector()}
     </SafeAreaView>
   );
 };
@@ -456,6 +568,116 @@ const styles = StyleSheet.create({
     color: '#666666',
     fontSize: 12,
     marginTop: 8,
+  },
+  // Mood Selector Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'flex-end',
+  },
+  moodSelectorContainer: {
+    backgroundColor: '#1C1C1E',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    maxHeight: '80%',
+  },
+  moodSelectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  moodSelectorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  moodSubtitle: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  moodOptions: {
+    marginBottom: 20,
+  },
+  moodOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2C2C2E',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  moodOptionSelected: {
+    backgroundColor: '#007AFF20',
+    borderColor: '#007AFF',
+    borderWidth: 1,
+  },
+  moodEmoji: {
+    fontSize: 24,
+    marginRight: 16,
+  },
+  moodInfo: {
+    flex: 1,
+  },
+  moodDescription: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  moodVibe: {
+    fontSize: 14,
+    color: '#8E8E93',
+  },
+  moodDoneButton: {
+    backgroundColor: '#007AFF',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  moodDoneButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Mood Display Styles
+  moodsDisplay: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    alignItems: 'center',
+  },
+  moodsLabel: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginBottom: 8,
+  },
+  moodsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  moodChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2C2C2E',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    margin: 4,
+  },
+  moodChipEmoji: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  moodChipText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
 });
 
