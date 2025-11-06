@@ -134,9 +134,15 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const handleToggleFavorite = () => {
+  const handleToggleFavorite = async () => {
     if (currentTrack) {
-      toggleTrackFavorite(currentTrack.id);
+      await toggleTrackFavorite(currentTrack.id);
+      // Update the local track state to reflect the change immediately
+      const updatedTrack = {
+        ...currentTrack,
+        isFavorite: !currentTrack.isFavorite
+      };
+      setCurrentTrack(updatedTrack);
     }
   };
 
@@ -145,7 +151,39 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
       await incrementPlayCount(currentTrack.id);
     }
     // Auto-play next track if in playlist
-    // TODO: Implement next track functionality
+    skipToNext();
+  };
+
+  const skipToPrevious = () => {
+    if (!playlist || playlist.length === 0) {
+      Alert.alert('No Playlist', 'Add this track to a playlist to use previous/next controls');
+      return;
+    }
+
+    const currentIndex = playlist.findIndex(t => t.id === currentTrack?.id);
+    if (currentIndex > 0) {
+      const previousTrack = playlist[currentIndex - 1];
+      setCurrentTrack(previousTrack);
+      navigation.setParams({ track: previousTrack });
+    } else {
+      Alert.alert('First Track', 'This is the first track in the playlist');
+    }
+  };
+
+  const skipToNext = () => {
+    if (!playlist || playlist.length === 0) {
+      Alert.alert('No Playlist', 'Add this track to a playlist to use previous/next controls');
+      return;
+    }
+
+    const currentIndex = playlist.findIndex(t => t.id === currentTrack?.id);
+    if (currentIndex < playlist.length - 1) {
+      const nextTrack = playlist[currentIndex + 1];
+      setCurrentTrack(nextTrack);
+      navigation.setParams({ track: nextTrack });
+    } else {
+      Alert.alert('Last Track', 'This is the last track in the playlist');
+    }
   };
 
   const toggleMood = async (moodType: MoodType) => {
@@ -336,7 +374,7 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
 
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={() => Alert.alert('Previous Track', 'Previous track functionality will be available with playlist support')}
+          onPress={skipToPrevious}
         >
           <Ionicons name="play-skip-back" size={32} color="#ffffff" />
         </TouchableOpacity>
@@ -355,7 +393,7 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ route }) => {
 
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={() => Alert.alert('Next Track', 'Next track functionality will be available with playlist support')}
+          onPress={skipToNext}
         >
           <Ionicons name="play-skip-forward" size={32} color="#ffffff" />
         </TouchableOpacity>

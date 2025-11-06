@@ -8,6 +8,7 @@ import PlayerScreen from '../screens/PlayerScreen';
 import PlaylistScreen from '../screens/PlaylistScreen';
 import FolderBrowserScreen from '../screens/FolderBrowserScreen';
 import EqualizerScreen from '../screens/EqualizerScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 // Import contexts
 import { useMusicLibrary } from '../contexts/MusicLibraryContext';
@@ -54,6 +55,9 @@ const TabNavigator: React.FC = () => {
               break;
             case 'Equalizer':
               iconName = focused ? 'options' : 'options-outline';
+              break;
+            case 'Settings':
+              iconName = focused ? 'settings' : 'settings-outline';
               break;
             default:
               iconName = 'home-outline';
@@ -121,6 +125,14 @@ const TabNavigator: React.FC = () => {
         component={EqualizerScreen}
         options={{
           title: 'Equalizer',
+          headerShown: true,
+        }}
+      />
+      <Tab.Screen 
+        name="Settings" 
+        component={SettingsScreen}
+        options={{
+          title: 'Settings',
           headerShown: true,
         }}
       />

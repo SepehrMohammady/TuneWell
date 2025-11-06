@@ -11,6 +11,7 @@ expo-env.d.ts
 
 # Native
 .kotlin/
+kotlin/
 *.orig.*
 *.jks
 *.p8
@@ -35,6 +36,20 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+
+# GitHub Copilot
+.github/copilot-instructions.md
+
+# Backup files
+*.backup
+
+# Test files
+**/test*.ts
+**/test*.tsx
 
 # generated native folders
 /ios

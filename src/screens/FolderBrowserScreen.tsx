@@ -53,38 +53,39 @@ const FolderBrowserScreen: React.FC<FolderBrowserScreenProps> = ({ route }) => {
   const loadFiles = async () => {
     setIsLoading(true);
     try {
-      // For now, we'll use document picker to select audio files
-      // In a real implementation, you'd use file system APIs
-      const mockFiles: FileItem[] = [
-        {
-          id: '1',
-          name: 'Sample Audio.flac',
-          uri: 'sample.flac',
-          type: 'audio',
-          size: 52428800, // 50MB
-          dateAdded: new Date(),
-        },
-        {
-          id: '2',
-          name: 'High Quality.dsf',
-          uri: 'sample.dsf',
-          type: 'audio',
-          size: 104857600, // 100MB
-          dateAdded: new Date(Date.now() - 86400000), // Yesterday
-        },
-        {
-          id: '3',
-          name: 'Music Folder',
-          uri: '/music',
-          type: 'folder',
-        },
-      ];
+      // Request permissions first
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'TuneWell needs media library access to browse your music files.'
+        );
+        setIsLoading(false);
+        return;
+      }
 
-      const sortedFiles = sortFiles(mockFiles);
+      // Get audio files from media library
+      const media = await MediaLibrary.getAssetsAsync({
+        mediaType: MediaLibrary.MediaType.audio,
+        first: 1000, // Load up to 1000 tracks
+        sortBy: MediaLibrary.SortBy.creationTime,
+      });
+
+      // Convert media assets to FileItem format
+      const audioFiles: FileItem[] = media.assets.map((asset) => ({
+        id: asset.id,
+        name: asset.filename,
+        uri: asset.uri,
+        type: 'audio' as const,
+        size: asset.duration * 1000, // Approximate size from duration
+        dateAdded: new Date(asset.modificationTime || asset.creationTime), // Use modification time as "added" time
+      }));
+
+      const sortedFiles = sortFiles(audioFiles);
       setFiles(sortedFiles);
     } catch (error) {
       console.error('Error loading files:', error);
-      Alert.alert('Error', 'Could not load files from this location');
+      Alert.alert('Error', 'Could not load audio files from media library');
     } finally {
       setIsLoading(false);
     }

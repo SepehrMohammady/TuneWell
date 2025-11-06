@@ -20,6 +20,7 @@ export type TabParamList = {
   Playlists: undefined;
   Browse: undefined;
   Equalizer: undefined;
+  Settings: undefined;
 };
 
 export type MoodType = 'happy' | 'sad' | 'energetic' | 'calm' | 'romantic' | 'angry' | 'dreamy' | 'confident';

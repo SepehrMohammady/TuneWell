@@ -2,7 +2,7 @@
   "expo": {
     "name": "TuneWell",
     "slug": "tunewell",
-    "version": "0.0.4",
+    "version": "0.0.6",
     "owner": "sepehrmohammady",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -52,7 +52,13 @@
         {
           "photosPermission": "Allow TuneWell to access your music files for playback.",
           "savePhotosPermission": "Allow TuneWell to save audio metadata.",
-          "isAccessMediaLocationEnabled": true
+          "isAccessMediaLocationEnabled": true,
+          "androidPermissions": [
+            "READ_EXTERNAL_STORAGE",
+            "READ_MEDIA_AUDIO",
+            "WRITE_EXTERNAL_STORAGE",
+            "READ_MEDIA_VISUAL_USER_SELECTED"
+          ]
         }
       ],
       [

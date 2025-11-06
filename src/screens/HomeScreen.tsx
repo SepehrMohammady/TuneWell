@@ -18,13 +18,22 @@ import { useMusicLibrary } from '../contexts/MusicLibraryContext';
 import { useEQ } from '../contexts/EQContext';
 
 const HomeScreen: React.FC = () => {
-  const { library, getRecentlyAdded, getMostPlayed, getFavorites } = useMusicLibrary();
+  const { library, getRecentlyAdded, getMostPlayed, getFavorites, setCurrentTrack } = useMusicLibrary();
   const { eqState } = useEQ();
   const [permissionResponse, requestPermission] = MediaLibrary.usePermissions();
 
   useEffect(() => {
     requestAudioPermissions();
+    clearInvalidTracks();
   }, []);
+
+  const clearInvalidTracks = () => {
+    // Clear any mock/sample tracks that don't have valid URIs
+    if (library.currentTrack && library.currentTrack.uri.includes('sample.')) {
+      console.log('Clearing invalid sample track from previous session');
+      setCurrentTrack(null);
+    }
+  };
 
   const requestAudioPermissions = async () => {
     try {
