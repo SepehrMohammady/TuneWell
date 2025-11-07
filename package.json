@@ -1,6 +1,6 @@
 {
   "name": "tunewell",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Professional music player for enthusiasts and sound engineers with DAC support",
   "main": "index.ts",
   "scripts": {
@@ -38,6 +38,7 @@
     "react-native-vector-icons": "^10.3.0"
   },
   "devDependencies": {
+    "@expo/config-plugins": "^54.0.2",
     "@types/react": "~19.1.0",
     "typescript": "~5.9.2"
   },

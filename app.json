@@ -2,7 +2,7 @@
   "expo": {
     "name": "TuneWell",
     "slug": "tunewell",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "owner": "sepehrmohammady",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,7 +26,10 @@
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_AUDIO",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.WAKE_LOCK"
       ],
       "package": "com.sepehrmohammady.tunewell"
     },
