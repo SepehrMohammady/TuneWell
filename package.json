@@ -35,7 +35,6 @@
     "react-native-document-picker": "^9.1.1",
     "react-native-permissions": "^4.0.3",
     "react-native-sqlite-storage": "^6.0.1",
-    "react-native-music-metadata": "^0.3.4",
     "react-native-linear-gradient": "^2.8.3",
     "react-native-vector-icons": "^10.0.3",
     "react-native-svg": "^14.1.0",
