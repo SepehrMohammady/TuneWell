@@ -1,0 +1,74 @@
+# Expo
+.expo/
+dist/
+web-build/
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.ipa
+*.apk
+
+# Dependencies
+node_modules/
+
+# Build
+build/
+android/app/build/
+ios/Pods/
+
+# Testing
+coverage/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# React Native
+ios/build/
+.bundle/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+ios/.xcode.env.local
+
+# Windows
+windows/Debug/
+windows/Release/
+windows/x64/
+windows/ARM/
+windows/.vs/
+windows/*.vcxproj.user

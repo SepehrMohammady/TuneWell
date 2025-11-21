@@ -1,0 +1,57 @@
+{
+    "expo": {
+        "name": "TuneWell",
+        "slug": "tunewell",
+        "version": "0.0.1",
+        "sdkVersion": "51.0.0",
+        "owner": "sepehrmohammady",
+        "orientation": "portrait",
+        "icon": "./assets/icon.png",
+        "userInterfaceStyle": "dark",
+        "splash": {
+            "image": "./assets/splash-icon.png",
+            "resizeMode": "contain",
+            "backgroundColor": "#000000"
+        },
+        "assetBundlePatterns": [
+            "**/*"
+        ],
+        "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "com.sepehrmohammady.tunewell",
+            "infoPlist": {
+                "UIBackgroundModes": [
+                    "audio"
+                ],
+                "NSAppleMusicUsageDescription": "TuneWell needs access to your music library to play your audio files."
+            }
+        },
+        "android": {
+            "adaptiveIcon": {
+                "foregroundImage": "./assets/adaptive-icon.png",
+                "backgroundColor": "#000000"
+            },
+            "package": "com.sepehrmohammady.tunewell",
+            "permissions": [
+                "READ_EXTERNAL_STORAGE",
+                "WRITE_EXTERNAL_STORAGE",
+                "READ_MEDIA_AUDIO",
+                "FOREGROUND_SERVICE",
+                "WAKE_LOCK"
+            ]
+        },
+        "web": {
+            "favicon": "./assets/favicon.png"
+        },
+        "plugins": [
+            [
+                "expo-media-library",
+                {
+                    "photosPermission": "Allow TuneWell to access your audio files.",
+                    "savePhotosPermission": "Allow TuneWell to save audio files.",
+                    "isAccessMediaLocationEnabled": true
+                }
+            ]
+        ]
+    }
+}
