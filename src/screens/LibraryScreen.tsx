@@ -9,13 +9,14 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
-import { theme } from '@/styles/theme';
+import { useTheme } from '@/styles/theme';
 import { useLibraryStore } from '@/store/LibraryStore';
 import { usePlayerStore } from '@/store/PlayerStore';
 import { FileSystemService } from '@/services/FileSystemService';
 import { TrackItem } from '../components/TrackItem';
 
 export function LibraryScreen() {
+    const theme = useTheme();
     const { tracks, searchQuery, isLoading, setTracks, setLoading, setSearchQuery, getFilteredTracks } = useLibraryStore();
     const { playTrack } = usePlayerStore();
     const [hasPermission, setHasPermission] = useState(false);
@@ -72,6 +73,53 @@ export function LibraryScreen() {
 
     const filteredTracks = getFilteredTracks();
 
+    const styles = StyleSheet.create({
+        container: {
+            flex: 1,
+        },
+        searchContainer: {
+            padding: theme.spacing.md,
+            backgroundColor: theme.colors.background,
+        },
+        searchInput: {
+            backgroundColor: theme.colors.surface,
+            borderRadius: theme.borderRadius.md,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            padding: theme.spacing.md,
+            color: theme.colors.text,
+            fontSize: theme.typography.body.fontSize,
+        },
+        list: {
+            paddingBottom: 200, // Space for player controls and bar
+        },
+        emptyContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: theme.spacing.xl,
+            backgroundColor: theme.colors.background,
+        },
+        emptyText: {
+            color: theme.colors.textSecondary,
+            fontSize: theme.typography.body.fontSize,
+            textAlign: 'center',
+            marginTop: theme.spacing.md,
+        },
+        button: {
+            marginTop: theme.spacing.lg,
+            backgroundColor: theme.colors.primary,
+            paddingVertical: theme.spacing.md,
+            paddingHorizontal: theme.spacing.xl,
+            borderRadius: theme.borderRadius.md,
+        },
+        buttonText: {
+            color: '#FFFFFF',
+            fontSize: theme.typography.body.fontSize,
+            fontWeight: '600',
+        },
+    });
+
     if (!hasPermission) {
         return (
             <View style={styles.emptyContainer}>
@@ -127,46 +175,3 @@ export function LibraryScreen() {
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    searchContainer: {
-        padding: theme.spacing.md,
-    },
-    searchInput: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.md,
-        padding: theme.spacing.md,
-        color: theme.colors.text,
-        fontSize: theme.typography.body.fontSize,
-    },
-    list: {
-        paddingBottom: 120, // Space for now playing bar
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: theme.spacing.xl,
-    },
-    emptyText: {
-        color: theme.colors.textSecondary,
-        fontSize: theme.typography.body.fontSize,
-        textAlign: 'center',
-        marginTop: theme.spacing.md,
-    },
-    button: {
-        marginTop: theme.spacing.lg,
-        backgroundColor: theme.colors.primary,
-        paddingVertical: theme.spacing.md,
-        paddingHorizontal: theme.spacing.xl,
-        borderRadius: theme.borderRadius.md,
-    },
-    buttonText: {
-        color: theme.colors.text,
-        fontSize: theme.typography.body.fontSize,
-        fontWeight: '600',
-    },
-});

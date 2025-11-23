@@ -1,16 +1,18 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import TrackPlayer, { usePlaybackState, useProgress, Event } from 'react-native-track-player';
-import { theme } from '@/styles/theme';
+import { useTheme } from '@/styles/theme';
 import { usePlayerStore } from '@/store/PlayerStore';
 import { LibraryScreen } from './LibraryScreen';
 import { PlayerControls } from '../components/PlayerControls';
 import { NowPlayingBar } from '../components/NowPlayingBar';
+import { SeekBar } from '../components/SeekBar';
 
 export function MainScreen() {
+    const theme = useTheme();
     const playbackState = usePlaybackState();
     const progress = useProgress();
-    const { setPlaying, setProgress, setDuration, setCurrentTrack } = usePlayerStore();
+    const { setPlaying, setProgress, setDuration, setCurrentTrack, currentTrack } = usePlayerStore();
 
     useEffect(() => {
         // Update progress
@@ -48,6 +50,31 @@ export function MainScreen() {
         setPlaying(isPlaying);
     }, [playbackState]);
 
+    const styles = StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: theme.colors.background,
+        },
+        header: {
+            paddingTop: theme.spacing.xl,
+            paddingBottom: theme.spacing.md,
+            paddingHorizontal: theme.spacing.lg,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.colors.border,
+            backgroundColor: theme.colors.background,
+        },
+        logo: {
+            ...theme.typography.h2,
+            color: theme.colors.text,
+            fontWeight: '700',
+        },
+        playerSection: {
+            backgroundColor: theme.colors.surface,
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.border,
+        },
+    });
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -56,26 +83,15 @@ export function MainScreen() {
 
             <LibraryScreen />
 
+            {/* Player section with seek bar and controls */}
+            {currentTrack && (
+                <View style={styles.playerSection}>
+                    <SeekBar />
+                    <PlayerControls />
+                </View>
+            )}
+
             <NowPlayingBar />
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: theme.colors.background,
-    },
-    header: {
-        paddingTop: theme.spacing.xl,
-        paddingBottom: theme.spacing.md,
-        paddingHorizontal: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    logo: {
-        ...theme.typography.h2,
-        color: theme.colors.text,
-        fontWeight: '700',
-    },
-});
