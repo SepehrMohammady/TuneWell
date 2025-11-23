@@ -11,7 +11,6 @@ export function NowPlayingBar() {
     const { currentTrack, isPlaying, play, pause, next, previous } = usePlayerStore();
     const { position, duration } = useProgress();
     const [imageError, setImageError] = useState(false);
-    const [isSeeking, setIsSeeking] = useState(false);
 
     if (!currentTrack) return null;
 
@@ -23,7 +22,6 @@ export function NowPlayingBar() {
 
     const handleSlidingComplete = async (value: number) => {
         await TrackPlayer.seekTo(value);
-        setIsSeeking(false);
     };
 
     const styles = StyleSheet.create({
@@ -121,13 +119,15 @@ export function NowPlayingBar() {
             fontSize: 16,
             color: theme.colors.text,
             textAlign: 'center',
-            lineHeight: 16,
+            includeFontPadding: false,
+            textAlignVertical: 'center',
         },
         playText: {
             fontSize: 20,
             color: theme.colors.text,
             textAlign: 'center',
-            lineHeight: 20,
+            includeFontPadding: false,
+            textAlignVertical: 'center',
         },
     });
 
@@ -178,7 +178,7 @@ export function NowPlayingBar() {
                     minimumTrackTintColor={theme.colors.textSecondary}
                     maximumTrackTintColor={theme.colors.border}
                     thumbTintColor={theme.colors.text}
-                    onSlidingStart={() => setIsSeeking(true)}
+                    onValueChange={() => { }} // Allow dragging
                     onSlidingComplete={handleSlidingComplete}
                 />
             </View>
