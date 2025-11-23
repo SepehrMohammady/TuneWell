@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useProgress } from 'react-native-track-player';
 import TrackPlayer from 'react-native-track-player';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { usePlayerStore } from '@/store/PlayerStore';
 import { useTheme } from '@/styles/theme';
 
@@ -47,7 +47,7 @@ export function NowPlayingBar() {
                         />
                     ) : (
                         <View style={styles.artworkPlaceholder}>
-                            <Icon name="music-note" size={20} color={theme.colors.textSecondary} />
+                            <MaterialIcons name="music-note" size={20} color={theme.colors.textSecondary} />
                         </View>
                     )}
                 </View>
@@ -88,7 +88,7 @@ export function NowPlayingBar() {
                     style={[styles.controlButton, { backgroundColor: theme.colors.surfaceAlt }]}
                     activeOpacity={0.7}
                 >
-                    <Icon name="skip-previous" size={28} color={theme.colors.text} />
+                    <MaterialIcons name="skip-previous" size={28} color={theme.colors.text} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -96,7 +96,7 @@ export function NowPlayingBar() {
                     style={[styles.playButton, { backgroundColor: theme.colors.surfaceAlt }]}
                     activeOpacity={0.7}
                 >
-                    <Icon name={isPlaying ? 'pause' : 'play-arrow'} size={32} color={theme.colors.text} />
+                    <MaterialIcons name={isPlaying ? 'pause' : 'play-arrow'} size={32} color={theme.colors.text} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -104,7 +104,7 @@ export function NowPlayingBar() {
                     style={[styles.controlButton, { backgroundColor: theme.colors.surfaceAlt }]}
                     activeOpacity={0.7}
                 >
-                    <Icon name="skip-next" size={28} color={theme.colors.text} />
+                    <MaterialIcons name="skip-next" size={28} color={theme.colors.text} />
                 </TouchableOpacity>
             </View>
         </View>
