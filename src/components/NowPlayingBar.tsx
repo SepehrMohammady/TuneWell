@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useProgress } from 'react-native-track-player';
 import TrackPlayer from 'react-native-track-player';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { usePlayerStore } from '@/store/PlayerStore';
 import { useTheme } from '@/styles/theme';
 
@@ -47,7 +47,7 @@ export function NowPlayingBar() {
                         />
                     ) : (
                         <View style={styles.artworkPlaceholder}>
-                            <Ionicons name="musical-note" size={20} color={theme.colors.textSecondary} />
+                            <Icon name="music-note" size={20} color={theme.colors.textSecondary} />
                         </View>
                     )}
                 </View>
@@ -87,32 +87,24 @@ export function NowPlayingBar() {
                     onPress={previous}
                     style={[styles.controlButton, { backgroundColor: theme.colors.surfaceAlt }]}
                     activeOpacity={0.7}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                    <Ionicons name="play-skip-back" size={20} color={theme.colors.text} />
+                    <Icon name="skip-previous" size={28} color={theme.colors.text} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     onPress={isPlaying ? pause : play}
                     style={[styles.playButton, { backgroundColor: theme.colors.surfaceAlt }]}
                     activeOpacity={0.7}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                    <Ionicons
-                        name={isPlaying ? "pause" : "play"}
-                        size={28}
-                        color={theme.colors.text}
-                        style={{ marginLeft: isPlaying ? 0 : 2 }} // Optical adjustment for play icon
-                    />
+                    <Icon name={isPlaying ? 'pause' : 'play-arrow'} size={32} color={theme.colors.text} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     onPress={next}
                     style={[styles.controlButton, { backgroundColor: theme.colors.surfaceAlt }]}
                     activeOpacity={0.7}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                    <Ionicons name="play-skip-forward" size={20} color={theme.colors.text} />
+                    <Icon name="skip-next" size={28} color={theme.colors.text} />
                 </TouchableOpacity>
             </View>
         </View>
@@ -126,24 +118,19 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         borderTopWidth: 1,
-        paddingTop: 12,
-        paddingBottom: 24,
-        paddingHorizontal: 20,
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        paddingTop: 8,
+        paddingBottom: 16,
+        paddingHorizontal: 16,
     },
     trackInfo: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 8,
     },
     artwork: {
-        width: 48,
-        height: 48,
-        borderRadius: 8,
+        width: 40,
+        height: 40,
+        borderRadius: 4,
         marginRight: 12,
         overflow: 'hidden',
     },
@@ -161,35 +148,33 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     title: {
-        fontSize: 15,
-        fontWeight: '600',
-        marginBottom: 4,
+        fontSize: 14,
+        fontWeight: '500',
+        marginBottom: 2,
     },
     artist: {
-        fontSize: 13,
+        fontSize: 12,
     },
     seekSection: {
-        marginBottom: 16,
+        marginBottom: 8,
     },
     timeRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 8,
+        marginBottom: 4,
     },
     timeText: {
-        fontSize: 12,
-        fontVariant: ['tabular-nums'],
+        fontSize: 11,
     },
     slider: {
         width: '100%',
-        height: 40,
-        marginHorizontal: -10, // Offset default padding of slider
+        height: 30,
     },
     controls: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 32,
+        gap: 24,
     },
     controlButton: {
         width: 44,
@@ -199,11 +184,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     playButton: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
+        width: 52,
+        height: 52,
+        borderRadius: 26,
         justifyContent: 'center',
         alignItems: 'center',
-        elevation: 2,
     },
 });
