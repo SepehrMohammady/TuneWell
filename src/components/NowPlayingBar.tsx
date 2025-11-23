@@ -11,7 +11,6 @@ export function NowPlayingBar() {
     const { currentTrack, isPlaying, play, pause, next, previous } = usePlayerStore();
     const { position, duration } = useProgress();
     const [imageError, setImageError] = useState(false);
-    const [isSeeking, setIsSeeking] = useState(false);
 
     if (!currentTrack) return null;
 
@@ -21,127 +20,19 @@ export function NowPlayingBar() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const handleSlidingComplete = async (value: number) => {
-        await TrackPlayer.seekTo(value);
-        setIsSeeking(false);
+    const handleSeek = async (value: number) => {
+        try {
+            await TrackPlayer.seekTo(value);
+        } catch (error) {
+            console.error('Seek error:', error);
+        }
     };
-
-    const handleValueChange = (value: number) => {
-        setIsSeeking(true);
-    };
-
-    const styles = StyleSheet.create({
-        container: {
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            backgroundColor: theme.colors.surface,
-            borderTopWidth: 1,
-            borderTopColor: theme.colors.border,
-            paddingTop: theme.spacing.sm,
-            paddingBottom: theme.spacing.md,
-            paddingHorizontal: theme.spacing.md,
-        },
-        trackInfo: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            marginBottom: theme.spacing.sm,
-        },
-        artwork: {
-            width: 40,
-            height: 40,
-            borderRadius: theme.borderRadius.sm,
-            marginRight: theme.spacing.md,
-            backgroundColor: theme.colors.surfaceAlt,
-            overflow: 'hidden',
-        },
-        artworkImage: {
-            width: '100%',
-            height: '100%',
-        },
-        artworkPlaceholder: {
-            width: '100%',
-            height: '100%',
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        artworkPlaceholderText: {
-            fontSize: 18,
-            color: theme.colors.textSecondary,
-        },
-        info: {
-            flex: 1,
-        },
-        title: {
-            color: theme.colors.text,
-            fontSize: 14,
-            fontWeight: '500',
-            marginBottom: 2,
-        },
-        artist: {
-            color: theme.colors.textSecondary,
-            fontSize: 12,
-        },
-        seekSection: {
-            marginBottom: theme.spacing.sm,
-        },
-        timeRow: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            marginBottom: 4,
-        },
-        timeText: {
-            fontSize: 11,
-            color: theme.colors.textSecondary,
-        },
-        slider: {
-            width: '100%',
-            height: 30,
-        },
-        controls: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: theme.spacing.lg,
-        },
-        controlButton: {
-            width: 38,
-            height: 38,
-            borderRadius: 19,
-            backgroundColor: theme.colors.surfaceAlt,
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        playButton: {
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-            backgroundColor: theme.colors.surfaceAlt,
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        controlText: {
-            fontSize: 18,
-            color: theme.colors.text,
-            textAlign: 'center',
-            includeFontPadding: false,
-            textAlignVertical: 'center',
-        },
-        playText: {
-            fontSize: 22,
-            color: theme.colors.text,
-            textAlign: 'center',
-            includeFontPadding: false,
-            textAlignVertical: 'center',
-        },
-    });
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
             {/* Track Info */}
             <View style={styles.trackInfo}>
-                <View style={styles.artwork}>
+                <View style={[styles.artwork, { backgroundColor: theme.colors.surfaceAlt }]}>
                     {currentTrack.artwork && !imageError ? (
                         <Image
                             source={{
@@ -155,16 +46,16 @@ export function NowPlayingBar() {
                         />
                     ) : (
                         <View style={styles.artworkPlaceholder}>
-                            <Text style={styles.artworkPlaceholderText}>♪</Text>
+                            <Text style={[styles.artworkPlaceholderText, { color: theme.colors.textSecondary }]}>♪</Text>
                         </View>
                     )}
                 </View>
 
                 <View style={styles.info}>
-                    <Text style={styles.title} numberOfLines={1}>
+                    <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>
                         {currentTrack.title}
                     </Text>
-                    <Text style={styles.artist} numberOfLines={1}>
+                    <Text style={[styles.artist, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                         {currentTrack.artist}
                     </Text>
                 </View>
@@ -173,41 +64,140 @@ export function NowPlayingBar() {
             {/* Seek Bar */}
             <View style={styles.seekSection}>
                 <View style={styles.timeRow}>
-                    <Text style={styles.timeText}>{formatTime(position)}</Text>
-                    <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                    <Text style={[styles.timeText, { color: theme.colors.textSecondary }]}>{formatTime(position)}</Text>
+                    <Text style={[styles.timeText, { color: theme.colors.textSecondary }]}>{formatTime(duration)}</Text>
                 </View>
                 <Slider
                     style={styles.slider}
                     value={position}
                     minimumValue={0}
                     maximumValue={duration || 1}
-                    minimumTrackTintColor={theme.colors.textSecondary}
+                    minimumTrackTintColor={theme.colors.text}
                     maximumTrackTintColor={theme.colors.border}
                     thumbTintColor={theme.colors.text}
-                    onValueChange={handleValueChange}
-                    onSlidingStart={() => setIsSeeking(true)}
-                    onSlidingComplete={handleSlidingComplete}
+                    tapToSeek={true}
+                    onSlidingComplete={handleSeek}
                 />
             </View>
 
             {/* Controls */}
             <View style={styles.controls}>
-                <TouchableOpacity onPress={previous} style={styles.controlButton} activeOpacity={0.7}>
-                    <Text style={styles.controlText}>⏮</Text>
+                <TouchableOpacity
+                    onPress={previous}
+                    style={[styles.controlButton, { backgroundColor: theme.colors.surfaceAlt }]}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[styles.controlText, { color: theme.colors.text }]}>⏮</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     onPress={isPlaying ? pause : play}
-                    style={styles.playButton}
+                    style={[styles.playButton, { backgroundColor: theme.colors.surfaceAlt }]}
                     activeOpacity={0.7}
                 >
-                    <Text style={styles.playText}>{isPlaying ? '⏸' : '▶'}</Text>
+                    <Text style={[styles.playText, { color: theme.colors.text }]}>{isPlaying ? '⏸' : '▶'}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={next} style={styles.controlButton} activeOpacity={0.7}>
-                    <Text style={styles.controlText}>⏭</Text>
+                <TouchableOpacity
+                    onPress={next}
+                    style={[styles.controlButton, { backgroundColor: theme.colors.surfaceAlt }]}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[styles.controlText, { color: theme.colors.text }]}>⏭</Text>
                 </TouchableOpacity>
             </View>
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        borderTopWidth: 1,
+        paddingTop: 8,
+        paddingBottom: 16,
+        paddingHorizontal: 16,
+    },
+    trackInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    artwork: {
+        width: 40,
+        height: 40,
+        borderRadius: 4,
+        marginRight: 12,
+        overflow: 'hidden',
+    },
+    artworkImage: {
+        width: '100%',
+        height: '100%',
+    },
+    artworkPlaceholder: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    artworkPlaceholderText: {
+        fontSize: 18,
+    },
+    info: {
+        flex: 1,
+    },
+    title: {
+        fontSize: 14,
+        fontWeight: '500',
+        marginBottom: 2,
+    },
+    artist: {
+        fontSize: 12,
+    },
+    seekSection: {
+        marginBottom: 8,
+    },
+    timeRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    timeText: {
+        fontSize: 11,
+    },
+    slider: {
+        width: '100%',
+        height: 30,
+    },
+    controls: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 24,
+    },
+    controlButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    playButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    controlText: {
+        fontSize: 20,
+        textAlign: 'center',
+    },
+    playText: {
+        fontSize: 24,
+        textAlign: 'center',
+    },
+});
