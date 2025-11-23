@@ -11,6 +11,7 @@ export function NowPlayingBar() {
     const { currentTrack, isPlaying, play, pause, next, previous } = usePlayerStore();
     const { position, duration } = useProgress();
     const [imageError, setImageError] = useState(false);
+    const [isSeeking, setIsSeeking] = useState(false);
 
     if (!currentTrack) return null;
 
@@ -22,6 +23,11 @@ export function NowPlayingBar() {
 
     const handleSlidingComplete = async (value: number) => {
         await TrackPlayer.seekTo(value);
+        setIsSeeking(false);
+    };
+
+    const handleValueChange = (value: number) => {
+        setIsSeeking(true);
     };
 
     const styles = StyleSheet.create({
@@ -91,7 +97,7 @@ export function NowPlayingBar() {
         },
         slider: {
             width: '100%',
-            height: 20,
+            height: 30,
         },
         controls: {
             flexDirection: 'row',
@@ -100,30 +106,30 @@ export function NowPlayingBar() {
             gap: theme.spacing.lg,
         },
         controlButton: {
-            width: 36,
-            height: 36,
-            borderRadius: 18,
+            width: 38,
+            height: 38,
+            borderRadius: 19,
             backgroundColor: theme.colors.surfaceAlt,
             justifyContent: 'center',
             alignItems: 'center',
         },
         playButton: {
-            width: 44,
-            height: 44,
-            borderRadius: 22,
+            width: 48,
+            height: 48,
+            borderRadius: 24,
             backgroundColor: theme.colors.surfaceAlt,
             justifyContent: 'center',
             alignItems: 'center',
         },
         controlText: {
-            fontSize: 16,
+            fontSize: 18,
             color: theme.colors.text,
             textAlign: 'center',
             includeFontPadding: false,
             textAlignVertical: 'center',
         },
         playText: {
-            fontSize: 20,
+            fontSize: 22,
             color: theme.colors.text,
             textAlign: 'center',
             includeFontPadding: false,
@@ -178,7 +184,8 @@ export function NowPlayingBar() {
                     minimumTrackTintColor={theme.colors.textSecondary}
                     maximumTrackTintColor={theme.colors.border}
                     thumbTintColor={theme.colors.text}
-                    onValueChange={() => { }} // Allow dragging
+                    onValueChange={handleValueChange}
+                    onSlidingStart={() => setIsSeeking(true)}
                     onSlidingComplete={handleSlidingComplete}
                 />
             </View>
