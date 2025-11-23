@@ -25,8 +25,23 @@ export class MetadataService {
         }
 
         try {
-            const metadata = await getAudioMetadata(uri);
+            console.log(`[MetadataService] Extracting metadata from: ${uri}`);
 
+            // Request all available metadata fields
+            const response = await getAudioMetadata(uri, [
+                'name',
+                'artist',
+                'album',
+                'albumArtist',
+                'year',
+                'track',
+                'artwork'
+            ]);
+
+            console.log(`[MetadataService] Raw response:`, response);
+
+            // Extract metadata from response
+            const metadata = response.metadata;
             const result: AudioMetadata = {
                 title: metadata.name || undefined,
                 artist: metadata.artist || undefined,
@@ -34,15 +49,23 @@ export class MetadataService {
                 albumArtist: metadata.albumArtist || undefined,
                 year: metadata.year || undefined,
                 track: metadata.track || undefined,
-                artwork: metadata.artwork || undefined, // Already base64
+                artwork: metadata.artwork || undefined,
             };
+
+            console.log(`[MetadataService] Processed metadata:`, {
+                title: result.title,
+                artist: result.artist,
+                album: result.album,
+                hasArtwork: !!result.artwork
+            });
 
             // Cache the result
             this.metadataCache.set(uri, result);
 
             return result;
         } catch (error) {
-            console.warn(`Failed to extract metadata from ${uri}:`, error);
+            console.error(`[MetadataService] Failed to extract metadata from ${uri}:`, error);
+            console.error('[MetadataService] Error details:', JSON.stringify(error));
 
             // Return empty metadata on error
             const emptyMetadata: AudioMetadata = {};
