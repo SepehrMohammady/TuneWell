@@ -30,14 +30,15 @@ export class FileSystemService {
             id: asset.id || `track-${index}`,
             url: asset.uri,
             title: asset.filename.replace(/\.[^/.]+$/, ''),
-            artist: 'Loading...', // Temporary placeholder
+            artist: 'Unknown Artist',
             album: asset.albumId || undefined,
             duration: asset.duration,
             artwork: undefined,
         }));
 
         // Second pass: Extract metadata in background (non-blocking)
-        // Process in batches to improve performance
+        // DISABLED: Causing performance issues and crashes. Will implement on-demand loading later.
+        /*
         const batchSize = 10;
         setTimeout(async () => {
             console.log('[FileSystemService] Starting background metadata extraction...');
@@ -68,7 +69,8 @@ export class FileSystemService {
             }
 
             console.log('[FileSystemService] Background metadata extraction complete');
-        }, 500); // Start after 500ms delay
+        }, 500);
+        */
 
         return tracks;
     }
