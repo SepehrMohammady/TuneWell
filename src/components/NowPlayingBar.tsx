@@ -1,14 +1,30 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import Slider from '@react-native-community/slider';
+import { useProgress } from 'react-native-track-player';
+import TrackPlayer from 'react-native-track-player';
 import { usePlayerStore } from '@/store/PlayerStore';
 import { useTheme } from '@/styles/theme';
 
 export function NowPlayingBar() {
     const theme = useTheme();
     const { currentTrack, isPlaying, play, pause, next, previous } = usePlayerStore();
+    const { position, duration } = useProgress();
     const [imageError, setImageError] = useState(false);
+    const [isSeeking, setIsSeeking] = useState(false);
 
     if (!currentTrack) return null;
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const handleSlidingComplete = async (value: number) => {
+        await TrackPlayer.seekTo(value);
+        setIsSeeking(false);
+    };
 
     const styles = StyleSheet.create({
         container: {
@@ -19,22 +35,18 @@ export function NowPlayingBar() {
             backgroundColor: theme.colors.surface,
             borderTopWidth: 1,
             borderTopColor: theme.colors.border,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            paddingTop: theme.spacing.sm,
+            paddingBottom: theme.spacing.md,
             paddingHorizontal: theme.spacing.md,
-            paddingVertical: theme.spacing.sm,
-            ...theme.shadows.small,
         },
         trackInfo: {
-            flex: 1,
             flexDirection: 'row',
             alignItems: 'center',
-            marginRight: theme.spacing.md,
+            marginBottom: theme.spacing.sm,
         },
         artwork: {
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             borderRadius: theme.borderRadius.sm,
             marginRight: theme.spacing.md,
             backgroundColor: theme.colors.surfaceAlt,
@@ -51,7 +63,7 @@ export function NowPlayingBar() {
             alignItems: 'center',
         },
         artworkPlaceholderText: {
-            fontSize: 20,
+            fontSize: 18,
             color: theme.colors.textSecondary,
         },
         info: {
@@ -59,47 +71,69 @@ export function NowPlayingBar() {
         },
         title: {
             color: theme.colors.text,
-            fontSize: theme.typography.body.fontSize,
+            fontSize: 14,
             fontWeight: '500',
             marginBottom: 2,
         },
         artist: {
             color: theme.colors.textSecondary,
-            fontSize: theme.typography.caption.fontSize,
+            fontSize: 12,
+        },
+        seekSection: {
+            marginBottom: theme.spacing.sm,
+        },
+        timeRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            marginBottom: 4,
+        },
+        timeText: {
+            fontSize: 11,
+            color: theme.colors.textSecondary,
+        },
+        slider: {
+            width: '100%',
+            height: 20,
         },
         controls: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: theme.spacing.sm,
+            justifyContent: 'center',
+            gap: theme.spacing.lg,
         },
         controlButton: {
             width: 36,
             height: 36,
-            borderRadius: theme.borderRadius.round,
+            borderRadius: 18,
             backgroundColor: theme.colors.surfaceAlt,
             justifyContent: 'center',
             alignItems: 'center',
         },
         playButton: {
-            width: 40,
-            height: 40,
-            borderRadius: theme.borderRadius.round,
-            backgroundColor: theme.colors.text,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: theme.colors.surfaceAlt,
             justifyContent: 'center',
             alignItems: 'center',
         },
-        controlIcon: {
+        controlText: {
             fontSize: 16,
             color: theme.colors.text,
+            textAlign: 'center',
+            lineHeight: 16,
         },
-        playIcon: {
-            fontSize: 18,
-            color: theme.colors.background,
+        playText: {
+            fontSize: 20,
+            color: theme.colors.text,
+            textAlign: 'center',
+            lineHeight: 20,
         },
     });
 
     return (
         <View style={styles.container}>
+            {/* Track Info */}
             <View style={styles.trackInfo}>
                 <View style={styles.artwork}>
                     {currentTrack.artwork && !imageError ? (
@@ -130,24 +164,41 @@ export function NowPlayingBar() {
                 </View>
             </View>
 
+            {/* Seek Bar */}
+            <View style={styles.seekSection}>
+                <View style={styles.timeRow}>
+                    <Text style={styles.timeText}>{formatTime(position)}</Text>
+                    <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                </View>
+                <Slider
+                    style={styles.slider}
+                    value={position}
+                    minimumValue={0}
+                    maximumValue={duration || 1}
+                    minimumTrackTintColor={theme.colors.textSecondary}
+                    maximumTrackTintColor={theme.colors.border}
+                    thumbTintColor={theme.colors.text}
+                    onSlidingStart={() => setIsSeeking(true)}
+                    onSlidingComplete={handleSlidingComplete}
+                />
+            </View>
+
+            {/* Controls */}
             <View style={styles.controls}>
-                {/* Previous Button */}
                 <TouchableOpacity onPress={previous} style={styles.controlButton} activeOpacity={0.7}>
-                    <Text style={styles.controlIcon}>⏮</Text>
+                    <Text style={styles.controlText}>⏮</Text>
                 </TouchableOpacity>
 
-                {/* Play/Pause Button */}
                 <TouchableOpacity
                     onPress={isPlaying ? pause : play}
                     style={styles.playButton}
                     activeOpacity={0.7}
                 >
-                    <Text style={styles.playIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+                    <Text style={styles.playText}>{isPlaying ? '⏸' : '▶'}</Text>
                 </TouchableOpacity>
 
-                {/* Next Button */}
                 <TouchableOpacity onPress={next} style={styles.controlButton} activeOpacity={0.7}>
-                    <Text style={styles.controlIcon}>⏭</Text>
+                    <Text style={styles.controlText}>⏭</Text>
                 </TouchableOpacity>
             </View>
         </View>

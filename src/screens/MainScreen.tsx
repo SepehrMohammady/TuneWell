@@ -4,9 +4,7 @@ import TrackPlayer, { usePlaybackState, useProgress, Event } from 'react-native-
 import { useTheme } from '@/styles/theme';
 import { usePlayerStore } from '@/store/PlayerStore';
 import { LibraryScreen } from './LibraryScreen';
-import { PlayerControls } from '../components/PlayerControls';
 import { NowPlayingBar } from '../components/NowPlayingBar';
-import { SeekBar } from '../components/SeekBar';
 
 export function MainScreen() {
     const theme = useTheme();
@@ -70,28 +68,71 @@ export function MainScreen() {
         },
         playerSection: {
             backgroundColor: theme.colors.surface,
-            borderTopWidth: 1,
-            borderTopColor: theme.colors.border,
-        },
-    });
+            import React, { useEffect } from 'react';
+    import { View, StyleSheet, Text } from 'react-native';
+    import TrackPlayer, { usePlaybackState, useProgress, Event } from 'react-native-track-player';
+    import { useTheme } from '@/styles/theme';
+    import { usePlayerStore } from '@/store/PlayerStore';
+    import { LibraryScreen } from './LibraryScreen';
+    import { PlayerControls } from '../components/PlayerControls';
+    import { NowPlayingBar } from '../components/NowPlayingBar';
+    import { SeekBar } from '../components/SeekBar';
 
-    return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.logo}>TuneWell</Text>
-            </View>
+    export function MainScreen() {
+        const theme = useTheme();
+        const playbackState = usePlaybackState();
+        const progress = useProgress();
+        const { setPlaying, setProgress, setDuration, setCurrentTrack, currentTrack } = usePlayerStore();
 
-            <LibraryScreen />
+        useEffect(() => {
+            // Update progress
+            setProgress(progress.position);
+            setDuration(progress.duration);
+        }, [progress]);
 
-            {/* Player section with seek bar and controls */}
-            {currentTrack && (
-                <View style={styles.playerSection}>
-                    <SeekBar />
-                    <PlayerControls />
-                </View>
-            )}
+        useEffect(() => {
+            // Set up track change listener
+            const trackChangedListener = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async ({ index }) => {
+                if (index !== undefined && index !== null) {
+                    const track = await TrackPlayer.getTrack(index);
+                    if (track) {
+                        setCurrentTrack({
+                            id: track.url,
+                            url: track.url,
+                            title: track.title || 'Unknown Title',
+                            artist: track.artist || 'Unknown Artist',
+                            album: track.album,
+                            duration: track.duration,
+                            artwork: track.artwork,
+                        });
+                    }
+                }
+            });
 
-            <NowPlayingBar />
-        </View>
-    );
-}
+            return () => {
+                trackChangedListener.remove();
+            };
+        }, []);
+
+        useEffect(() => {
+            // Update playing state
+            const isPlaying = playbackState.state === 'playing';
+            setPlaying(isPlaying);
+        }, [playbackState]);
+
+        const styles = StyleSheet.create({
+            container: {
+                flex: 1,
+                backgroundColor: theme.colors.background,
+            },
+            header: {
+                paddingTop: theme.spacing.xl,
+                paddingBottom: theme.spacing.md,
+                </View >
+
+                <LibraryScreen />
+
+                <NowPlayingBar />
+            </View >
+        );
+    }
