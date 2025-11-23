@@ -19,26 +19,56 @@ export class FileSystemService {
 
         const media = await MediaLibrary.getAssetsAsync({
             mediaType: MediaLibrary.MediaType.audio,
-            first: 10000, // Get up to 10000 tracks
+            first: 10000,
             sortBy: [[MediaLibrary.SortBy.creationTime, false]],
         });
 
-        // Extract metadata for all tracks
-        const tracks: Track[] = await Promise.all(
-            media.assets.map(async (asset, index) => {
-                const metadata = await MetadataService.getMetadata(asset.uri);
+        console.log(`[FileSystemService] Found ${media.assets.length} audio files`);
 
-                return {
-                    id: asset.id || `track-${index}`,
-                    url: asset.uri,
-                    title: metadata.title || asset.filename.replace(/\.[^/.]+$/, ''),
-                    artist: metadata.artist || 'Unknown Artist',
-                    album: metadata.album || asset.albumId || undefined,
-                    duration: asset.duration,
-                    artwork: metadata.artwork || undefined,
-                };
-            })
-        );
+        // First pass: Create tracks with basic info (fast - loads immediately)
+        const tracks: Track[] = media.assets.map((asset, index) => ({
+            id: asset.id || `track-${index}`,
+            url: asset.uri,
+            title: asset.filename.replace(/\.[^/.]+$/, ''),
+            artist: 'Loading...', // Temporary placeholder
+            album: asset.albumId || undefined,
+            duration: asset.duration,
+            artwork: undefined,
+        }));
+
+        // Second pass: Extract metadata in background (non-blocking)
+        // Process in batches to improve performance
+        const batchSize = 10;
+        setTimeout(async () => {
+            console.log('[FileSystemService] Starting background metadata extraction...');
+
+            for (let i = 0; i < media.assets.length; i += batchSize) {
+                const batch = media.assets.slice(i, Math.min(i + batchSize, media.assets.length));
+
+                await Promise.all(
+                    batch.map(async (asset, batchIndex) => {
+                        const index = i + batchIndex;
+                        try {
+                            const metadata = await MetadataService.getMetadata(asset.uri);
+
+                            // Update track in place
+                            tracks[index].title = metadata.title || tracks[index].title;
+                            tracks[index].artist = metadata.artist || 'Unknown Artist';
+                            tracks[index].album = metadata.album || tracks[index].album;
+                            tracks[index].artwork = metadata.artwork;
+                        } catch (error) {
+                            console.warn(`Failed to get metadata for track ${index}:`, error);
+                            tracks[index].artist = 'Unknown Artist';
+                        }
+                    })
+                );
+
+                // Small delay between batches
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            console.log('[FileSystemService] Background metadata extraction complete');
+        }, 500); // Start after 500ms delay
 
         return tracks;
     }
@@ -52,12 +82,10 @@ export class FileSystemService {
                 const filePath = `${uri}/${file}`;
                 const fileInfo = await FileSystem.getInfoAsync(filePath);
 
-                // Check if it's a directory (recursive)
                 if (fileInfo.isDirectory) {
                     const subFiles = await this.getAudioFilesFromUri(filePath);
                     audioFiles.push(...subFiles);
                 } else {
-                    // Check if it's an audio file
                     const ext = file.substring(file.lastIndexOf('.')).toLowerCase();
                     if (AUDIO_EXTENSIONS.includes(ext)) {
                         const metadata = await MetadataService.getMetadata(filePath);
