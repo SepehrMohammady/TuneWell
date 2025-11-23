@@ -5,9 +5,7 @@ export interface Track {
     artist: string;
     album?: string;
     duration?: number;
-    artwork?: string;
-    year?: string;
-    genre?: string;
+    artwork?: string; // base64 encoded album artwork
 }
 
 export interface PlayerState {

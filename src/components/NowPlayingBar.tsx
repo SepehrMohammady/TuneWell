@@ -13,7 +13,10 @@ export function NowPlayingBar() {
             <View style={styles.trackInfo}>
                 <View style={styles.artwork}>
                     {currentTrack.artwork ? (
-                        <Image source={{ uri: currentTrack.artwork }} style={styles.artworkImage} />
+                        <Image
+                            source={{ uri: `data:image/jpeg;base64,${currentTrack.artwork}` }}
+                            style={styles.artworkImage}
+                        />
                     ) : (
                         <View style={styles.artworkPlaceholder}>
                             <Text style={styles.artworkPlaceholderText}>♫</Text>

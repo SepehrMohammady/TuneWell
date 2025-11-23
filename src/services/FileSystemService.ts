@@ -1,6 +1,7 @@
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import { Track } from '@/types';
+import { MetadataService } from './MetadataService';
 
 const AUDIO_EXTENSIONS = ['.mp3', '.m4a', '.flac', '.wav', '.aac', '.ogg', '.opus'];
 
@@ -22,14 +23,22 @@ export class FileSystemService {
             sortBy: [[MediaLibrary.SortBy.creationTime, false]],
         });
 
-        const tracks: Track[] = media.assets.map((asset, index) => ({
-            id: asset.id || `track-${index}`,
-            url: asset.uri,
-            title: asset.filename.replace(/\.[^/.]+$/, ''), // Remove extension
-            artist: 'Unknown Artist',
-            album: asset.albumId || undefined,
-            duration: asset.duration,
-        }));
+        // Extract metadata for all tracks
+        const tracks: Track[] = await Promise.all(
+            media.assets.map(async (asset, index) => {
+                const metadata = await MetadataService.getMetadata(asset.uri);
+
+                return {
+                    id: asset.id || `track-${index}`,
+                    url: asset.uri,
+                    title: metadata.title || asset.filename.replace(/\.[^/.]+$/, ''),
+                    artist: metadata.artist || 'Unknown Artist',
+                    album: metadata.album || asset.albumId || undefined,
+                    duration: asset.duration,
+                    artwork: metadata.artwork || undefined,
+                };
+            })
+        );
 
         return tracks;
     }
@@ -51,12 +60,16 @@ export class FileSystemService {
                     // Check if it's an audio file
                     const ext = file.substring(file.lastIndexOf('.')).toLowerCase();
                     if (AUDIO_EXTENSIONS.includes(ext)) {
+                        const metadata = await MetadataService.getMetadata(filePath);
+
                         audioFiles.push({
                             id: filePath,
                             url: filePath,
-                            title: file.replace(/\.[^/.]+$/, ''),
-                            artist: 'Unknown Artist',
+                            title: metadata.title || file.replace(/\.[^/.]+$/, ''),
+                            artist: metadata.artist || 'Unknown Artist',
+                            album: metadata.album || undefined,
                             duration: undefined,
+                            artwork: metadata.artwork || undefined,
                         });
                     }
                 }

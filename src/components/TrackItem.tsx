@@ -17,17 +17,23 @@ export function TrackItem({ track, onPress }: TrackItemProps) {
     };
 
     return (
-        <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
-            <View style={styles.artwork}>
+        <TouchableOpacity style={styles.container} onPress={onPress}>
+            {/* Album Artwork */}
+            <View style={styles.artworkContainer}>
                 {track.artwork ? (
-                    <Image source={{ uri: track.artwork }} style={styles.artworkImage} />
+                    <Image
+                        source={{ uri: `data:image/jpeg;base64,${track.artwork}` }}
+                        style={styles.artwork}
+                        resizeMode="cover"
+                    />
                 ) : (
-                    <View style={styles.artworkPlaceholder}>
-                        <Text style={styles.artworkPlaceholderText}>♫</Text>
+                    <View style={[styles.artwork, styles.placeholderArtwork]}>
+                        <Text style={styles.musicIcon}>♪</Text>
                     </View>
                 )}
             </View>
 
+            {/* Track Info */}
             <View style={styles.info}>
                 <Text style={styles.title} numberOfLines={1}>
                     {track.title}
@@ -37,7 +43,10 @@ export function TrackItem({ track, onPress }: TrackItemProps) {
                 </Text>
             </View>
 
-            <Text style={styles.duration}>{formatDuration(track.duration)}</Text>
+            {/* Duration */}
+            {track.duration && (
+                <Text style={styles.duration}>{formatDuration(track.duration)}</Text>
+            )}
         </TouchableOpacity>
     );
 }
@@ -46,48 +55,43 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: theme.spacing.md,
-        borderBottomWidth: 0.5,
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.lg,
+        borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
+    },
+    artworkContainer: {
+        marginRight: theme.spacing.md,
     },
     artwork: {
         width: 50,
         height: 50,
         borderRadius: theme.borderRadius.sm,
-        overflow: 'hidden',
-        marginRight: theme.spacing.md,
     },
-    artworkImage: {
-        width: '100%',
-        height: '100%',
-    },
-    artworkPlaceholder: {
-        width: '100%',
-        height: '100%',
+    placeholderArtwork: {
         backgroundColor: theme.colors.surface,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    artworkPlaceholderText: {
+    musicIcon: {
         fontSize: 24,
-        color: theme.colors.textSecondary,
+        color: theme.colors.primary,
     },
     info: {
         flex: 1,
-        marginRight: theme.spacing.md,
     },
     title: {
+        ...theme.typography.body,
         color: theme.colors.text,
-        fontSize: theme.typography.body.fontSize,
-        fontWeight: '500',
         marginBottom: 4,
     },
     artist: {
+        ...theme.typography.caption,
         color: theme.colors.textSecondary,
-        fontSize: theme.typography.caption.fontSize,
     },
     duration: {
-        color: theme.colors.textTertiary,
-        fontSize: theme.typography.small.fontSize,
+        ...theme.typography.caption,
+        color: theme.colors.textSecondary,
+        marginLeft: theme.spacing.md,
     },
 });
