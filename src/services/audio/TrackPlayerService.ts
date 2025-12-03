@@ -16,7 +16,7 @@ import TrackPlayer, {
 /**
  * Register playback service for background operation
  */
-export async function PlaybackService() {
+export async function PlaybackService(): Promise<void> {
   TrackPlayer.addEventListener(Event.RemotePlay, () => {
     TrackPlayer.play();
   });
@@ -80,59 +80,58 @@ export async function setupTrackPlayer(): Promise<boolean> {
   
   try {
     // Check if already initialized
-    const currentTrack = await TrackPlayer.getActiveTrack();
-    isSetup = currentTrack !== null;
-  } catch {
-    // Not initialized yet
-    isSetup = false;
+    try {
+      const currentTrack = await TrackPlayer.getActiveTrack();
+      isSetup = true; // If we got here without error, it's already set up
+    } catch {
+      // Not initialized yet - this is expected
+      isSetup = false;
+    }
+
+    if (!isSetup) {
+      await TrackPlayer.setupPlayer({
+        // Audio quality settings
+        maxCacheSize: 1024 * 1024 * 500, // 500 MB cache
+        autoUpdateMetadata: true,
+        autoHandleInterruptions: true,
+      });
+
+      await TrackPlayer.updateOptions({
+        // Capabilities for lock screen / notification
+        capabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.Stop,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+          Capability.SeekTo,
+          Capability.JumpForward,
+          Capability.JumpBackward,
+        ],
+        compactCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+        ],
+        
+        // Progress update interval
+        progressUpdateEventInterval: 1,
+        
+        // Android specific
+        android: {
+          appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
+        },
+      });
+      
+      console.log('[TrackPlayer] Setup complete');
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[TrackPlayer] Setup failed:', error);
+    return false;
   }
-
-  if (!isSetup) {
-    await TrackPlayer.setupPlayer({
-      // Audio quality settings
-      maxCacheSize: 1024 * 1024 * 500, // 500 MB cache
-      autoUpdateMetadata: true,
-      autoHandleInterruptions: true,
-    });
-
-    await TrackPlayer.updateOptions({
-      // Capabilities for lock screen / notification
-      capabilities: [
-        Capability.Play,
-        Capability.Pause,
-        Capability.Stop,
-        Capability.SkipToNext,
-        Capability.SkipToPrevious,
-        Capability.SeekTo,
-        Capability.JumpForward,
-        Capability.JumpBackward,
-      ],
-      compactCapabilities: [
-        Capability.Play,
-        Capability.Pause,
-        Capability.SkipToNext,
-        Capability.SkipToPrevious,
-      ],
-      
-      // Progress update interval
-      progressUpdateEventInterval: 1,
-      
-      // Android specific
-      android: {
-        appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
-      },
-      
-      // Icons for notification
-      // icon: require('../assets/images/notification-icon.png'),
-      // playIcon: require('../assets/images/play-icon.png'),
-      // pauseIcon: require('../assets/images/pause-icon.png'),
-      // stopIcon: require('../assets/images/stop-icon.png'),
-      // previousIcon: require('../assets/images/previous-icon.png'),
-      // nextIcon: require('../assets/images/next-icon.png'),
-    });
-  }
-
-  return isSetup;
 }
 
 /**

@@ -16,7 +16,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { StatusBar, LogBox } from 'react-native';
+import { StatusBar, LogBox, View, Text, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './navigation';
@@ -26,9 +26,47 @@ import { VERSION, THEME } from './config';
 // Ignore specific warnings in development
 LogBox.ignoreLogs([
   'Non-serializable values were found in the navigation state',
+  'Sending `onAnimatedValueUpdate` with no listeners registered',
 ]);
 
 // Note: PlaybackService is registered in index.js
+
+// Error boundary fallback component
+function ErrorFallback({ error }: { error: Error }) {
+  return (
+    <View style={errorStyles.container}>
+      <Text style={errorStyles.title}>TuneWell</Text>
+      <Text style={errorStyles.subtitle}>Something went wrong</Text>
+      <Text style={errorStyles.error}>{error.message}</Text>
+    </View>
+  );
+}
+
+const errorStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0F0F0F',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#A0A0A0',
+    marginBottom: 20,
+  },
+  error: {
+    fontSize: 14,
+    color: '#EF4444',
+    textAlign: 'center',
+  },
+});
 
 export default function App() {
   const [isPlayerReady, setIsPlayerReady] = useState(false);

@@ -1,97 +1,178 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+<p align="center">
+  <img src="assets/logo.png" alt="TuneWell Logo" width="200" />
+</p>
 
-# Getting Started
+<h1 align="center">TuneWell</h1>
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+<p align="center">
+  <strong>Engineering-Ready Music Player</strong>
+</p>
 
-## Step 1: Start Metro
+<p align="center">
+  A professional audiophile music player for Android, built with React Native.<br/>
+  Designed for sound engineers, audiophiles, and music enthusiasts who demand the best audio quality.
+</p>
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.0.1-blue.svg" alt="Version" />
+  <img src="https://img.shields.io/badge/platform-Android-green.svg" alt="Platform" />
+  <img src="https://img.shields.io/badge/React%20Native-0.82.1-61dafb.svg" alt="React Native" />
+  <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License" />
+</p>
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+---
 
-```sh
-# Using npm
-npm start
+## 🎵 Overview
 
-# OR using Yarn
-yarn start
+**TuneWell** is a professional-grade music player designed for audiophiles and sound engineers. It supports high-resolution audio formats and provides advanced audio processing capabilities, making it the perfect companion for critical listening sessions.
+
+### Key Features
+
+- **🎛️ 10-Band Parametric Equalizer** - Fine-tune your audio with professional-grade EQ controls and customizable presets
+- **📀 High-Resolution Audio Support** - Native playback of FLAC, DSD (DFF/DSF), WAV, and other lossless formats
+- **🔊 USB DAC Ready** - External audio device support for the highest quality output
+- **📋 Smart Playlists** - Favorites, most played, recently added, and mood-based playlists
+- **🎨 Minimal Design** - Clean, distraction-free interface focused on the listening experience
+- **⏭️ Gapless Playback** - Seamless transitions between tracks for uninterrupted listening
+- **🔄 Background Playback** - Keep the music playing with full lock screen and notification controls
+
+## 🎧 Supported Audio Formats
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| FLAC | `.flac` | Free Lossless Audio Codec |
+| DSD | `.dff`, `.dsf` | Direct Stream Digital |
+| WAV | `.wav` | Waveform Audio |
+| AIFF | `.aiff`, `.aif` | Audio Interchange File Format |
+| ALAC | `.m4a` | Apple Lossless Audio Codec |
+| MP3 | `.mp3` | MPEG Audio Layer III |
+| AAC | `.aac`, `.m4a` | Advanced Audio Coding |
+| OGG | `.ogg` | Ogg Vorbis |
+| OPUS | `.opus` | Opus Interactive Audio Codec |
+| WMA | `.wma` | Windows Media Audio |
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18+ 
+- React Native CLI
+- Android Studio with SDK 24+
+- JDK 17+
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/SepehrMohammady/TuneWell.git
+   cd TuneWell
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install --legacy-peer-deps
+   ```
+
+3. **Start Metro bundler**
+   ```bash
+   npm start
+   ```
+
+4. **Build and run on Android**
+   ```bash
+   npm run android
+   ```
+
+### Building Release APK
+
+```bash
+cd android
+./gradlew assembleRelease
 ```
 
-## Step 2: Build and run your app
+The APK will be available at `android/app/build/outputs/apk/release/app-release.apk`
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+## 📱 Screenshots
 
-### Android
+*Coming soon*
 
-```sh
-# Using npm
-npm run android
+## 🏗️ Architecture
 
-# OR using Yarn
-yarn android
+TuneWell is built with a modern tech stack:
+
+- **React Native 0.82** - Cross-platform mobile framework
+- **TypeScript** - Type-safe JavaScript
+- **Zustand** - Lightweight state management with MMKV persistence
+- **React Navigation 6** - Native navigation
+- **react-native-track-player** - Background audio playback
+- **WatermelonDB** - High-performance SQLite database
+
+### Project Structure
+
+```
+src/
+├── components/       # Reusable UI components
+│   ├── common/       # Buttons, sliders, cards
+│   └── player/       # Mini player, EQ visualizer
+├── config/           # App configuration and constants
+├── database/         # WatermelonDB schema and models
+├── hooks/            # Custom React hooks
+├── navigation/       # React Navigation setup
+├── screens/          # App screens
+├── services/         # Audio, metadata, and scanner services
+├── store/            # Zustand state stores
+├── theme/            # Colors, typography, spacing
+├── types/            # TypeScript type definitions
+└── utils/            # Helper utilities
 ```
 
-### iOS
+## 🎛️ EQ Presets
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+TuneWell includes professionally tuned EQ presets:
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+- **Flat** - Neutral response
+- **Bass Boost** - Enhanced low frequencies
+- **Treble Boost** - Enhanced high frequencies
+- **Vocal** - Optimized for vocals
+- **Rock** - Classic rock sound
+- **Pop** - Modern pop sound
+- **Jazz** - Warm jazz tones
+- **Classical** - Concert hall clarity
+- **Electronic** - Deep bass and crisp highs
+- **Acoustic** - Natural instrument tones
 
-```sh
-bundle install
-```
+## 🎨 Mood Playlists
 
-Then, and every time you update your native dependencies, run:
+Automatically organize your music by mood:
 
-```sh
-bundle exec pod install
-```
+- 🧘 Relaxed
+- ⚡ Energetic
+- 😊 Happy
+- 😢 Melancholic
+- 🎉 Party
+- 💪 Workout
+- 🎯 Focus
+- 💤 Sleep
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## 📄 License
 
-```sh
-# Using npm
-npm run ios
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-# OR using Yarn
-yarn ios
-```
+## 👤 Author
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+**Sepehr Mohammady**
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+- Email: SMohammady@outlook.com
+- GitHub: [@SepehrMohammady](https://github.com/SepehrMohammady)
 
-## Step 3: Modify your app
+## 🙏 Acknowledgments
 
-Now that you have successfully run the app, let's make changes!
+- [react-native-track-player](https://github.com/doublesymmetry/react-native-track-player) for audio playback
+- [WatermelonDB](https://github.com/Nozbe/WatermelonDB) for database management
+- [Zustand](https://github.com/pmndrs/zustand) for state management
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+---
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+<p align="center">
+  Made with ❤️ for audiophiles
+</p>
