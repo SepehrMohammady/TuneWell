@@ -6,26 +6,10 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { MMKV } from 'react-native-mmkv';
+import { zustandStorage } from '../utils/storage';
 import type { Track, QueueItem, PlaybackProgress } from '../types';
 import type { PlaybackState, RepeatMode } from '../config/constants';
 import { PLAYBACK_STATES, REPEAT_MODES } from '../config/constants';
-
-// MMKV storage for persistence
-const storage = new MMKV({ id: 'tunewell-player' });
-
-const zustandStorage = {
-  getItem: (name: string) => {
-    const value = storage.getString(name);
-    return value ?? null;
-  },
-  setItem: (name: string, value: string) => {
-    storage.set(name, value);
-  },
-  removeItem: (name: string) => {
-    storage.delete(name);
-  },
-};
 
 interface PlayerState {
   // Current playback

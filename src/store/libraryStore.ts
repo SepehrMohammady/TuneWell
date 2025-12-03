@@ -6,25 +6,10 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { MMKV } from 'react-native-mmkv';
+import { zustandStorage } from '../utils/storage';
 import type { SortOption } from '../config/constants';
 import { SORT_OPTIONS } from '../config/constants';
 import type { LibraryScanResult, LibraryStats } from '../types';
-
-const storage = new MMKV({ id: 'tunewell-library' });
-
-const zustandStorage = {
-  getItem: (name: string) => {
-    const value = storage.getString(name);
-    return value ?? null;
-  },
-  setItem: (name: string, value: string) => {
-    storage.set(name, value);
-  },
-  removeItem: (name: string) => {
-    storage.delete(name);
-  },
-};
 
 interface LibraryState {
   // Scan folders

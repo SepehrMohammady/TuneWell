@@ -6,23 +6,8 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { MMKV } from 'react-native-mmkv';
+import { zustandStorage } from '../utils/storage';
 import type { AppSettings, AudioOutputSettings } from '../types';
-
-const storage = new MMKV({ id: 'tunewell-settings' });
-
-const zustandStorage = {
-  getItem: (name: string) => {
-    const value = storage.getString(name);
-    return value ?? null;
-  },
-  setItem: (name: string, value: string) => {
-    storage.set(name, value);
-  },
-  removeItem: (name: string) => {
-    storage.delete(name);
-  },
-};
 
 const defaultAudioOutput: AudioOutputSettings = {
   selectedDeviceId: undefined,
