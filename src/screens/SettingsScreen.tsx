@@ -8,7 +8,7 @@
  * - About and version info
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import {
   TouchableOpacity,
   StatusBar,
   Switch,
+  Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME, VERSION, APP_INFO } from '../config';
@@ -27,6 +29,124 @@ export default function SettingsScreen() {
   const { currentTrack } = usePlayerStore();
   const settings = useSettingsStore();
   const { scanFolders, lastScanAt, stats } = useLibraryStore();
+
+  const [selectedSampleRate, setSelectedSampleRate] = useState(settings.audioOutput.sampleRate);
+  const [selectedBitDepth, setSelectedBitDepth] = useState(settings.audioOutput.bitDepth);
+  const [selectedTheme, setSelectedTheme] = useState('Dark');
+  const [selectedDsdOutput, setSelectedDsdOutput] = useState('PCM Conversion');
+  const [selectedReplayGain, setSelectedReplayGain] = useState('Off');
+  const [selectedArtworkQuality, setSelectedArtworkQuality] = useState('High');
+
+  const handleSelectOption = (
+    title: string,
+    options: string[],
+    current: string,
+    onSelect: (value: string) => void
+  ) => {
+    Alert.alert(
+      title,
+      'Select an option:',
+      [
+        ...options.map(opt => ({
+          text: opt + (opt === current ? ' ✓' : ''),
+          onPress: () => onSelect(opt),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]
+    );
+  };
+
+  const handleSampleRateSelect = () => {
+    handleSelectOption(
+      'Sample Rate',
+      ['44.1 kHz', '48 kHz', '88.2 kHz', '96 kHz', '176.4 kHz', '192 kHz', '352.8 kHz', '384 kHz'],
+      `${selectedSampleRate / 1000} kHz`,
+      (value) => {
+        const rate = parseFloat(value) * 1000;
+        setSelectedSampleRate(rate);
+        settings.setAudioOutput({ sampleRate: rate });
+      }
+    );
+  };
+
+  const handleBitDepthSelect = () => {
+    handleSelectOption(
+      'Bit Depth',
+      ['16-bit', '24-bit', '32-bit'],
+      `${selectedBitDepth}-bit`,
+      (value) => {
+        const depth = parseInt(value);
+        setSelectedBitDepth(depth);
+        settings.setAudioOutput({ bitDepth: depth });
+      }
+    );
+  };
+
+  const handleDsdOutputSelect = () => {
+    handleSelectOption(
+      'DSD Output',
+      ['PCM Conversion', 'DoP (DSD over PCM)', 'Native DSD'],
+      selectedDsdOutput,
+      setSelectedDsdOutput
+    );
+  };
+
+  const handleReplayGainSelect = () => {
+    handleSelectOption(
+      'ReplayGain',
+      ['Off', 'Track Gain', 'Album Gain', 'Auto'],
+      selectedReplayGain,
+      setSelectedReplayGain
+    );
+  };
+
+  const handleThemeSelect = () => {
+    handleSelectOption(
+      'Theme',
+      ['Dark', 'Light', 'AMOLED Black', 'System'],
+      selectedTheme,
+      setSelectedTheme
+    );
+  };
+
+  const handleArtworkQualitySelect = () => {
+    handleSelectOption(
+      'Artwork Quality',
+      ['Low', 'Medium', 'High', 'Original'],
+      selectedArtworkQuality,
+      setSelectedArtworkQuality
+    );
+  };
+
+  const handleCrossfadeDuration = () => {
+    handleSelectOption(
+      'Crossfade Duration',
+      ['1s', '2s', '3s', '4s', '5s', '8s', '10s'],
+      `${settings.crossfadeDuration / 1000}s`,
+      (value) => {
+        const duration = parseInt(value) * 1000;
+        settings.setCrossfadeDuration(duration);
+      }
+    );
+  };
+
+  const handleMusicFolders = () => {
+    Alert.alert(
+      'Music Folders',
+      scanFolders.length > 0 
+        ? `Current folders:\n${scanFolders.join('\n')}\n\nGo to Library tab to manage folders.`
+        : 'No folders added yet. Go to Library tab to add folders.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleOutputDevice = () => {
+    Alert.alert(
+      'Output Device',
+      'Currently using system default output.\n\nUSB DAC support will automatically detect and use connected DACs.',
+      [{ text: 'OK' }]
+    );
+  };
 
   const formatDate = (timestamp: number | null | undefined): string => {
     if (!timestamp) return 'Never';
@@ -85,7 +205,7 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Library</Text>
           <View style={styles.sectionContent}>
-            {renderSettingRow('Music Folders', `${scanFolders.length} folders`)}
+            {renderSettingRow('Music Folders', `${scanFolders.length} folders`, handleMusicFolders)}
             {renderSettingRow('Last Scan', formatDate(lastScanAt))}
             {renderSettingRow('Total Tracks', stats?.totalTracks?.toString() || '0')}
             {renderToggleRow(
@@ -105,12 +225,13 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Audio Output</Text>
           <View style={styles.sectionContent}>
-            {renderSettingRow('Output Device', 'System Default')}
+            {renderSettingRow('Output Device', 'System Default', handleOutputDevice)}
             {renderSettingRow(
               'Sample Rate',
-              `${settings.audioOutput.sampleRate / 1000} kHz`
+              `${selectedSampleRate / 1000} kHz`,
+              handleSampleRateSelect
             )}
-            {renderSettingRow('Bit Depth', `${settings.audioOutput.bitDepth}-bit`)}
+            {renderSettingRow('Bit Depth', `${selectedBitDepth}-bit`, handleBitDepthSelect)}
             {renderToggleRow(
               'Exclusive Mode',
               settings.audioOutput.exclusiveMode,
@@ -121,8 +242,8 @@ export default function SettingsScreen() {
               settings.audioOutput.gaplessPlayback,
               (value) => settings.setAudioOutput({ gaplessPlayback: value })
             )}
-            {renderSettingRow('DSD Output', 'PCM Conversion')}
-            {renderSettingRow('ReplayGain', 'Off')}
+            {renderSettingRow('DSD Output', selectedDsdOutput, handleDsdOutputSelect)}
+            {renderSettingRow('ReplayGain', selectedReplayGain, handleReplayGainSelect)}
           </View>
         </View>
 
@@ -147,7 +268,8 @@ export default function SettingsScreen() {
             )}
             {settings.crossfade && renderSettingRow(
               'Crossfade Duration',
-              `${settings.crossfadeDuration / 1000}s`
+              `${settings.crossfadeDuration / 1000}s`,
+              handleCrossfadeDuration
             )}
           </View>
         </View>
@@ -156,7 +278,7 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Display</Text>
           <View style={styles.sectionContent}>
-            {renderSettingRow('Theme', 'Dark')}
+            {renderSettingRow('Theme', selectedTheme, handleThemeSelect)}
             {renderToggleRow(
               'Show Bitrate',
               settings.showBitrate,
@@ -167,7 +289,7 @@ export default function SettingsScreen() {
               settings.showSampleRate,
               settings.setShowSampleRate
             )}
-            {renderSettingRow('Artwork Quality', 'High')}
+            {renderSettingRow('Artwork Quality', selectedArtworkQuality, handleArtworkQualitySelect)}
           </View>
         </View>
 
@@ -182,7 +304,7 @@ export default function SettingsScreen() {
             <TouchableOpacity
               style={styles.linkRow}
               onPress={() => {
-                // Open GitHub repo
+                Linking.openURL('https://github.com/SepehrMohammady/TuneWell');
               }}
             >
               <Text style={styles.linkText}>View on GitHub</Text>

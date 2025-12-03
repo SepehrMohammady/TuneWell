@@ -220,25 +220,25 @@ export const ROUTES = {
 
 export type Route = typeof ROUTES[keyof typeof ROUTES];
 
-// Theme
+// Theme - Minimal neutral design
 export const THEME = {
   colors: {
-    primary: '#6366F1',
-    secondary: '#818CF8',
-    accent: '#C7D2FE',
-    background: '#0F0F0F',
-    surface: '#1A1A1A',
-    surfaceLight: '#2A2A2A',
+    primary: '#FFFFFF',
+    secondary: '#E5E5E5',
+    accent: '#D4D4D4',
+    background: '#0A0A0A',
+    surface: '#141414',
+    surfaceLight: '#1F1F1F',
     text: '#FFFFFF',
-    textSecondary: '#A0A0A0',
-    textMuted: '#666666',
-    border: '#333333',
-    error: '#EF4444',
-    success: '#22C55E',
-    warning: '#F59E0B',
-    info: '#3B82F6',
-    waveform: '#6366F1',
-    progress: '#818CF8',
+    textSecondary: '#A3A3A3',
+    textMuted: '#525252',
+    border: '#262626',
+    error: '#DC2626',
+    success: '#16A34A',
+    warning: '#CA8A04',
+    info: '#2563EB',
+    waveform: '#FFFFFF',
+    progress: '#FFFFFF',
   },
   spacing: {
     xs: 4,

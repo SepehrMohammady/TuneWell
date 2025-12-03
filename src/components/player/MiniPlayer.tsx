@@ -15,6 +15,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { THEME, ROUTES } from '../../config';
 import { usePlayerStore } from '../../store';
+import { audioService } from '../../services/audio';
 
 export default function MiniPlayer() {
   const navigation = useNavigation();
@@ -29,6 +30,30 @@ export default function MiniPlayer() {
   const progressPercent = progress.duration > 0
     ? (progress.position / progress.duration) * 100
     : 0;
+
+  const handlePlayPause = async () => {
+    try {
+      await audioService.togglePlayPause();
+    } catch (error) {
+      console.error('Play/pause error:', error);
+    }
+  };
+
+  const handlePrevious = async () => {
+    try {
+      await audioService.skipToPrevious();
+    } catch (error) {
+      console.error('Previous error:', error);
+    }
+  };
+
+  const handleNext = async () => {
+    try {
+      await audioService.skipToNext();
+    } catch (error) {
+      console.error('Next error:', error);
+    }
+  };
 
   return (
     <TouchableOpacity
@@ -74,15 +99,15 @@ export default function MiniPlayer() {
 
         {/* Controls */}
         <View style={styles.controls}>
-          <TouchableOpacity style={styles.controlButton}>
+          <TouchableOpacity style={styles.controlButton} onPress={handlePrevious}>
             <Text style={styles.controlButtonText}>⏮</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.playButton}>
+          <TouchableOpacity style={styles.playButton} onPress={handlePlayPause}>
             <Text style={styles.playButtonText}>
               {isPlaying ? '⏸' : '▶'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.controlButton}>
+          <TouchableOpacity style={styles.controlButton} onPress={handleNext}>
             <Text style={styles.controlButtonText}>⏭</Text>
           </TouchableOpacity>
         </View>

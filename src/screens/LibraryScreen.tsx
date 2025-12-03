@@ -8,7 +8,7 @@
  * - Sorting and filtering
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,18 +17,255 @@ import {
   TouchableOpacity,
   StatusBar,
   FlatList,
+  Alert,
+  PermissionsAndroid,
+  Platform,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { pickDirectory } from '@react-native-documents/picker';
 import { THEME, SORT_OPTIONS } from '../config';
 import { useLibraryStore, usePlayerStore } from '../store';
+import { audioService } from '../services/audio';
 import MiniPlayer from '../components/player/MiniPlayer';
+import type { Track } from '../types';
+import type { ScannedTrack } from '../services/libraryScanner';
 
 type ViewMode = 'folders' | 'tracks' | 'albums' | 'artists';
 
+const requestStoragePermission = async (): Promise<boolean> => {
+  if (Platform.OS !== 'android') return true;
+  
+  try {
+    const apiLevel = Platform.Version;
+    
+    // Android 13+ (API 33+) uses granular media permissions
+    if (typeof apiLevel === 'number' && apiLevel >= 33) {
+      const granted = await PermissionsAndroid.request(
+        'android.permission.READ_MEDIA_AUDIO' as any,
+        {
+          title: 'Audio Permission',
+          message: 'TuneWell needs access to your music files to play them.',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'Grant Access',
+        }
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } else {
+      // Android 12 and below
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+        {
+          title: 'Storage Permission',
+          message: 'TuneWell needs access to your music files to play them.',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'Grant Access',
+        }
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    }
+  } catch (err) {
+    console.warn('Permission request error:', err);
+    return false;
+  }
+};
+
 export default function LibraryScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('folders');
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [manualPath, setManualPath] = useState('');
   const { currentTrack } = usePlayerStore();
-  const { scanFolders, isScanning, sortBy, sortDescending, stats } = useLibraryStore();
+  const { 
+    scanFolders, 
+    tracks,
+    isScanning, 
+    scanMessage,
+    sortBy, 
+    sortDescending, 
+    stats, 
+    addScanFolder, 
+    removeScanFolder, 
+    startScan 
+  } = useLibraryStore();
+
+  // Request permission on mount
+  useEffect(() => {
+    const checkPermission = async () => {
+      if (Platform.OS === 'android') {
+        const apiLevel = Platform.Version;
+        let permission: any;
+        
+        if (typeof apiLevel === 'number' && apiLevel >= 33) {
+          permission = 'android.permission.READ_MEDIA_AUDIO';
+        } else {
+          permission = PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+        }
+        
+        const hasIt = await PermissionsAndroid.check(permission);
+        setHasPermission(hasIt);
+        
+        // Auto-request if not granted
+        if (!hasIt) {
+          const granted = await requestStoragePermission();
+          setHasPermission(granted);
+        }
+      } else {
+        setHasPermission(true);
+      }
+    };
+    checkPermission();
+  }, []);
+
+  const handleAddFolder = useCallback(async () => {
+    try {
+      // Ensure we have permission first
+      if (!hasPermission) {
+        const granted = await requestStoragePermission();
+        setHasPermission(granted);
+        if (!granted) {
+          Alert.alert(
+            'Permission Required',
+            'TuneWell needs storage permission to access your music files. Please grant permission in Settings.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      }
+
+      // Use directory picker to select a folder
+      const result = await pickDirectory();
+
+      if (result) {
+        const folderPath = result.uri;
+        
+        // Check if folder already exists
+        if (scanFolders.includes(folderPath)) {
+          Alert.alert('Already Added', 'This folder is already in your library.');
+          return;
+        }
+        
+        addScanFolder(folderPath);
+        Alert.alert(
+          'Folder Added', 
+          `Added folder to library.\n\nTap "Scan" to find music files.`,
+          [
+            { text: 'Later', style: 'cancel' },
+            { text: 'Scan Now', onPress: () => startScan() }
+          ]
+        );
+      }
+    } catch (err: any) {
+      if (err?.code !== 'DOCUMENT_PICKER_CANCELED' && err?.message !== 'User canceled' && !err?.message?.includes('cancel')) {
+        console.log('Folder picker error:', err);
+        // Show manual entry option
+        setShowFolderModal(true);
+      }
+    }
+  }, [addScanFolder, hasPermission, startScan, scanFolders]);
+
+  const handleManualAddFolder = useCallback(() => {
+    if (!manualPath.trim()) {
+      Alert.alert('Error', 'Please enter a folder path.');
+      return;
+    }
+    
+    const path = manualPath.trim();
+    if (scanFolders.includes(path)) {
+      Alert.alert('Already Added', 'This folder is already in your library.');
+      return;
+    }
+    
+    addScanFolder(path);
+    setManualPath('');
+    setShowFolderModal(false);
+    Alert.alert('Folder Added', 'Folder added to library.');
+  }, [manualPath, addScanFolder, scanFolders]);
+
+  const handleRemoveFolder = useCallback((folderPath: string) => {
+    Alert.alert(
+      'Remove Folder',
+      'Remove this folder from your library?\n\nThis will not delete your music files.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Remove', 
+          style: 'destructive',
+          onPress: () => removeScanFolder(folderPath)
+        }
+      ]
+    );
+  }, [removeScanFolder]);
+
+  const handleScan = useCallback(async () => {
+    if (!hasPermission) {
+      const granted = await requestStoragePermission();
+      setHasPermission(granted);
+      if (!granted) {
+        Alert.alert('Permission Required', 'Please grant storage permission to scan for music.');
+        return;
+      }
+    }
+    
+    if (scanFolders.length === 0) {
+      Alert.alert('No Folders', 'Please add at least one folder to scan.');
+      return;
+    }
+    startScan();
+  }, [scanFolders, startScan, hasPermission]);
+
+  // Convert ScannedTrack to Track format for playback
+  const convertToTrack = (scannedTrack: ScannedTrack): Track => ({
+    id: scannedTrack.id,
+    uri: scannedTrack.uri,
+    filePath: scannedTrack.path,
+    fileName: scannedTrack.filename,
+    folderPath: scannedTrack.folder,
+    folderName: scannedTrack.folder.split('/').pop() || 'Music',
+    title: scannedTrack.title || scannedTrack.filename.replace(/\.[^/.]+$/, ''),
+    artist: scannedTrack.artist || 'Unknown Artist',
+    album: scannedTrack.album || 'Unknown Album',
+    duration: scannedTrack.duration || 0,
+    sampleRate: 44100,
+    bitDepth: 16,
+    channels: 2,
+    format: scannedTrack.extension.replace('.', '').toUpperCase(),
+    isLossless: ['.flac', '.wav', '.aiff', '.alac', '.ape'].includes(scannedTrack.extension.toLowerCase()),
+    isHighRes: false,
+    isDSD: ['.dff', '.dsf', '.dsd'].includes(scannedTrack.extension.toLowerCase()),
+    playCount: 0,
+    isFavorite: false,
+    moods: [],
+    dateAdded: scannedTrack.modifiedAt,
+    dateModified: scannedTrack.modifiedAt,
+  });
+
+  const handlePlayTrack = useCallback(async (scannedTrack: ScannedTrack, index: number) => {
+    try {
+      // Initialize audio service if needed
+      await audioService.initialize();
+      
+      // Convert all tracks to Track format
+      const allTracks: Track[] = tracks.map(convertToTrack);
+      
+      // Create queue items
+      const queueItems = allTracks.map((track, idx) => ({
+        id: `queue_${track.id}_${Date.now()}_${idx}`,
+        track,
+        addedAt: Date.now(),
+        source: 'library' as const,
+      }));
+      
+      // Play the queue starting from the selected track
+      await audioService.playQueue(queueItems, index);
+    } catch (error: any) {
+      console.error('Playback error:', error);
+      Alert.alert('Playback Error', error.message || 'Failed to play track');
+    }
+  }, [tracks]);
 
   const renderViewModeTab = (mode: ViewMode, label: string) => (
     <TouchableOpacity
@@ -48,7 +285,7 @@ export default function LibraryScreen() {
       <Text style={styles.emptyStateSubtext}>
         Add folders containing your music files to start building your library.
       </Text>
-      <TouchableOpacity style={styles.addFolderButton}>
+      <TouchableOpacity style={styles.addFolderButton} onPress={handleAddFolder}>
         <Text style={styles.addFolderButtonText}>Add Folder</Text>
       </TouchableOpacity>
     </View>
@@ -56,45 +293,109 @@ export default function LibraryScreen() {
 
   const renderFolderView = () => (
     <View style={styles.viewContent}>
+      {/* Add Folder Button - always visible */}
+      <TouchableOpacity style={styles.addFolderRow} onPress={handleAddFolder}>
+        <Text style={styles.addFolderRowIcon}>➕</Text>
+        <Text style={styles.addFolderRowText}>Add Music Folder</Text>
+      </TouchableOpacity>
+      
       {scanFolders.length === 0 ? (
-        renderEmptyLibrary()
+        <View style={styles.emptyFolders}>
+          <Text style={styles.emptyFoldersText}>No folders added yet</Text>
+          <Text style={styles.emptyFoldersSubtext}>Tap above to add your music folders</Text>
+        </View>
       ) : (
         <FlatList
           data={scanFolders}
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.folderItem}>
+            <View style={styles.folderItem}>
               <Text style={styles.folderIcon}>📂</Text>
               <View style={styles.folderInfo}>
-                <Text style={styles.folderName}>{item.split('/').pop()}</Text>
-                <Text style={styles.folderPath}>{item}</Text>
+                <Text style={styles.folderName} numberOfLines={1}>
+                  {decodeURIComponent(item.split('/').pop() || item.split('%2F').pop() || 'Folder')}
+                </Text>
+                <Text style={styles.folderPath} numberOfLines={1}>
+                  {decodeURIComponent(item).replace('content://com.android.externalstorage.documents/tree/', '')}
+                </Text>
               </View>
-            </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.removeFolderButton}
+                onPress={() => handleRemoveFolder(item)}
+              >
+                <Text style={styles.removeFolderText}>✕</Text>
+              </TouchableOpacity>
+            </View>
           )}
           contentContainerStyle={styles.listContent}
+          scrollEnabled={false}
         />
       )}
     </View>
   );
 
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const renderTracksView = () => (
     <View style={styles.viewContent}>
+      {/* Scan status */}
+      {isScanning && (
+        <View style={styles.scanStatus}>
+          <Text style={styles.scanStatusText}>{scanMessage || 'Scanning...'}</Text>
+        </View>
+      )}
+      
       <View style={styles.sortBar}>
-        <Text style={styles.sortLabel}>Sort by:</Text>
+        <Text style={styles.sortLabel}>
+          {tracks.length} tracks {stats?.totalSize ? `• ${formatFileSize(stats.totalSize)}` : ''}
+        </Text>
         <TouchableOpacity style={styles.sortButton}>
           <Text style={styles.sortButtonText}>{sortBy}</Text>
           <Text style={styles.sortDirection}>{sortDescending ? '↓' : '↑'}</Text>
         </TouchableOpacity>
       </View>
       
-      {stats?.totalTracks === 0 ? (
-        renderEmptyLibrary()
-      ) : (
-        <View style={styles.statsInfo}>
-          <Text style={styles.statsText}>
-            {stats?.totalTracks || 0} tracks • {stats?.totalAlbums || 0} albums • {stats?.totalArtists || 0} artists
+      {tracks.length === 0 ? (
+        <View style={styles.emptyFolders}>
+          <Text style={styles.emptyFoldersText}>No tracks found</Text>
+          <Text style={styles.emptyFoldersSubtext}>
+            {scanFolders.length === 0 
+              ? 'Add a folder first, then tap Scan' 
+              : 'Tap Scan to find music files'}
           </Text>
         </View>
+      ) : (
+        <FlatList
+          data={tracks}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item, index }) => (
+            <TouchableOpacity 
+              style={styles.trackItem}
+              onPress={() => handlePlayTrack(item, index)}
+            >
+              <View style={styles.trackIcon}>
+                <Text style={styles.trackIconText}>🎵</Text>
+              </View>
+              <View style={styles.trackInfo}>
+                <Text style={styles.trackTitle} numberOfLines={1}>
+                  {item.title || item.filename}
+                </Text>
+                <Text style={styles.trackDetails} numberOfLines={1}>
+                  {item.extension.replace('.', '').toUpperCase()} • {formatFileSize(item.size)}
+                </Text>
+              </View>
+              <View style={styles.playIcon}>
+                <Text style={styles.playIconText}>▶</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.listContent}
+          scrollEnabled={false}
+        />
       )}
     </View>
   );
@@ -130,7 +431,7 @@ export default function LibraryScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Library</Text>
-        <TouchableOpacity style={styles.scanButton} disabled={isScanning}>
+        <TouchableOpacity style={styles.scanButton} disabled={isScanning} onPress={handleScan}>
           <Text style={styles.scanButtonText}>
             {isScanning ? 'Scanning...' : 'Scan'}
           </Text>
@@ -155,6 +456,49 @@ export default function LibraryScreen() {
         {/* Spacer for mini player */}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Manual Folder Entry Modal */}
+      <Modal
+        visible={showFolderModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFolderModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add Folder Manually</Text>
+            <Text style={styles.modalSubtitle}>
+              Enter the full path to your music folder
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={manualPath}
+              onChangeText={setManualPath}
+              placeholder="/storage/emulated/0/Music"
+              placeholderTextColor={THEME.colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setShowFolderModal(false);
+                  setManualPath('');
+                }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalAddButton}
+                onPress={handleManualAddFolder}
+              >
+                <Text style={styles.modalAddText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Mini Player */}
       {currentTrack && <MiniPlayer />}
@@ -320,5 +664,167 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: THEME.colors.textSecondary,
     fontSize: 16,
+  },
+  addFolderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.colors.surface,
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.lg,
+    marginBottom: THEME.spacing.md,
+    borderWidth: 1,
+    borderColor: THEME.colors.primary,
+    borderStyle: 'dashed',
+  },
+  addFolderRowIcon: {
+    fontSize: 20,
+    marginRight: THEME.spacing.md,
+  },
+  addFolderRowText: {
+    fontSize: 16,
+    color: THEME.colors.primary,
+    fontWeight: '500',
+  },
+  emptyFolders: {
+    alignItems: 'center',
+    paddingVertical: THEME.spacing.xl,
+  },
+  emptyFoldersText: {
+    color: THEME.colors.textSecondary,
+    fontSize: 16,
+  },
+  emptyFoldersSubtext: {
+    color: THEME.colors.textMuted,
+    fontSize: 14,
+    marginTop: THEME.spacing.xs,
+  },
+  removeFolderButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: THEME.colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: THEME.spacing.sm,
+  },
+  removeFolderText: {
+    color: THEME.colors.error,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: THEME.spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: THEME.colors.surface,
+    borderRadius: THEME.borderRadius.lg,
+    padding: THEME.spacing.lg,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: THEME.colors.text,
+    marginBottom: THEME.spacing.xs,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: THEME.colors.textSecondary,
+    marginBottom: THEME.spacing.md,
+  },
+  modalInput: {
+    backgroundColor: THEME.colors.background,
+    borderRadius: THEME.borderRadius.md,
+    padding: THEME.spacing.md,
+    fontSize: 14,
+    color: THEME.colors.text,
+    marginBottom: THEME.spacing.md,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: THEME.spacing.sm,
+  },
+  modalCancelButton: {
+    paddingHorizontal: THEME.spacing.lg,
+    paddingVertical: THEME.spacing.sm,
+  },
+  modalCancelText: {
+    color: THEME.colors.textSecondary,
+    fontSize: 16,
+  },
+  modalAddButton: {
+    backgroundColor: THEME.colors.primary,
+    paddingHorizontal: THEME.spacing.lg,
+    paddingVertical: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.md,
+  },
+  modalAddText: {
+    color: THEME.colors.text,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  scanStatus: {
+    backgroundColor: THEME.colors.primary + '20',
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    marginBottom: THEME.spacing.md,
+  },
+  scanStatusText: {
+    color: THEME.colors.primary,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  trackItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.colors.surface,
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    marginBottom: THEME.spacing.sm,
+  },
+  trackIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: THEME.borderRadius.md,
+    backgroundColor: THEME.colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: THEME.spacing.md,
+  },
+  trackIconText: {
+    fontSize: 24,
+  },
+  trackInfo: {
+    flex: 1,
+  },
+  trackTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: THEME.colors.text,
+    marginBottom: 2,
+  },
+  trackDetails: {
+    fontSize: 13,
+    color: THEME.colors.textSecondary,
+  },
+  playIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: THEME.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: THEME.spacing.sm,
+  },
+  playIconText: {
+    color: THEME.colors.text,
+    fontSize: 14,
+    marginLeft: 2,
   },
 });

@@ -38,11 +38,12 @@ const TuneWellTheme = {
   },
 };
 
+import { Text as RNText } from 'react-native';
+
 /**
- * Tab icon component placeholder
+ * Tab icon component
  */
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
-  // In a real app, use react-native-vector-icons or similar
   const iconMap: Record<string, string> = {
     Home: '🏠',
     Library: '📚',
@@ -52,9 +53,9 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   };
   
   return (
-    <React.Fragment>
-      {/* Icon placeholder - replace with actual icon component */}
-    </React.Fragment>
+    <RNText style={{ fontSize: 22 }}>
+      {iconMap[name] || '📱'}
+    </RNText>
   );
 }
 

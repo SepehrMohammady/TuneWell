@@ -106,6 +106,16 @@ export default function HomeScreen() {
               { id: 'focus', name: 'Focus', icon: '🎯', color: '#4169E1' },
               { id: 'romantic', name: 'Romantic', icon: '💕', color: '#FF69B4' },
               { id: 'dreamy', name: 'Dreamy', icon: '🌙', color: '#9370DB' },
+              { id: 'melancholy', name: 'Melancholy', icon: '🌧️', color: '#708090' },
+              { id: 'uplifting', name: 'Uplifting', icon: '🌈', color: '#00CED1' },
+              { id: 'chill', name: 'Chill', icon: '❄️', color: '#87CEEB' },
+              { id: 'workout', name: 'Workout', icon: '💪', color: '#DC143C' },
+              { id: 'party', name: 'Party', icon: '🎉', color: '#FF1493' },
+              { id: 'study', name: 'Study', icon: '📚', color: '#8B4513' },
+              { id: 'sleep', name: 'Sleep', icon: '😴', color: '#191970' },
+              { id: 'nature', name: 'Nature', icon: '🌲', color: '#228B22' },
+              { id: 'adventure', name: 'Adventure', icon: '🏔️', color: '#CD853F' },
+              { id: 'nostalgic', name: 'Nostalgic', icon: '📼', color: '#B8860B' },
             ].map((mood) => (
               <TouchableOpacity
                 key={mood.id}

@@ -7,7 +7,7 @@
  * - User-created playlists
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  Alert,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME, MOOD_CATEGORIES } from '../config';
@@ -23,13 +26,42 @@ import MiniPlayer from '../components/player/MiniPlayer';
 
 type Section = 'system' | 'mood' | 'custom';
 
+interface CustomPlaylist {
+  id: string;
+  name: string;
+  trackCount: number;
+  createdAt: number;
+}
+
 export default function PlaylistsScreen() {
   const [expandedSection, setExpandedSection] = useState<Section | null>('system');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [customPlaylists, setCustomPlaylists] = useState<CustomPlaylist[]>([]);
   const { currentTrack } = usePlayerStore();
 
   const toggleSection = (section: Section) => {
     setExpandedSection(expandedSection === section ? null : section);
   };
+
+  const handleCreatePlaylist = useCallback(() => {
+    if (!newPlaylistName.trim()) {
+      Alert.alert('Error', 'Please enter a playlist name');
+      return;
+    }
+    
+    const newPlaylist: CustomPlaylist = {
+      id: Date.now().toString(),
+      name: newPlaylistName.trim(),
+      trackCount: 0,
+      createdAt: Date.now(),
+    };
+    
+    setCustomPlaylists(prev => [...prev, newPlaylist]);
+    setNewPlaylistName('');
+    setShowCreateModal(false);
+    Alert.alert('Success', `Playlist "${newPlaylist.name}" created!`);
+  }, [newPlaylistName]);
 
   const renderSectionHeader = (section: Section, title: string, count: number) => (
     <TouchableOpacity
@@ -53,10 +85,49 @@ export default function PlaylistsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Playlists</Text>
-        <TouchableOpacity style={styles.createButton}>
+        <TouchableOpacity style={styles.createButton} onPress={() => setShowCreateModal(true)}>
           <Text style={styles.createButtonText}>+ New</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Create Playlist Modal */}
+      <Modal
+        visible={showCreateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>New Playlist</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Playlist name"
+              placeholderTextColor={THEME.colors.textSecondary}
+              value={newPlaylistName}
+              onChangeText={setNewPlaylistName}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  setShowCreateModal(false);
+                  setNewPlaylistName('');
+                }}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.modalButtonCreate]}
+                onPress={handleCreatePlaylist}
+              >
+                <Text style={styles.modalButtonText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView 
         style={styles.content}
@@ -127,16 +198,30 @@ export default function PlaylistsScreen() {
         )}
 
         {/* Custom Playlists */}
-        {renderSectionHeader('custom', 'My Playlists', 0)}
+        {renderSectionHeader('custom', 'My Playlists', customPlaylists.length)}
         {expandedSection === 'custom' && (
           <View style={styles.sectionContent}>
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateIcon}>📋</Text>
-              <Text style={styles.emptyStateText}>No custom playlists yet</Text>
-              <Text style={styles.emptyStateSubtext}>
-                Tap "+ New" to create your first playlist
-              </Text>
-            </View>
+            {customPlaylists.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateIcon}>📋</Text>
+                <Text style={styles.emptyStateText}>No custom playlists yet</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  Tap "+ New" to create your first playlist
+                </Text>
+              </View>
+            ) : (
+              customPlaylists.map((playlist) => (
+                <TouchableOpacity key={playlist.id} style={styles.playlistItem}>
+                  <View style={[styles.playlistIcon, { backgroundColor: THEME.colors.primary }]}>
+                    <Text style={styles.playlistIconText}>🎵</Text>
+                  </View>
+                  <View style={styles.playlistInfo}>
+                    <Text style={styles.playlistName}>{playlist.name}</Text>
+                    <Text style={styles.playlistMeta}>{playlist.trackCount} tracks</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         )}
 
@@ -264,5 +349,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: THEME.colors.textSecondary,
     marginTop: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: THEME.colors.surface,
+    borderRadius: THEME.borderRadius.lg,
+    padding: THEME.spacing.xl,
+    width: '85%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: THEME.colors.text,
+    marginBottom: THEME.spacing.lg,
+    textAlign: 'center',
+  },
+  modalInput: {
+    backgroundColor: THEME.colors.background,
+    borderRadius: THEME.borderRadius.md,
+    paddingHorizontal: THEME.spacing.md,
+    paddingVertical: THEME.spacing.md,
+    fontSize: 16,
+    color: THEME.colors.text,
+    marginBottom: THEME.spacing.lg,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: THEME.colors.background,
+    marginRight: THEME.spacing.sm,
+  },
+  modalButtonCreate: {
+    backgroundColor: THEME.colors.primary,
+    marginLeft: THEME.spacing.sm,
+  },
+  modalButtonText: {
+    color: THEME.colors.text,
+    fontWeight: '600',
+    fontSize: 16,
   },
 });

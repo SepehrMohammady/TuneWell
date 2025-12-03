@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { THEME, ROUTES } from '../config';
 import { usePlayerStore, useEQStore } from '../store';
+import { audioService } from '../services/audio';
 import { formatDuration } from '../services/metadata';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -150,19 +151,19 @@ export default function PlayerScreen() {
         </TouchableOpacity>
 
         {/* Previous */}
-        <TouchableOpacity style={styles.controlButton}>
+        <TouchableOpacity style={styles.controlButton} onPress={() => audioService.skipToPrevious()}>
           <Text style={styles.controlButtonText}>⏮</Text>
         </TouchableOpacity>
 
         {/* Play/Pause */}
-        <TouchableOpacity style={styles.playButton}>
+        <TouchableOpacity style={styles.playButton} onPress={() => audioService.togglePlayPause()}>
           <Text style={styles.playButtonText}>
             {isPlaying ? '⏸' : '▶'}
           </Text>
         </TouchableOpacity>
 
         {/* Next */}
-        <TouchableOpacity style={styles.controlButton}>
+        <TouchableOpacity style={styles.controlButton} onPress={() => audioService.skipToNext()}>
           <Text style={styles.controlButtonText}>⏭</Text>
         </TouchableOpacity>
 

@@ -8,7 +8,7 @@
  * - Import/export functionality
  */
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,10 @@ import {
   TouchableOpacity,
   StatusBar,
   Switch,
+  Alert,
+  PanResponder,
+  GestureResponderEvent,
+  PanResponderGestureState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME, EQ_FREQUENCIES, EQ_PRESETS } from '../config';
@@ -52,6 +56,8 @@ export default function EqualizerScreen() {
     resetToFlat,
   } = useEQStore();
 
+  const [savedPresets, setSavedPresets] = useState<{name: string, bands: typeof bands, preamp: number}[]>([]);
+
   const formatFrequency = (freq: number): string => {
     if (freq >= 1000) {
       return `${freq / 1000}k`;
@@ -59,12 +65,72 @@ export default function EqualizerScreen() {
     return freq.toString();
   };
 
+  const handleBandAdjust = useCallback((index: number, direction: 'up' | 'down') => {
+    const currentGain = bands[index].gain;
+    const newGain = direction === 'up' 
+      ? Math.min(12, currentGain + 1)
+      : Math.max(-12, currentGain - 1);
+    setBandGain(index, newGain);
+  }, [bands, setBandGain]);
+
+  const handleSavePreset = useCallback(() => {
+    Alert.prompt(
+      'Save Preset',
+      'Enter a name for this preset:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save',
+          onPress: (name: string | undefined) => {
+            if (name && name.trim()) {
+              setSavedPresets(prev => [...prev, {
+                name: name.trim(),
+                bands: [...bands],
+                preamp,
+              }]);
+              Alert.alert('Saved', `Preset "${name.trim()}" saved successfully!`);
+            }
+          },
+        },
+      ],
+      'plain-text',
+      'My Custom Preset'
+    );
+  }, [bands, preamp]);
+
+  const handleExportPreset = useCallback(() => {
+    const presetData = JSON.stringify({
+      bands: bands.map(b => ({ frequency: b.frequency, gain: b.gain })),
+      preamp,
+    }, null, 2);
+    
+    Alert.alert(
+      'Export Preset',
+      `Preset data:\n\n${presetData}\n\n(Copy this to share your EQ settings)`,
+      [{ text: 'OK' }]
+    );
+  }, [bands, preamp]);
+
+  const handleImportPreset = useCallback(() => {
+    Alert.alert(
+      'Import Preset',
+      'Import functionality will be available in a future update.\n\nYou can manually adjust the EQ bands or select a built-in preset.',
+      [{ text: 'OK' }]
+    );
+  }, []);
+
   const renderBandSlider = (frequency: number, gain: number, index: number) => {
     // Visual representation of the slider
     const normalizedGain = ((gain + 12) / 24) * 100; // -12 to +12 -> 0 to 100
     
     return (
       <View key={frequency} style={styles.bandContainer}>
+        <TouchableOpacity 
+          style={styles.bandAdjustButton}
+          onPress={() => handleBandAdjust(index, 'up')}
+        >
+          <Text style={styles.bandAdjustText}>+</Text>
+        </TouchableOpacity>
         <Text style={styles.bandGain}>{gain > 0 ? '+' : ''}{gain}</Text>
         <View style={styles.sliderTrack}>
           <View style={styles.sliderTrackBg} />
@@ -77,13 +143,14 @@ export default function EqualizerScreen() {
               }
             ]} 
           />
-          <TouchableOpacity 
-            style={[styles.sliderThumb, { bottom: `${normalizedGain - 5}%` }]}
-            onPress={() => {
-              // In a real app, this would be a gesture-based slider
-            }}
-          />
+          <View style={[styles.sliderThumb, { bottom: `${Math.max(0, normalizedGain - 5)}%` }]} />
         </View>
+        <TouchableOpacity 
+          style={styles.bandAdjustButton}
+          onPress={() => handleBandAdjust(index, 'down')}
+        >
+          <Text style={styles.bandAdjustText}>−</Text>
+        </TouchableOpacity>
         <Text style={styles.bandFreq}>{formatFrequency(frequency)}</Text>
       </View>
     );
@@ -187,16 +254,34 @@ export default function EqualizerScreen() {
         <View style={styles.customSection}>
           <Text style={styles.sectionTitle}>Custom Presets</Text>
           <View style={styles.customActions}>
-            <TouchableOpacity style={styles.customButton}>
+            <TouchableOpacity style={styles.customButton} onPress={handleSavePreset}>
               <Text style={styles.customButtonText}>💾 Save</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.customButton}>
+            <TouchableOpacity style={styles.customButton} onPress={handleExportPreset}>
               <Text style={styles.customButtonText}>📤 Export</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.customButton}>
+            <TouchableOpacity style={styles.customButton} onPress={handleImportPreset}>
               <Text style={styles.customButtonText}>📥 Import</Text>
             </TouchableOpacity>
           </View>
+          {savedPresets.length > 0 && (
+            <View style={styles.savedPresetsContainer}>
+              <Text style={styles.savedPresetsTitle}>Saved Presets:</Text>
+              {savedPresets.map((preset, idx) => (
+                <TouchableOpacity 
+                  key={idx} 
+                  style={styles.savedPresetItem}
+                  onPress={() => {
+                    preset.bands.forEach((band, i) => setBandGain(i, band.gain));
+                    setPreamp(preset.preamp);
+                    Alert.alert('Applied', `Preset "${preset.name}" applied`);
+                  }}
+                >
+                  <Text style={styles.savedPresetName}>{preset.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Spacer for mini player */}
@@ -404,6 +489,42 @@ const styles = StyleSheet.create({
   customButtonText: {
     color: THEME.colors.text,
     fontWeight: '500',
+    fontSize: 14,
+  },
+  bandAdjustButton: {
+    width: 28,
+    height: 28,
+    backgroundColor: THEME.colors.surface,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  bandAdjustText: {
+    color: THEME.colors.text,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  savedPresetsContainer: {
+    marginTop: THEME.spacing.md,
+    backgroundColor: THEME.colors.surface,
+    borderRadius: THEME.borderRadius.md,
+    padding: THEME.spacing.sm,
+  },
+  savedPresetsTitle: {
+    color: THEME.colors.textSecondary,
+    fontSize: 12,
+    marginBottom: THEME.spacing.sm,
+  },
+  savedPresetItem: {
+    paddingVertical: THEME.spacing.sm,
+    paddingHorizontal: THEME.spacing.md,
+    backgroundColor: THEME.colors.surfaceLight,
+    borderRadius: THEME.borderRadius.sm,
+    marginBottom: THEME.spacing.xs,
+  },
+  savedPresetName: {
+    color: THEME.colors.text,
     fontSize: 14,
   },
 });

@@ -10,14 +10,19 @@ import { zustandStorage } from '../utils/storage';
 import type { SortOption } from '../config/constants';
 import { SORT_OPTIONS } from '../config/constants';
 import type { LibraryScanResult, LibraryStats } from '../types';
+import { scanLibrary, ScannedTrack } from '../services/libraryScanner';
 
 interface LibraryState {
   // Scan folders
   scanFolders: string[];
   
+  // Scanned tracks
+  tracks: ScannedTrack[];
+  
   // Scan state
   isScanning: boolean;
   scanProgress: number;
+  scanMessage: string;
   lastScanResult: LibraryScanResult | null;
   lastScanAt: number | null;
   
@@ -38,6 +43,7 @@ interface LibraryState {
   removeScanFolder: (path: string) => void;
   clearScanFolders: () => void;
   
+  startScan: () => void;
   setScanning: (isScanning: boolean) => void;
   setScanProgress: (progress: number) => void;
   setLastScanResult: (result: LibraryScanResult) => void;
@@ -58,8 +64,10 @@ interface LibraryState {
 
 const initialState = {
   scanFolders: [],
+  tracks: [] as ScannedTrack[],
   isScanning: false,
   scanProgress: 0,
+  scanMessage: '',
   lastScanResult: null,
   lastScanAt: null,
   stats: null,
@@ -88,6 +96,52 @@ export const useLibraryStore = create<LibraryState>()(
       },
       
       clearScanFolders: () => set({ scanFolders: [] }),
+      
+      startScan: async () => {
+        const { scanFolders, isScanning } = get();
+        if (isScanning) return;
+        
+        set({ isScanning: true, scanProgress: 0, scanMessage: 'Starting scan...' });
+        
+        try {
+          const result = await scanLibrary(scanFolders, (message, count) => {
+            set({ scanMessage: message, scanProgress: Math.min(count, 100) });
+          });
+          
+          // Get unique artists and albums
+          const artists = new Set<string>();
+          const albums = new Set<string>();
+          
+          for (const track of result.tracks) {
+            if (track.artist) artists.add(track.artist);
+            if (track.album) albums.add(track.album);
+          }
+          
+          set({ 
+            isScanning: false, 
+            scanProgress: 100,
+            scanMessage: `Found ${result.totalTracks} tracks`,
+            lastScanAt: Date.now(),
+            tracks: result.tracks,
+            stats: {
+              totalTracks: result.totalTracks,
+              totalAlbums: albums.size,
+              totalArtists: artists.size,
+              totalDuration: 0,
+              totalSize: result.totalSize,
+              formats: result.formats,
+              highResCount: 0,
+              dsdCount: (result.formats['DFF'] || 0) + (result.formats['DSF'] || 0) + (result.formats['DSD'] || 0),
+            }
+          });
+        } catch (error: any) {
+          console.error('Scan error:', error);
+          set({ 
+            isScanning: false, 
+            scanMessage: `Scan failed: ${error.message}`,
+          });
+        }
+      },
       
       setScanning: (isScanning) => {
         if (isScanning) {
