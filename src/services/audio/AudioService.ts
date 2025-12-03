@@ -21,7 +21,33 @@ import { PLAYBACK_STATES } from '../../config/constants';
 /**
  * Convert our Track type to TrackPlayer Track type
  */
+/**
+ * Get MIME type for audio format
+ */
+function getContentType(format: string): string | undefined {
+  const formatLower = format?.toLowerCase() || '';
+  const mimeTypes: Record<string, string> = {
+    'mp3': 'audio/mpeg',
+    'flac': 'audio/flac',
+    'wav': 'audio/wav',
+    'wave': 'audio/wav',
+    'aac': 'audio/aac',
+    'm4a': 'audio/mp4',
+    'ogg': 'audio/ogg',
+    'opus': 'audio/opus',
+    'wma': 'audio/x-ms-wma',
+    'aiff': 'audio/aiff',
+    'aif': 'audio/aiff',
+    'dsf': 'audio/x-dsf',
+    'dff': 'audio/x-dff',
+    'dsd': 'audio/x-dsd',
+  };
+  return mimeTypes[formatLower];
+}
+
 function convertToTPTrack(track: Track): TPTrack {
+  const contentType = getContentType(track.format);
+  
   return {
     id: track.id,
     url: track.uri,
@@ -30,6 +56,9 @@ function convertToTPTrack(track: Track): TPTrack {
     album: track.album || 'Unknown Album',
     artwork: track.artworkUri,
     duration: track.duration,
+    // Content type hint for ExoPlayer
+    type: contentType as any,
+    contentType: contentType,
     // Custom metadata
     genre: track.genre,
     date: track.year?.toString(),

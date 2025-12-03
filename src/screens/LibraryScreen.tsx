@@ -242,7 +242,7 @@ export default function LibraryScreen() {
     isLossless: ['.flac', '.wav', '.aiff', '.alac', '.ape'].includes(scannedTrack.extension.toLowerCase()),
     isHighRes: scannedTrack.sampleRate ? parseInt(scannedTrack.sampleRate, 10) > 48000 : false,
     isDSD: ['.dff', '.dsf', '.dsd'].includes(scannedTrack.extension.toLowerCase()),
-    artworkUri: scannedTrack.artwork ? `data:image/jpeg;base64,${scannedTrack.artwork}` : undefined,
+    artworkUri: scannedTrack.artwork || undefined,
     playCount: 0,
     isFavorite: false,
     moods: [],
@@ -387,7 +387,7 @@ export default function LibraryScreen() {
               {item.artwork ? (
                 <View style={styles.trackArtwork}>
                   <Image 
-                    source={{ uri: `data:image/jpeg;base64,${item.artwork}` }}
+                    source={{ uri: item.artwork }}
                     style={styles.trackArtworkImage}
                   />
                 </View>
