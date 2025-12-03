@@ -19,9 +19,8 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import TrackPlayer from 'react-native-track-player';
 import { RootNavigator } from './navigation';
-import { setupTrackPlayer, PlaybackService } from './services/audio';
+import { setupTrackPlayer } from './services/audio';
 import { VERSION, THEME } from './config';
 
 // Ignore specific warnings in development
@@ -29,8 +28,7 @@ LogBox.ignoreLogs([
   'Non-serializable values were found in the navigation state',
 ]);
 
-// Register playback service
-TrackPlayer.registerPlaybackService(() => PlaybackService);
+// Note: PlaybackService is registered in index.js
 
 export default function App() {
   const [isPlayerReady, setIsPlayerReady] = useState(false);
