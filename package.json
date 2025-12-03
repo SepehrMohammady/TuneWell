@@ -29,7 +29,7 @@
     "react-native-mmkv": "^3.2.0",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.10.0",
-    "react-native-track-player": "^4.1.1",
+    "react-native-track-player": "^5.0.0-alpha0",
     "react-native-vector-icons": "^10.2.0",
     "uuid": "^11.1.0",
     "zustand": "^4.5.5"
