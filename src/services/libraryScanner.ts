@@ -6,6 +6,7 @@
 
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
+import { extractMetadata, AudioMetadata } from '../native/MetadataExtractor';
 
 // Supported audio formats
 const AUDIO_EXTENSIONS = [
@@ -26,11 +27,18 @@ export interface ScannedTrack {
   extension: string;
   size: number;
   modifiedAt: number;
-  // Metadata (to be populated later)
+  // Metadata
   title?: string;
   artist?: string;
   album?: string;
+  albumArtist?: string;
+  genre?: string;
+  year?: string;
+  trackNumber?: string;
   duration?: number;
+  bitrate?: string;
+  sampleRate?: string;
+  artwork?: string; // Base64 encoded
 }
 
 export interface ScanResult {
@@ -151,7 +159,8 @@ const scanDirectory = async (
 const scanDirectoryRecursive = async (
   dirPath: string,
   onProgress?: (message: string, count: number) => void,
-  currentCount: number = 0
+  currentCount: number = 0,
+  extractMeta: boolean = true
 ): Promise<ScannedTrack[]> => {
   const tracks: ScannedTrack[] = [];
   
@@ -172,11 +181,12 @@ const scanDirectoryRecursive = async (
         const subTracks = await scanDirectoryRecursive(
           item.path, 
           onProgress, 
-          currentCount + tracks.length
+          currentCount + tracks.length,
+          extractMeta
         );
         tracks.push(...subTracks);
       } else if (item.isFile() && isAudioFile(item.name)) {
-        tracks.push({
+        const track: ScannedTrack = {
           id: generateTrackId(item.path),
           uri: `file://${item.path}`,
           filename: item.name,
@@ -185,8 +195,30 @@ const scanDirectoryRecursive = async (
           extension: getExtension(item.name),
           size: item.size,
           modifiedAt: new Date(item.mtime || Date.now()).getTime(),
-          title: item.name.replace(/\.[^/.]+$/, ''), // Use filename without extension as title
-        });
+          title: item.name.replace(/\.[^/.]+$/, ''), // Default to filename
+        };
+        
+        // Extract metadata using native module
+        if (extractMeta) {
+          try {
+            const metadata = await extractMetadata(item.path);
+            if (metadata.title) track.title = metadata.title;
+            if (metadata.artist) track.artist = metadata.artist;
+            if (metadata.album) track.album = metadata.album;
+            if (metadata.albumArtist) track.albumArtist = metadata.albumArtist;
+            if (metadata.genre) track.genre = metadata.genre;
+            if (metadata.year) track.year = metadata.year;
+            if (metadata.trackNumber) track.trackNumber = metadata.trackNumber;
+            if (metadata.duration) track.duration = metadata.duration;
+            if (metadata.bitrate) track.bitrate = metadata.bitrate;
+            if (metadata.sampleRate) track.sampleRate = metadata.sampleRate;
+            if (metadata.artwork) track.artwork = metadata.artwork;
+          } catch (metaError) {
+            console.log('Failed to extract metadata for:', item.path, metaError);
+          }
+        }
+        
+        tracks.push(track);
         
         if (tracks.length % 10 === 0) {
           onProgress?.(`Found ${currentCount + tracks.length} tracks...`, currentCount + tracks.length);
@@ -291,7 +323,8 @@ export const quickScan = async (
     try {
       const resolved = await resolveContentUri(folder);
       if (resolved) {
-        const tracks = await scanDirectoryRecursive(resolved);
+        // Pass false for extractMeta to skip metadata extraction for quick scan
+        const tracks = await scanDirectoryRecursive(resolved, undefined, 0, false);
         count += tracks.length;
         
         for (const track of tracks) {

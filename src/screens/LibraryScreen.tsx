@@ -22,6 +22,7 @@ import {
   Platform,
   TextInput,
   Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { pickDirectory } from '@react-native-documents/picker';
@@ -228,14 +229,20 @@ export default function LibraryScreen() {
     title: scannedTrack.title || scannedTrack.filename.replace(/\.[^/.]+$/, ''),
     artist: scannedTrack.artist || 'Unknown Artist',
     album: scannedTrack.album || 'Unknown Album',
+    albumArtist: scannedTrack.albumArtist,
+    genre: scannedTrack.genre,
+    year: scannedTrack.year ? parseInt(scannedTrack.year, 10) : undefined,
+    trackNumber: scannedTrack.trackNumber ? parseInt(scannedTrack.trackNumber, 10) : undefined,
     duration: scannedTrack.duration || 0,
-    sampleRate: 44100,
+    sampleRate: scannedTrack.sampleRate ? parseInt(scannedTrack.sampleRate, 10) : 44100,
     bitDepth: 16,
+    bitRate: scannedTrack.bitrate ? parseInt(scannedTrack.bitrate, 10) : undefined,
     channels: 2,
     format: scannedTrack.extension.replace('.', '').toUpperCase(),
     isLossless: ['.flac', '.wav', '.aiff', '.alac', '.ape'].includes(scannedTrack.extension.toLowerCase()),
-    isHighRes: false,
+    isHighRes: scannedTrack.sampleRate ? parseInt(scannedTrack.sampleRate, 10) > 48000 : false,
     isDSD: ['.dff', '.dsf', '.dsd'].includes(scannedTrack.extension.toLowerCase()),
+    artworkUri: scannedTrack.artwork ? `data:image/jpeg;base64,${scannedTrack.artwork}` : undefined,
     playCount: 0,
     isFavorite: false,
     moods: [],
@@ -377,15 +384,29 @@ export default function LibraryScreen() {
               style={styles.trackItem}
               onPress={() => handlePlayTrack(item, index)}
             >
-              <View style={styles.trackIcon}>
-                <Text style={styles.trackIconText}>🎵</Text>
-              </View>
+              {item.artwork ? (
+                <View style={styles.trackArtwork}>
+                  <Image 
+                    source={{ uri: `data:image/jpeg;base64,${item.artwork}` }}
+                    style={styles.trackArtworkImage}
+                  />
+                </View>
+              ) : (
+                <View style={styles.trackIcon}>
+                  <Text style={styles.trackIconText}>🎵</Text>
+                </View>
+              )}
               <View style={styles.trackInfo}>
                 <Text style={styles.trackTitle} numberOfLines={1}>
                   {item.title || item.filename}
                 </Text>
+                <Text style={styles.trackArtist} numberOfLines={1}>
+                  {item.artist || 'Unknown Artist'} • {item.album || 'Unknown Album'}
+                </Text>
                 <Text style={styles.trackDetails} numberOfLines={1}>
-                  {item.extension.replace('.', '').toUpperCase()} • {formatFileSize(item.size)}
+                  {item.extension.replace('.', '').toUpperCase()}
+                  {item.bitrate ? ` • ${item.bitrate} kbps` : ''}
+                  {item.sampleRate ? ` • ${item.sampleRate} Hz` : ''}
                 </Text>
               </View>
               <View style={styles.playIcon}>
@@ -809,9 +830,26 @@ const styles = StyleSheet.create({
     color: THEME.colors.text,
     marginBottom: 2,
   },
-  trackDetails: {
-    fontSize: 13,
+  trackArtist: {
+    fontSize: 14,
     color: THEME.colors.textSecondary,
+    marginBottom: 2,
+  },
+  trackDetails: {
+    fontSize: 12,
+    color: THEME.colors.textMuted,
+  },
+  trackArtwork: {
+    width: 48,
+    height: 48,
+    borderRadius: THEME.borderRadius.md,
+    marginRight: THEME.spacing.md,
+    overflow: 'hidden',
+  },
+  trackArtworkImage: {
+    width: 48,
+    height: 48,
+    resizeMode: 'cover',
   },
   playIcon: {
     width: 36,
