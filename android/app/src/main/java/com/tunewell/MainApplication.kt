@@ -16,6 +16,9 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           // Add our custom native modules
           add(MetadataExtractorPackage())
+          add(MediaStorePackage())
+          add(AudioEqualizerPackage())
+          add(NativeAudioDecoderPackage())
         },
     )
   }

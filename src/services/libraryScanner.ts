@@ -1,18 +1,19 @@
 /**
  * TuneWell Library Scanner Service
  * 
- * Scans folders for audio files and extracts metadata.
+ * Scans for audio files using MediaStore API for Android compatibility.
  */
 
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 import { extractMetadata, AudioMetadata } from '../native/MetadataExtractor';
+import { getAllAudioFiles, getAudioFilesInFolder, MediaStoreAudioFile } from '../native/MediaStore';
 
 // Supported audio formats
 const AUDIO_EXTENSIONS = [
   // Lossless
   '.flac', '.wav', '.aiff', '.aif', '.alac', '.ape', '.wv',
-  // DSD
+  // DSD (not playable on Android but we can show them)
   '.dff', '.dsf', '.dsd',
   // Lossy
   '.mp3', '.aac', '.m4a', '.ogg', '.opus', '.wma',
@@ -20,7 +21,7 @@ const AUDIO_EXTENSIONS = [
 
 export interface ScannedTrack {
   id: string;
-  uri: string;
+  uri: string; // content:// URI for Android, file:// for others
   filename: string;
   path: string;
   folder: string;
@@ -32,13 +33,15 @@ export interface ScannedTrack {
   artist?: string;
   album?: string;
   albumArtist?: string;
+  albumArtUri?: string; // Album art content URI
   genre?: string;
   year?: string;
   trackNumber?: string;
   duration?: number;
   bitrate?: string;
   sampleRate?: string;
-  artwork?: string; // Base64 encoded
+  artwork?: string; // Base64 encoded (from embedded art)
+  mimeType?: string;
 }
 
 export interface ScanResult {
@@ -248,7 +251,8 @@ const getCommonMusicPaths = (): string[] => {
 };
 
 /**
- * Main scan function - scans all configured folders
+ * Main scan function - scans all configured folders using MediaStore
+ * Uses content:// URIs for Android 11+ compatibility
  */
 export const scanLibrary = async (
   folders: string[],
@@ -263,50 +267,177 @@ export const scanLibrary = async (
     errors: [],
   };
   
-  // If no folders specified, scan common music directories
-  let foldersToScan = folders.length > 0 ? folders : getCommonMusicPaths();
+  if (folders.length === 0) {
+    result.errors.push('No folders selected');
+    return result;
+  }
   
-  // Resolve content URIs to file paths
+  // Resolve content URIs to file paths for matching
   const resolvedFolders: string[] = [];
-  for (const folder of foldersToScan) {
+  for (const folder of folders) {
     const resolved = await resolveContentUri(folder);
     if (resolved) {
       resolvedFolders.push(resolved);
-    } else {
-      result.errors.push(`Could not resolve: ${folder}`);
     }
   }
   
-  onProgress?.('Starting scan...', 0);
+  onProgress?.('Querying MediaStore...', 0);
   
-  // Scan each folder
-  for (const folder of resolvedFolders) {
+  // Use MediaStore to get all audio files with content:// URIs
+  if (Platform.OS === 'android') {
     try {
-      const tracks = await scanDirectoryRecursive(
-        folder,
-        onProgress,
-        result.tracks.length
-      );
-      result.tracks.push(...tracks);
-      result.folders.push(folder);
+      const allAudioFiles = await getAllAudioFiles();
+      
+      onProgress?.(`Found ${allAudioFiles.length} total audio files, filtering...`, 0);
+      
+      // Filter to only include files from selected folders
+      for (const file of allAudioFiles) {
+        const fileFolder = file.folder || file.path.substring(0, file.path.lastIndexOf('/'));
+        
+        // Check if file is in any of the selected folders (including subfolders)
+        const isInSelectedFolder = resolvedFolders.some(folder => 
+          fileFolder.startsWith(folder) || file.path.startsWith(folder)
+        );
+        
+        if (isInSelectedFolder) {
+          const track: ScannedTrack = {
+            id: `mediastore_${file.id}`,
+            uri: file.uri, // content:// URI for playback
+            filename: file.filename,
+            path: file.path,
+            folder: file.folder,
+            extension: file.extension,
+            size: file.size,
+            modifiedAt: file.dateModified,
+            title: file.title || file.filename.replace(/\.[^/.]+$/, ''),
+            artist: file.artist || undefined,
+            album: file.album || undefined,
+            albumArtUri: file.albumArtUri,
+            duration: file.duration,
+            mimeType: file.mimeType,
+          };
+
+          result.tracks.push(track);
+
+          if (file.folder && !result.folders.includes(file.folder)) {
+            result.folders.push(file.folder);
+          }
+        }
+      }
+
+      // Calculate statistics
+      result.totalTracks = result.tracks.length;
+      result.totalSize = result.tracks.reduce((sum, track) => sum + track.size, 0);
+
+      // Count formats
+      for (const track of result.tracks) {
+        const ext = track.extension.replace('.', '').toUpperCase();
+        result.formats[ext] = (result.formats[ext] || 0) + 1;
+      }
+
+      onProgress?.(`Scan complete: ${result.totalTracks} tracks found`, result.totalTracks);
     } catch (error: any) {
-      console.log('Error scanning folder:', folder, error);
-      result.errors.push(`Error scanning ${folder}: ${error.message}`);
+      console.error('MediaStore scan error:', error);
+      result.errors.push(`MediaStore error: ${error.message}`);
+      
+      // Fallback to file system scanning
+      onProgress?.('Falling back to file system scan...', 0);
+      for (const folder of resolvedFolders) {
+        try {
+          const tracks = await scanDirectoryRecursive(folder, onProgress, result.tracks.length);
+          result.tracks.push(...tracks);
+          result.folders.push(folder);
+        } catch (err: any) {
+          result.errors.push(`Error scanning ${folder}: ${err.message}`);
+        }
+      }
+    }
+  } else {
+    // Non-Android: use file system scanning
+    for (const folder of resolvedFolders) {
+      try {
+        const tracks = await scanDirectoryRecursive(folder, onProgress, result.tracks.length);
+        result.tracks.push(...tracks);
+        result.folders.push(folder);
+      } catch (error: any) {
+        result.errors.push(`Error scanning ${folder}: ${error.message}`);
+      }
     }
   }
   
-  // Calculate statistics
-  result.totalTracks = result.tracks.length;
-  result.totalSize = result.tracks.reduce((sum, track) => sum + track.size, 0);
-  
-  // Count formats
-  for (const track of result.tracks) {
-    const ext = track.extension.replace('.', '').toUpperCase();
-    result.formats[ext] = (result.formats[ext] || 0) + 1;
+  return result;
+};
+
+/**
+ * Scan using MediaStore API (recommended for Android 11+)
+ * This returns content:// URIs that work with ExoPlayer
+ */
+export const scanWithMediaStore = async (
+  onProgress?: (message: string, count: number) => void
+): Promise<ScanResult> => {
+  const result: ScanResult = {
+    tracks: [],
+    totalTracks: 0,
+    totalSize: 0,
+    formats: {},
+    folders: [],
+    errors: [],
+  };
+
+  if (Platform.OS !== 'android') {
+    result.errors.push('MediaStore is only available on Android');
+    return result;
   }
-  
-  onProgress?.(`Scan complete: ${result.totalTracks} tracks found`, result.totalTracks);
-  
+
+  onProgress?.('Querying MediaStore...', 0);
+
+  try {
+    const audioFiles = await getAllAudioFiles();
+    
+    onProgress?.(`Found ${audioFiles.length} audio files`, audioFiles.length);
+
+    for (const file of audioFiles) {
+      const track: ScannedTrack = {
+        id: `mediastore_${file.id}`,
+        uri: file.uri, // content:// URI
+        filename: file.filename,
+        path: file.path,
+        folder: file.folder,
+        extension: file.extension,
+        size: file.size,
+        modifiedAt: file.dateModified,
+        title: file.title || file.filename.replace(/\.[^/.]+$/, ''),
+        artist: file.artist || undefined,
+        album: file.album || undefined,
+        albumArtUri: file.albumArtUri,
+        duration: file.duration,
+        mimeType: file.mimeType,
+      };
+
+      result.tracks.push(track);
+
+      // Track folders
+      if (file.folder && !result.folders.includes(file.folder)) {
+        result.folders.push(file.folder);
+      }
+    }
+
+    // Calculate statistics
+    result.totalTracks = result.tracks.length;
+    result.totalSize = result.tracks.reduce((sum, track) => sum + track.size, 0);
+
+    // Count formats
+    for (const track of result.tracks) {
+      const ext = track.extension.replace('.', '').toUpperCase();
+      result.formats[ext] = (result.formats[ext] || 0) + 1;
+    }
+
+    onProgress?.(`Scan complete: ${result.totalTracks} tracks found`, result.totalTracks);
+  } catch (error: any) {
+    console.error('MediaStore scan error:', error);
+    result.errors.push(`MediaStore error: ${error.message}`);
+  }
+
   return result;
 };
 
@@ -342,6 +473,7 @@ export const quickScan = async (
 
 export default {
   scanLibrary,
+  scanWithMediaStore,
   quickScan,
   AUDIO_EXTENSIONS,
 };

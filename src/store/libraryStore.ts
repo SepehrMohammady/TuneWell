@@ -6,11 +6,12 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { Platform } from 'react-native';
 import { zustandStorage } from '../utils/storage';
 import type { SortOption } from '../config/constants';
 import { SORT_OPTIONS } from '../config/constants';
 import type { LibraryScanResult, LibraryStats } from '../types';
-import { scanLibrary, ScannedTrack } from '../services/libraryScanner';
+import { scanLibrary, scanWithMediaStore, ScannedTrack } from '../services/libraryScanner';
 
 interface LibraryState {
   // Scan folders
@@ -101,9 +102,15 @@ export const useLibraryStore = create<LibraryState>()(
         const { scanFolders, isScanning } = get();
         if (isScanning) return;
         
+        if (scanFolders.length === 0) {
+          set({ scanMessage: 'Please add folders first' });
+          return;
+        }
+        
         set({ isScanning: true, scanProgress: 0, scanMessage: 'Starting scan...' });
         
         try {
+          // Use folder-based scanning with MediaStore
           const result = await scanLibrary(scanFolders, (message, count) => {
             set({ scanMessage: message, scanProgress: Math.min(count, 100) });
           });

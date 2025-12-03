@@ -8,7 +8,7 @@
  * - Sorting and filtering
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -79,6 +79,7 @@ export default function LibraryScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [manualPath, setManualPath] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const { currentTrack } = usePlayerStore();
   const { 
     scanFolders, 
@@ -92,6 +93,55 @@ export default function LibraryScreen() {
     removeScanFolder, 
     startScan 
   } = useLibraryStore();
+
+  // Filter tracks based on search query
+  const filteredTracks = useMemo(() => {
+    if (!searchQuery.trim()) return tracks;
+    const query = searchQuery.toLowerCase();
+    return tracks.filter(track => 
+      (track.title?.toLowerCase().includes(query)) ||
+      (track.artist?.toLowerCase().includes(query)) ||
+      (track.album?.toLowerCase().includes(query)) ||
+      (track.filename.toLowerCase().includes(query))
+    );
+  }, [tracks, searchQuery]);
+
+  // Group tracks by album
+  const albumGroups = useMemo(() => {
+    const groups: Record<string, { name: string; artist: string; artwork?: string; tracks: ScannedTrack[] }> = {};
+    for (const track of filteredTracks) {
+      const albumName = track.album || 'Unknown Album';
+      if (!groups[albumName]) {
+        groups[albumName] = {
+          name: albumName,
+          artist: track.artist || 'Unknown Artist',
+          artwork: track.albumArtUri || track.artwork,
+          tracks: [],
+        };
+      }
+      groups[albumName].tracks.push(track);
+    }
+    return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredTracks]);
+
+  // Group tracks by artist
+  const artistGroups = useMemo(() => {
+    const groups: Record<string, { name: string; artwork?: string; tracks: ScannedTrack[]; albums: Set<string> }> = {};
+    for (const track of filteredTracks) {
+      const artistName = track.artist || 'Unknown Artist';
+      if (!groups[artistName]) {
+        groups[artistName] = {
+          name: artistName,
+          artwork: track.albumArtUri || track.artwork,
+          tracks: [],
+          albums: new Set(),
+        };
+      }
+      groups[artistName].tracks.push(track);
+      if (track.album) groups[artistName].albums.add(track.album);
+    }
+    return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredTracks]);
 
   // Request permission on mount
   useEffect(() => {
@@ -221,7 +271,7 @@ export default function LibraryScreen() {
   // Convert ScannedTrack to Track format for playback
   const convertToTrack = (scannedTrack: ScannedTrack): Track => ({
     id: scannedTrack.id,
-    uri: scannedTrack.uri,
+    uri: scannedTrack.uri, // content:// URI from MediaStore
     filePath: scannedTrack.path,
     fileName: scannedTrack.filename,
     folderPath: scannedTrack.folder,
@@ -242,7 +292,8 @@ export default function LibraryScreen() {
     isLossless: ['.flac', '.wav', '.aiff', '.alac', '.ape'].includes(scannedTrack.extension.toLowerCase()),
     isHighRes: scannedTrack.sampleRate ? parseInt(scannedTrack.sampleRate, 10) > 48000 : false,
     isDSD: ['.dff', '.dsf', '.dsd'].includes(scannedTrack.extension.toLowerCase()),
-    artworkUri: scannedTrack.artwork || undefined,
+    // Use album art URI from MediaStore, or embedded artwork
+    artworkUri: scannedTrack.albumArtUri || scannedTrack.artwork || undefined,
     playCount: 0,
     isFavorite: false,
     moods: [],
@@ -251,12 +302,20 @@ export default function LibraryScreen() {
   });
 
   const handlePlayTrack = useCallback(async (scannedTrack: ScannedTrack, index: number) => {
+    // Check for unsupported DSD formats (show warning but still try to play)
+    const ext = scannedTrack.extension.toLowerCase();
+    const isDSD = ['.dsf', '.dff', '.dsd'].includes(ext);
+    
     try {
       // Initialize audio service if needed
       await audioService.initialize();
       
-      // Convert all tracks to Track format
-      const allTracks: Track[] = tracks.map(convertToTrack);
+      // Convert filtered tracks to Track format
+      const allTracks: Track[] = filteredTracks.map(convertToTrack);
+      
+      // Find the actual index
+      const trackIndex = allTracks.findIndex(t => t.id === `mediastore_${scannedTrack.id.replace('mediastore_', '')}}` || t.id === scannedTrack.id);
+      const playIndex = trackIndex !== -1 ? trackIndex : index;
       
       // Create queue items
       const queueItems = allTracks.map((track, idx) => ({
@@ -267,12 +326,12 @@ export default function LibraryScreen() {
       }));
       
       // Play the queue starting from the selected track
-      await audioService.playQueue(queueItems, index);
+      await audioService.playQueue(queueItems, playIndex);
     } catch (error: any) {
       console.error('Playback error:', error);
       Alert.alert('Playback Error', error.message || 'Failed to play track');
     }
-  }, [tracks]);
+  }, [filteredTracks]);
 
   const renderViewModeTab = (mode: ViewMode, label: string) => (
     <TouchableOpacity
@@ -349,6 +408,23 @@ export default function LibraryScreen() {
 
   const renderTracksView = () => (
     <View style={styles.viewContent}>
+      {/* Search Box */}
+      <View style={styles.searchContainer}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search tracks, artists, albums..."
+          placeholderTextColor={THEME.colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
+            <Text style={styles.searchClearText}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Scan status */}
       {isScanning && (
         <View style={styles.scanStatus}>
@@ -358,7 +434,7 @@ export default function LibraryScreen() {
       
       <View style={styles.sortBar}>
         <Text style={styles.sortLabel}>
-          {tracks.length} tracks {stats?.totalSize ? `• ${formatFileSize(stats.totalSize)}` : ''}
+          {filteredTracks.length} tracks {searchQuery ? `(filtered)` : ''} {stats?.totalSize ? `• ${formatFileSize(stats.totalSize)}` : ''}
         </Text>
         <TouchableOpacity style={styles.sortButton}>
           <Text style={styles.sortButtonText}>{sortBy}</Text>
@@ -366,28 +442,30 @@ export default function LibraryScreen() {
         </TouchableOpacity>
       </View>
       
-      {tracks.length === 0 ? (
+      {filteredTracks.length === 0 ? (
         <View style={styles.emptyFolders}>
-          <Text style={styles.emptyFoldersText}>No tracks found</Text>
+          <Text style={styles.emptyFoldersText}>{searchQuery ? 'No matching tracks' : 'No tracks found'}</Text>
           <Text style={styles.emptyFoldersSubtext}>
-            {scanFolders.length === 0 
-              ? 'Add a folder first, then tap Scan' 
-              : 'Tap Scan to find music files'}
+            {searchQuery 
+              ? 'Try a different search term'
+              : scanFolders.length === 0 
+                ? 'Add a folder first, then tap Scan' 
+                : 'Tap Scan to find music files'}
           </Text>
         </View>
       ) : (
         <FlatList
-          data={tracks}
+          data={filteredTracks}
           keyExtractor={(item) => item.id}
           renderItem={({ item, index }) => (
             <TouchableOpacity 
               style={styles.trackItem}
               onPress={() => handlePlayTrack(item, index)}
             >
-              {item.artwork ? (
+              {(item.albumArtUri || item.artwork) ? (
                 <View style={styles.trackArtwork}>
                   <Image 
-                    source={{ uri: item.artwork }}
+                    source={{ uri: item.albumArtUri || item.artwork }}
                     style={styles.trackArtworkImage}
                   />
                 </View>
@@ -421,26 +499,129 @@ export default function LibraryScreen() {
     </View>
   );
 
+  const handlePlayAlbum = useCallback(async (albumTracks: ScannedTrack[]) => {
+    try {
+      await audioService.initialize();
+      const allTracks: Track[] = albumTracks.map(convertToTrack);
+      const queueItems = allTracks.map((track, idx) => ({
+        id: `queue_${track.id}_${Date.now()}_${idx}`,
+        track,
+        addedAt: Date.now(),
+        source: 'library' as const,
+      }));
+      await audioService.playQueue(queueItems, 0);
+    } catch (error: any) {
+      Alert.alert('Playback Error', error.message || 'Failed to play album');
+    }
+  }, []);
+
   const renderAlbumsView = () => (
     <View style={styles.viewContent}>
-      {stats?.totalAlbums === 0 ? (
+      {/* Search Box */}
+      <View style={styles.searchContainer}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search albums..."
+          placeholderTextColor={THEME.colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
+            <Text style={styles.searchClearText}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {albumGroups.length === 0 ? (
         renderEmptyLibrary()
       ) : (
-        <View style={styles.gridPlaceholder}>
-          <Text style={styles.placeholderText}>Albums will appear here</Text>
-        </View>
+        <FlatList
+          data={albumGroups}
+          keyExtractor={(item) => item.name}
+          numColumns={2}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={styles.albumItem}
+              onPress={() => handlePlayAlbum(item.tracks)}
+            >
+              {item.artwork ? (
+                <Image 
+                  source={{ uri: item.artwork }}
+                  style={styles.albumArtwork}
+                />
+              ) : (
+                <View style={[styles.albumArtwork, styles.albumArtworkPlaceholder]}>
+                  <Text style={styles.albumArtworkPlaceholderText}>💿</Text>
+                </View>
+              )}
+              <Text style={styles.albumName} numberOfLines={1}>{item.name}</Text>
+              <Text style={styles.albumArtist} numberOfLines={1}>{item.artist}</Text>
+              <Text style={styles.albumTrackCount}>{item.tracks.length} tracks</Text>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.albumGrid}
+          scrollEnabled={false}
+        />
       )}
     </View>
   );
 
   const renderArtistsView = () => (
     <View style={styles.viewContent}>
-      {stats?.totalArtists === 0 ? (
+      {/* Search Box */}
+      <View style={styles.searchContainer}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search artists..."
+          placeholderTextColor={THEME.colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
+            <Text style={styles.searchClearText}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {artistGroups.length === 0 ? (
         renderEmptyLibrary()
       ) : (
-        <View style={styles.gridPlaceholder}>
-          <Text style={styles.placeholderText}>Artists will appear here</Text>
-        </View>
+        <FlatList
+          data={artistGroups}
+          keyExtractor={(item) => item.name}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={styles.artistItem}
+              onPress={() => handlePlayAlbum(item.tracks)}
+            >
+              {item.artwork ? (
+                <Image 
+                  source={{ uri: item.artwork }}
+                  style={styles.artistArtwork}
+                />
+              ) : (
+                <View style={[styles.artistArtwork, styles.artistArtworkPlaceholder]}>
+                  <Text style={styles.artistArtworkPlaceholderText}>👤</Text>
+                </View>
+              )}
+              <View style={styles.artistInfo}>
+                <Text style={styles.artistName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.artistStats}>
+                  {item.albums.size} albums • {item.tracks.length} tracks
+                </Text>
+              </View>
+              <View style={styles.playIcon}>
+                <Text style={styles.playIconText}>▶</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.listContent}
+          scrollEnabled={false}
+        />
       )}
     </View>
   );
@@ -864,5 +1045,103 @@ const styles = StyleSheet.create({
     color: THEME.colors.text,
     fontSize: 14,
     marginLeft: 2,
+  },
+  // Search styles
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.colors.surface,
+    borderRadius: THEME.borderRadius.md,
+    paddingHorizontal: THEME.spacing.md,
+    marginBottom: THEME.spacing.md,
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: THEME.spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: THEME.spacing.sm,
+    fontSize: 16,
+    color: THEME.colors.text,
+  },
+  searchClear: {
+    padding: THEME.spacing.xs,
+  },
+  searchClearText: {
+    color: THEME.colors.textMuted,
+    fontSize: 16,
+  },
+  // Album styles
+  albumGrid: {
+    paddingHorizontal: THEME.spacing.xs,
+  },
+  albumItem: {
+    flex: 1,
+    margin: THEME.spacing.xs,
+    maxWidth: '48%',
+  },
+  albumArtwork: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: THEME.borderRadius.md,
+    marginBottom: THEME.spacing.xs,
+  },
+  albumArtworkPlaceholder: {
+    backgroundColor: THEME.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  albumArtworkPlaceholderText: {
+    fontSize: 40,
+  },
+  albumName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: THEME.colors.text,
+  },
+  albumArtist: {
+    fontSize: 12,
+    color: THEME.colors.textSecondary,
+  },
+  albumTrackCount: {
+    fontSize: 11,
+    color: THEME.colors.textMuted,
+  },
+  // Artist styles
+  artistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.colors.surface,
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    marginBottom: THEME.spacing.sm,
+  },
+  artistArtwork: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    marginRight: THEME.spacing.md,
+  },
+  artistArtworkPlaceholder: {
+    backgroundColor: THEME.colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  artistArtworkPlaceholderText: {
+    fontSize: 24,
+  },
+  artistInfo: {
+    flex: 1,
+  },
+  artistName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: THEME.colors.text,
+    marginBottom: 2,
+  },
+  artistStats: {
+    fontSize: 13,
+    color: THEME.colors.textSecondary,
   },
 });

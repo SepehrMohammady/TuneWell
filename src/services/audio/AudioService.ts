@@ -13,8 +13,9 @@ import TrackPlayer, {
   useProgress,
   useActiveTrack,
 } from 'react-native-track-player';
-import { usePlayerStore } from '../../store';
+import { usePlayerStore, useEQStore } from '../../store';
 import { setupTrackPlayer, mapPlayerState, mapRepeatMode } from './TrackPlayerService';
+import { eqService } from '../../native/AudioEqualizer';
 import type { Track, QueueItem } from '../../types';
 import { PLAYBACK_STATES } from '../../config/constants';
 
@@ -29,15 +30,15 @@ function getContentType(format: string): string | undefined {
   const mimeTypes: Record<string, string> = {
     'mp3': 'audio/mpeg',
     'flac': 'audio/flac',
-    'wav': 'audio/wav',
-    'wave': 'audio/wav',
+    'wav': 'audio/x-wav',  // Use x-wav for better compatibility
+    'wave': 'audio/x-wav',
     'aac': 'audio/aac',
     'm4a': 'audio/mp4',
     'ogg': 'audio/ogg',
     'opus': 'audio/opus',
     'wma': 'audio/x-ms-wma',
-    'aiff': 'audio/aiff',
-    'aif': 'audio/aiff',
+    'aiff': 'audio/x-aiff',
+    'aif': 'audio/x-aiff',
     'dsf': 'audio/x-dsf',
     'dff': 'audio/x-dff',
     'dsd': 'audio/x-dsd',
@@ -48,17 +49,29 @@ function getContentType(format: string): string | undefined {
 function convertToTPTrack(track: Track): TPTrack {
   const contentType = getContentType(track.format);
   
-  return {
+  // For local files, ensure proper URI format
+  let url = track.uri;
+  
+  // Log for debugging
+  console.log('[AudioService] Converting track:', {
+    title: track.title,
+    format: track.format,
+    originalUri: track.uri,
+    resolvedUrl: url,
+    contentType,
+    isContentUri: url?.startsWith('content://'),
+    isFileUri: url?.startsWith('file://'),
+  });
+  
+  // Build the track object
+  const tpTrack: TPTrack = {
     id: track.id,
-    url: track.uri,
+    url: url,
     title: track.title || track.fileName,
     artist: track.artist || 'Unknown Artist',
     album: track.album || 'Unknown Album',
     artwork: track.artworkUri,
     duration: track.duration,
-    // Content type hint for ExoPlayer
-    type: contentType as any,
-    contentType: contentType,
     // Custom metadata
     genre: track.genre,
     date: track.year?.toString(),
@@ -70,11 +83,20 @@ function convertToTPTrack(track: Track): TPTrack {
     bitDepth: track.bitDepth,
     format: track.format,
   };
+
+  // Only add contentType if we have one - ExoPlayer uses this as a hint
+  if (contentType) {
+    tpTrack.contentType = contentType;
+  }
+
+  return tpTrack;
 }
 
 class AudioService {
   private initialized = false;
+  private eqInitialized = false;
   private eventSubscriptions: (() => void)[] = [];
+  private eqUnsubscribe: (() => void) | null = null;
 
   /**
    * Initialize the audio service
@@ -84,7 +106,68 @@ class AudioService {
 
     await setupTrackPlayer();
     this.setupEventListeners();
+    await this.initializeEQ();
     this.initialized = true;
+  }
+
+  /**
+   * Initialize the equalizer
+   */
+  private async initializeEQ(): Promise<void> {
+    if (this.eqInitialized) return;
+
+    try {
+      // Initialize EQ with session 0 (global output)
+      const result = await eqService.initialize(0);
+      
+      if (result) {
+        this.eqInitialized = true;
+        
+        // Apply current EQ settings from store
+        await this.syncEQFromStore();
+        
+        // Subscribe to EQ store changes
+        this.eqUnsubscribe = useEQStore.subscribe(
+          async (state, prevState) => {
+            // Check what changed and update accordingly
+            if (state.isEnabled !== prevState.isEnabled) {
+              await eqService.setEnabled(state.isEnabled);
+            }
+            
+            if (state.bands !== prevState.bands || state.preamp !== prevState.preamp) {
+              await this.applyEQBands();
+            }
+          }
+        );
+        
+        console.log('[AudioService] EQ initialized successfully');
+      }
+    } catch (error) {
+      console.error('[AudioService] Failed to initialize EQ:', error);
+    }
+  }
+
+  /**
+   * Sync EQ settings from store to native
+   */
+  private async syncEQFromStore(): Promise<void> {
+    const { isEnabled, bands, preamp } = useEQStore.getState();
+    
+    await eqService.setEnabled(isEnabled);
+    await this.applyEQBands();
+    
+    // Apply preamp as bass boost (approximation)
+    if (preamp > 0) {
+      await eqService.setBassBoost(preamp * 5); // Scale preamp to bass boost
+    }
+  }
+
+  /**
+   * Apply EQ bands from store to native equalizer
+   */
+  private async applyEQBands(): Promise<void> {
+    const { bands } = useEQStore.getState();
+    await eqService.applyCustomEQ(bands);
   }
 
   /**
@@ -136,6 +219,15 @@ class AudioService {
   destroy(): void {
     this.eventSubscriptions.forEach((unsubscribe) => unsubscribe());
     this.eventSubscriptions = [];
+    
+    // Cleanup EQ
+    if (this.eqUnsubscribe) {
+      this.eqUnsubscribe();
+      this.eqUnsubscribe = null;
+    }
+    eqService.release();
+    this.eqInitialized = false;
+    
     this.initialized = false;
   }
 
@@ -168,11 +260,26 @@ class AudioService {
     // Convert to TrackPlayer tracks
     const tpTracks = queue.map((item) => convertToTPTrack(item.track));
 
-    // Reset and load queue
-    await TrackPlayer.reset();
-    await TrackPlayer.add(tpTracks);
-    await TrackPlayer.skip(startIndex);
-    await TrackPlayer.play();
+    console.log('[AudioService] Playing queue:', {
+      trackCount: tpTracks.length,
+      startIndex,
+      firstTrack: tpTracks[startIndex] ? {
+        title: tpTracks[startIndex].title,
+        url: tpTracks[startIndex].url,
+        contentType: tpTracks[startIndex].contentType,
+      } : null,
+    });
+
+    try {
+      // Reset and load queue
+      await TrackPlayer.reset();
+      await TrackPlayer.add(tpTracks);
+      await TrackPlayer.skip(startIndex);
+      await TrackPlayer.play();
+    } catch (error) {
+      console.error('[AudioService] Playback error:', error);
+      throw error;
+    }
   }
 
   /**
