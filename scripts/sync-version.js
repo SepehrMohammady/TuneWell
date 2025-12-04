@@ -34,6 +34,21 @@ function updatePackageJson() {
   console.log(`✓ Updated package.json to version ${versionString}`);
 }
 
+function updatePackageLockJson() {
+  const lockPath = path.join(ROOT_DIR, 'package-lock.json');
+  if (!fs.existsSync(lockPath)) {
+    console.log('⚠ package-lock.json not found, skipping');
+    return;
+  }
+  const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+  lock.version = versionString;
+  if (lock.packages && lock.packages['']) {
+    lock.packages[''].version = versionString;
+  }
+  fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+  console.log(`✓ Updated package-lock.json to version ${versionString}`);
+}
+
 function updateAppJson() {
   const appJsonPath = path.join(ROOT_DIR, 'app.json');
   const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
@@ -169,6 +184,7 @@ function main() {
   console.log(`Syncing version ${versionString} (build ${VERSION.build})...\n`);
   
   updatePackageJson();
+  updatePackageLockJson();
   updateAppJson();
   updateVersionConfig();
   updateAndroidBuildGradle();
