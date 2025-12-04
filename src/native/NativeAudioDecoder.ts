@@ -39,6 +39,8 @@ interface NativeAudioDecoderModuleType {
   resume(): Promise<boolean>;
   stop(): Promise<boolean>;
   getState(): Promise<PlaybackState>;
+  getAudioSessionId(): Promise<number>;
+  setAudioSessionId(sessionId: number): Promise<boolean>;
 }
 
 const { NativeAudioDecoderModule } = NativeModules;
@@ -160,6 +162,34 @@ class NativeDecoderService {
     } catch (error) {
       console.error('[NativeDecoder] getState error:', error);
       return null;
+    }
+  }
+
+  /**
+   * Get the audio session ID (for EQ integration)
+   */
+  async getAudioSessionId(): Promise<number> {
+    if (!NativeAudioDecoder) return 0;
+    
+    try {
+      return await NativeAudioDecoder.getAudioSessionId();
+    } catch (error) {
+      console.error('[NativeDecoder] getAudioSessionId error:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Set the audio session ID to use (for EQ integration)
+   */
+  async setAudioSessionId(sessionId: number): Promise<boolean> {
+    if (!NativeAudioDecoder) return false;
+    
+    try {
+      return await NativeAudioDecoder.setAudioSessionId(sessionId);
+    } catch (error) {
+      console.error('[NativeDecoder] setAudioSessionId error:', error);
+      return false;
     }
   }
 

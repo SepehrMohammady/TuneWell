@@ -341,6 +341,22 @@ class AudioService {
           if (success) {
             usePlayerStore.getState().setState('playing');
             console.log('[AudioService] DSD playback started successfully');
+            
+            // Reinitialize EQ with the native decoder's audio session
+            setTimeout(async () => {
+              try {
+                const sessionId = await nativeDecoderService.getAudioSessionId();
+                if (sessionId > 0) {
+                  console.log('[AudioService] Reinitializing EQ with native decoder session:', sessionId);
+                  await eqService.release();
+                  await eqService.initialize(sessionId);
+                  await this.syncEQFromStore();
+                }
+              } catch (eqError) {
+                console.warn('[AudioService] Failed to reinitialize EQ for DSD:', eqError);
+              }
+            }, 200);
+            
             return;
           } else {
             console.error('[AudioService] Native decoder returned false');

@@ -67,6 +67,10 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             }
             sum
         }
+        
+        // IIR low-pass filter coefficient (higher = more smoothing, less noise)
+        // alpha = 0.15 gives gentle smoothing while preserving dynamics
+        private const val LPF_ALPHA = 0.15
     }
 
     private var audioTrack: AudioTrack? = null
@@ -74,8 +78,37 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
     private var isPlaying = false
     private var isPaused = false
     private var currentUri: String? = null
+    private var audioSessionId: Int = 0  // Shared with EQ for effects
 
     override fun getName(): String = "NativeAudioDecoderModule"
+
+    /**
+     * Get the audio session ID from our AudioTrack (for EQ integration)
+     */
+    @ReactMethod
+    fun getAudioSessionId(promise: Promise) {
+        try {
+            val sessionId = audioTrack?.audioSessionId ?: audioSessionId
+            Log.d(TAG, "Native decoder audio session ID: $sessionId")
+            promise.resolve(sessionId)
+        } catch (e: Exception) {
+            promise.reject("SESSION_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Set the audio session ID to use (call before playing)
+     */
+    @ReactMethod
+    fun setAudioSessionId(sessionId: Int, promise: Promise) {
+        try {
+            audioSessionId = sessionId
+            Log.d(TAG, "Set audio session ID: $audioSessionId")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("SESSION_ERROR", e.message, e)
+        }
+    }
 
     /**
      * Check if a file can be played by this decoder
@@ -366,6 +399,13 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT
             val bufferSize = AudioTrack.getMinBufferSize(outputSampleRate, channelConfig, audioFormat) * 4
             
+            // Generate audio session ID if not set (for EQ integration)
+            if (audioSessionId == 0) {
+                val audioManager = reactContext.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
+                audioSessionId = audioManager.generateAudioSessionId()
+                Log.d(TAG, "Generated audio session ID: $audioSessionId")
+            }
+            
             audioTrack = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
@@ -380,13 +420,14 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         .setEncoding(audioFormat)
                         .build()
                 )
+                .setSessionId(audioSessionId)
                 .setBufferSizeInBytes(bufferSize)
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
             
             audioTrack?.play()
             
-            // DSD to PCM conversion using lookup table
+            // DSD to PCM conversion using lookup table with IIR low-pass filter
             decoderJob = CoroutineScope(Dispatchers.IO).launch {
                 // DSF stores data in interleaved blocks:
                 // [Left block (blockSizePerChannel bytes)][Right block (blockSizePerChannel bytes)]
@@ -402,6 +443,10 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                 var leftSum = 0
                 var rightSum = 0
                 var byteCount = 0
+                
+                // IIR low-pass filter state for noise reduction
+                var leftFiltered = 0.0
+                var rightFiltered = 0.0
                 
                 while (isPlaying && dataStream.read(dsdBuffer).also { bytesRead = it } > 0) {
                     if (isPaused) {
@@ -429,13 +474,18 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         
                         // Output PCM sample every bytesPerPcmSample bytes
                         if (byteCount >= bytesPerPcmSample) {
-                            // Convert accumulated sum to 16-bit PCM
-                            // Max possible sum for 8 bytes = 8 * 8 = 64 (all 1s)
-                            // Min possible sum = -64 (all 0s)
-                            // Scale to 16-bit range
-                            val scale = 32767.0 / (bytesPerPcmSample * 8.0)
-                            val leftPcm = (leftSum * scale).toInt().coerceIn(-32768, 32767)
-                            val rightPcm = (rightSum * scale).toInt().coerceIn(-32768, 32767)
+                            // Convert accumulated sum to floating point
+                            val scale = 1.0 / (bytesPerPcmSample * 8.0)
+                            val leftRaw = leftSum * scale
+                            val rightRaw = rightSum * scale
+                            
+                            // Apply IIR low-pass filter: y[n] = alpha * x[n] + (1-alpha) * y[n-1]
+                            leftFiltered = LPF_ALPHA * leftRaw + (1.0 - LPF_ALPHA) * leftFiltered
+                            rightFiltered = LPF_ALPHA * rightRaw + (1.0 - LPF_ALPHA) * rightFiltered
+                            
+                            // Scale to 16-bit PCM with some headroom
+                            val leftPcm = (leftFiltered * 28000).toInt().coerceIn(-32768, 32767)
+                            val rightPcm = (rightFiltered * 28000).toInt().coerceIn(-32768, 32767)
                             
                             if (channelCount == 2) {
                                 pcmBuffer[pcmIndex++] = leftPcm.toShort()
@@ -612,6 +662,13 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT
             val bufferSize = AudioTrack.getMinBufferSize(outputSampleRate, channelConfig, audioFormat) * 4
             
+            // Generate audio session ID if not set (for EQ integration)
+            if (audioSessionId == 0) {
+                val audioManager = reactContext.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
+                audioSessionId = audioManager.generateAudioSessionId()
+                Log.d(TAG, "Generated audio session ID: $audioSessionId")
+            }
+            
             audioTrack = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
@@ -626,6 +683,7 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         .setEncoding(audioFormat)
                         .build()
                 )
+                .setSessionId(audioSessionId)
                 .setBufferSizeInBytes(bufferSize)
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
@@ -642,7 +700,7 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             
             Log.d(TAG, "DFF output: ${outputSampleRate}Hz, bytesPerPcmSample=$bytesPerPcmSample")
             
-            // DSD to PCM conversion using lookup table
+            // DSD to PCM conversion using lookup table with IIR low-pass filter
             decoderJob = CoroutineScope(Dispatchers.IO).launch {
                 val blockSize = 4096
                 val dsdBuffer = ByteArray(blockSize * channelCount)
@@ -652,6 +710,10 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                 var leftSum = 0
                 var rightSum = 0
                 var byteCount = 0
+                
+                // IIR low-pass filter state for noise reduction
+                var leftFiltered = 0.0
+                var rightFiltered = 0.0
                 
                 var bytesRead = 0
                 var totalRead = 0L
@@ -681,9 +743,18 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         
                         // Output PCM sample every bytesPerPcmSample bytes
                         if (byteCount >= bytesPerPcmSample) {
-                            val scale = 32767.0 / (bytesPerPcmSample * 8.0)
-                            val leftPcm = (leftSum * scale).toInt().coerceIn(-32768, 32767)
-                            val rightPcm = (rightSum * scale).toInt().coerceIn(-32768, 32767)
+                            // Convert to floating point
+                            val scale = 1.0 / (bytesPerPcmSample * 8.0)
+                            val leftRaw = leftSum * scale
+                            val rightRaw = rightSum * scale
+                            
+                            // Apply IIR low-pass filter
+                            leftFiltered = LPF_ALPHA * leftRaw + (1.0 - LPF_ALPHA) * leftFiltered
+                            rightFiltered = LPF_ALPHA * rightRaw + (1.0 - LPF_ALPHA) * rightFiltered
+                            
+                            // Scale to 16-bit PCM
+                            val leftPcm = (leftFiltered * 28000).toInt().coerceIn(-32768, 32767)
+                            val rightPcm = (rightFiltered * 28000).toInt().coerceIn(-32768, 32767)
                             
                             if (channelCount == 2) {
                                 pcmBuffer[pcmIndex++] = leftPcm.toShort()
@@ -846,6 +917,13 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT
             val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 4
             
+            // Generate audio session ID if not set (for EQ integration)
+            if (audioSessionId == 0) {
+                val audioManager = reactContext.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
+                audioSessionId = audioManager.generateAudioSessionId()
+                Log.d(TAG, "Generated audio session ID: $audioSessionId")
+            }
+            
             audioTrack = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
@@ -860,6 +938,7 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         .setEncoding(audioFormat)
                         .build()
                 )
+                .setSessionId(audioSessionId)
                 .setBufferSizeInBytes(bufferSize)
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
