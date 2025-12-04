@@ -190,6 +190,8 @@ export const useLibraryStore = create<LibraryState>()(
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         scanFolders: state.scanFolders,
+        tracks: state.tracks,
+        stats: state.stats,
         lastScanAt: state.lastScanAt,
         sortBy: state.sortBy,
         sortDescending: state.sortDescending,

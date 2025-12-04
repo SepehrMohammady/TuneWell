@@ -25,12 +25,13 @@ import { PLAYBACK_STATES } from '../../config/constants';
 
 /**
  * Check if a format requires the native decoder
- * DSD formats (DSF/DFF) require our native decoder since ExoPlayer doesn't support them.
+ * DSD formats (DSF/DFF) and WAV require our native decoder.
+ * WAV is included because ExoPlayer with content:// URIs can be unreliable.
  */
 function requiresNativeDecoder(format: string): boolean {
   const fmt = (format || '').toLowerCase().replace('.', '');
-  // DSD formats require native decoder
-  return ['dsf', 'dff', 'dsd'].includes(fmt);
+  // DSD and WAV formats use native decoder for reliable playback
+  return ['dsf', 'dff', 'dsd', 'wav', 'wave'].includes(fmt);
 }
 
 /**
