@@ -34,50 +34,38 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
         private const val TAG = "NativeAudioDecoder"
         
         // DSD sample rates
-        const val DSD64_RATE = 2822400   // 64x CD sample rate
+        const val DSD64_RATE = 2822400   // 64x CD sample rate (44100 * 64)
         const val DSD128_RATE = 5644800  // 128x CD sample rate
         const val DSD256_RATE = 11289600 // 256x CD sample rate
         
-        // PCM output sample rates
+        // PCM output sample rates - must match DSD rate / 64
         const val PCM_SAMPLE_RATE_44100 = 44100
         const val PCM_SAMPLE_RATE_88200 = 88200
         const val PCM_SAMPLE_RATE_176400 = 176400
         
-        // DSD decimation filter - 64 tap FIR low-pass filter
-        // This filter is designed for DSD64 to 44.1kHz conversion
-        // Cutoff at ~20kHz with good stopband attenuation
-        private val FIR_TAPS = 64
+        // DSD to PCM decimation ratio 
+        // DSD64 (2.8224 MHz) / 64 = 44.1 kHz
+        // We process 8 bytes (64 bits) of DSD data to produce 1 PCM sample
+        const val DECIMATION_RATIO = 64
         
-        // Pre-computed FIR filter coefficients (sinc windowed with Blackman-Harris)
-        // These coefficients provide proper low-pass filtering for DSD decimation
-        private val FIR_COEFFICIENTS = DoubleArray(FIR_TAPS) { i ->
-            val center = (FIR_TAPS - 1) / 2.0
-            val x = i - center
-            
-            // Normalized cutoff frequency (20kHz at DSD64 rate, fs=2.8224MHz)
-            val fc = 0.015  // ~21kHz cutoff
-            
-            // Sinc function
-            val sinc = if (x == 0.0) 1.0 else sin(2 * PI * fc * x) / (PI * x)
-            
-            // Blackman-Harris window for good sidelobe suppression
-            val a0 = 0.35875
-            val a1 = 0.48829
-            val a2 = 0.14128
-            val a3 = 0.01168
-            val window = a0 - a1 * kotlin.math.cos(2 * PI * i / (FIR_TAPS - 1)) +
-                        a2 * kotlin.math.cos(4 * PI * i / (FIR_TAPS - 1)) -
-                        a3 * kotlin.math.cos(6 * PI * i / (FIR_TAPS - 1))
-            
-            sinc * window
+        // Simple sigma-delta demodulation lookup table
+        // Each byte (8 bits) maps to a sum of +1/-1 values
+        // Pre-computed for LSB-first bit order (DSF format)
+        private val DSD_TO_PCM_TABLE_LSB = IntArray(256) { byte ->
+            var sum = 0
+            for (bit in 0 until 8) {
+                sum += if ((byte shr bit) and 1 == 1) 1 else -1
+            }
+            sum
         }
         
-        // Normalize filter coefficients
-        init {
-            val sum = FIR_COEFFICIENTS.sum()
-            for (i in FIR_COEFFICIENTS.indices) {
-                FIR_COEFFICIENTS[i] /= sum
+        // Pre-computed for MSB-first bit order (DFF format)
+        private val DSD_TO_PCM_TABLE_MSB = IntArray(256) { byte ->
+            var sum = 0
+            for (bit in 7 downTo 0) {
+                sum += if ((byte shr bit) and 1 == 1) 1 else -1
             }
+            sum
         }
     }
 
@@ -340,14 +328,21 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             
             Log.d(TAG, "DSF: $channelCount channels, ${dsdSampleRate}Hz DSD, blockSize=$blockSizePerChannel")
             
-            // Calculate output sample rate (decimate DSD to PCM)
-            val decimationRatio = dsdSampleRate / PCM_SAMPLE_RATE_44100
-            val outputSampleRate = PCM_SAMPLE_RATE_44100
+            // Calculate output sample rate based on DSD rate
+            // DSD64 (2.8224 MHz) -> 44.1 kHz, DSD128 -> 88.2 kHz, DSD256 -> 176.4 kHz
+            val outputSampleRate = when {
+                dsdSampleRate <= DSD64_RATE -> PCM_SAMPLE_RATE_44100
+                dsdSampleRate <= DSD128_RATE -> PCM_SAMPLE_RATE_88200
+                else -> PCM_SAMPLE_RATE_176400
+            }
             
-            Log.d(TAG, "Decimation ratio: $decimationRatio, output: ${outputSampleRate}Hz")
+            // Decimation: 8 bytes (64 bits) of DSD -> 1 PCM sample for DSD64
+            // The ratio of DSD bytes to PCM samples
+            val bytesPerPcmSample = dsdSampleRate / outputSampleRate / 8  // 8 bits per byte
+            
+            Log.d(TAG, "Output: ${outputSampleRate}Hz, bytesPerPcmSample=$bytesPerPcmSample")
             
             // Find data chunk
-            // Data chunk starts after format chunk (28 + fmtChunkSize)
             val dataChunkOffset = 28 + fmtChunkSize.toInt()
             
             // Skip to data chunk
@@ -391,29 +386,22 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             
             audioTrack?.play()
             
-            // DSD to PCM conversion using proper FIR decimation
+            // DSD to PCM conversion using lookup table
             decoderJob = CoroutineScope(Dispatchers.IO).launch {
-                // DSF stores data in blocks: all left channel data, then all right channel
-                // We need to handle the interleaved block structure
-                
-                // FIR filter state for each channel
-                val leftFilterBuffer = DoubleArray(FIR_TAPS)
-                val rightFilterBuffer = DoubleArray(FIR_TAPS)
-                var leftFilterIndex = 0
-                var rightFilterIndex = 0
-                
-                // DSD bit buffer for decimation
-                // For DSD64, we decimate 64 DSD samples to 1 PCM sample
-                val decimationFactor = 64  // DSD64 to 44.1kHz
+                // DSF stores data in interleaved blocks:
+                // [Left block (blockSizePerChannel bytes)][Right block (blockSizePerChannel bytes)]
+                // Each block contains blockSizePerChannel bytes of DSD data for one channel
                 
                 val dsdBuffer = ByteArray(blockSizePerChannel * channelCount)
-                val pcmBuffer = ShortArray(4096)  // Output buffer
+                val pcmBuffer = ShortArray(8192)  // Output buffer
                 
                 var bytesRead = 0
                 var pcmIndex = 0
-                var dsdBitCount = 0
-                var leftAccumulator = 0.0
-                var rightAccumulator = 0.0
+                
+                // Accumulators for averaging DSD values
+                var leftSum = 0
+                var rightSum = 0
+                var byteCount = 0
                 
                 while (isPlaying && dataStream.read(dsdBuffer).also { bytesRead = it } > 0) {
                     if (isPaused) {
@@ -421,13 +409,12 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         continue
                     }
                     
-                    pcmIndex = 0
+                    // Process the interleaved blocks
+                    // Left channel is in first blockSizePerChannel bytes
+                    // Right channel is in next blockSizePerChannel bytes
+                    val actualBlockSize = minOf(blockSizePerChannel, bytesRead / channelCount)
                     
-                    // Process each byte in the block
-                    // DSF block structure: blockSizePerChannel bytes for left, then right
-                    val bytesPerChannel = bytesRead / channelCount
-                    
-                    for (byteIdx in 0 until bytesPerChannel) {
+                    for (byteIdx in 0 until actualBlockSize) {
                         // Get left and right channel bytes
                         val leftByte = dsdBuffer[byteIdx].toInt() and 0xFF
                         val rightByte = if (channelCount == 2) 
@@ -435,51 +422,37 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         else 
                             leftByte
                         
-                        // Process each bit in the byte (LSB first for DSF)
-                        for (bit in 0 until 8) {
-                            // Extract DSD bits (LSB first)
-                            val leftBit = (leftByte shr bit) and 1
-                            val rightBit = (rightByte shr bit) and 1
+                        // Accumulate DSD values using lookup table (LSB first for DSF)
+                        leftSum += DSD_TO_PCM_TABLE_LSB[leftByte]
+                        rightSum += DSD_TO_PCM_TABLE_LSB[rightByte]
+                        byteCount++
+                        
+                        // Output PCM sample every bytesPerPcmSample bytes
+                        if (byteCount >= bytesPerPcmSample) {
+                            // Convert accumulated sum to 16-bit PCM
+                            // Max possible sum for 8 bytes = 8 * 8 = 64 (all 1s)
+                            // Min possible sum = -64 (all 0s)
+                            // Scale to 16-bit range
+                            val scale = 32767.0 / (bytesPerPcmSample * 8.0)
+                            val leftPcm = (leftSum * scale).toInt().coerceIn(-32768, 32767)
+                            val rightPcm = (rightSum * scale).toInt().coerceIn(-32768, 32767)
                             
-                            // Convert DSD bit to bipolar value (+1 or -1)
-                            val leftValue = if (leftBit == 1) 1.0 else -1.0
-                            val rightValue = if (rightBit == 1) 1.0 else -1.0
+                            if (channelCount == 2) {
+                                pcmBuffer[pcmIndex++] = leftPcm.toShort()
+                                pcmBuffer[pcmIndex++] = rightPcm.toShort()
+                            } else {
+                                pcmBuffer[pcmIndex++] = leftPcm.toShort()
+                            }
                             
-                            // Apply FIR filter (moving average with windowed coefficients)
-                            leftFilterBuffer[leftFilterIndex] = leftValue
-                            rightFilterBuffer[rightFilterIndex] = rightValue
+                            // Reset accumulators
+                            leftSum = 0
+                            rightSum = 0
+                            byteCount = 0
                             
-                            leftAccumulator += leftValue * FIR_COEFFICIENTS[dsdBitCount % FIR_TAPS]
-                            rightAccumulator += rightValue * FIR_COEFFICIENTS[dsdBitCount % FIR_TAPS]
-                            
-                            dsdBitCount++
-                            leftFilterIndex = (leftFilterIndex + 1) % FIR_TAPS
-                            rightFilterIndex = (rightFilterIndex + 1) % FIR_TAPS
-                            
-                            // Every decimationFactor DSD samples, output one PCM sample
-                            if (dsdBitCount >= decimationFactor) {
-                                // Apply gain and convert to 16-bit PCM
-                                // DSD typically needs about 6dB of gain
-                                val leftPcm = (leftAccumulator * 24000).toInt().coerceIn(-32768, 32767)
-                                val rightPcm = (rightAccumulator * 24000).toInt().coerceIn(-32768, 32767)
-                                
-                                if (channelCount == 2) {
-                                    pcmBuffer[pcmIndex++] = leftPcm.toShort()
-                                    pcmBuffer[pcmIndex++] = rightPcm.toShort()
-                                } else {
-                                    pcmBuffer[pcmIndex++] = leftPcm.toShort()
-                                }
-                                
-                                // Reset accumulators
-                                leftAccumulator = 0.0
-                                rightAccumulator = 0.0
-                                dsdBitCount = 0
-                                
-                                // Flush buffer when full
-                                if (pcmIndex >= pcmBuffer.size - 2) {
-                                    audioTrack?.write(pcmBuffer, 0, pcmIndex)
-                                    pcmIndex = 0
-                                }
+                            // Flush buffer when nearly full
+                            if (pcmIndex >= pcmBuffer.size - 2) {
+                                audioTrack?.write(pcmBuffer, 0, pcmIndex)
+                                pcmIndex = 0
                             }
                         }
                     }
@@ -487,6 +460,7 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                     // Write remaining samples
                     if (pcmIndex > 0) {
                         audioTrack?.write(pcmBuffer, 0, pcmIndex)
+                        pcmIndex = 0
                     }
                 }
                 
@@ -663,17 +637,21 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             val dataStream = openUri(uri) ?: return
             dataStream.skip(dataOffset)
             
-            // DSD to PCM conversion using FIR decimation (same approach as DSF)
+            // Calculate bytes per PCM sample (DFF uses interleaved channel data)
+            val bytesPerPcmSample = sampleRate / outputSampleRate / 8  // 8 bits per byte
+            
+            Log.d(TAG, "DFF output: ${outputSampleRate}Hz, bytesPerPcmSample=$bytesPerPcmSample")
+            
+            // DSD to PCM conversion using lookup table
             decoderJob = CoroutineScope(Dispatchers.IO).launch {
                 val blockSize = 4096
                 val dsdBuffer = ByteArray(blockSize * channelCount)
-                val pcmBuffer = ShortArray(4096)
+                val pcmBuffer = ShortArray(8192)
                 
-                // FIR filter state
-                var leftAccumulator = 0.0
-                var rightAccumulator = 0.0
-                var dsdBitCount = 0
-                val decimationFactor = 64
+                // Accumulators
+                var leftSum = 0
+                var rightSum = 0
+                var byteCount = 0
                 
                 var bytesRead = 0
                 var totalRead = 0L
@@ -686,10 +664,9 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                     }
                     
                     totalRead += bytesRead
-                    pcmIndex = 0
                     
-                    // DFF uses MSB-first bit order (opposite of DSF)
-                    // Process byte by byte
+                    // DFF uses interleaved channel data: L R L R L R...
+                    // and MSB-first bit order (opposite of DSF)
                     for (byteIdx in 0 until bytesRead step channelCount) {
                         val leftByte = dsdBuffer[byteIdx].toInt() and 0xFF
                         val rightByte = if (channelCount == 2 && byteIdx + 1 < bytesRead) 
@@ -697,44 +674,38 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         else 
                             leftByte
                         
-                        // Process each bit (MSB first for DFF)
-                        for (bit in 7 downTo 0) {
-                            val leftBit = (leftByte shr bit) and 1
-                            val rightBit = (rightByte shr bit) and 1
+                        // Accumulate DSD values using lookup table (MSB first for DFF)
+                        leftSum += DSD_TO_PCM_TABLE_MSB[leftByte]
+                        rightSum += DSD_TO_PCM_TABLE_MSB[rightByte]
+                        byteCount++
+                        
+                        // Output PCM sample every bytesPerPcmSample bytes
+                        if (byteCount >= bytesPerPcmSample) {
+                            val scale = 32767.0 / (bytesPerPcmSample * 8.0)
+                            val leftPcm = (leftSum * scale).toInt().coerceIn(-32768, 32767)
+                            val rightPcm = (rightSum * scale).toInt().coerceIn(-32768, 32767)
                             
-                            val leftValue = if (leftBit == 1) 1.0 else -1.0
-                            val rightValue = if (rightBit == 1) 1.0 else -1.0
+                            if (channelCount == 2) {
+                                pcmBuffer[pcmIndex++] = leftPcm.toShort()
+                                pcmBuffer[pcmIndex++] = rightPcm.toShort()
+                            } else {
+                                pcmBuffer[pcmIndex++] = leftPcm.toShort()
+                            }
                             
-                            leftAccumulator += leftValue * FIR_COEFFICIENTS[dsdBitCount % FIR_TAPS]
-                            rightAccumulator += rightValue * FIR_COEFFICIENTS[dsdBitCount % FIR_TAPS]
+                            leftSum = 0
+                            rightSum = 0
+                            byteCount = 0
                             
-                            dsdBitCount++
-                            
-                            if (dsdBitCount >= decimationFactor) {
-                                val leftPcm = (leftAccumulator * 24000).toInt().coerceIn(-32768, 32767)
-                                val rightPcm = (rightAccumulator * 24000).toInt().coerceIn(-32768, 32767)
-                                
-                                if (channelCount == 2) {
-                                    pcmBuffer[pcmIndex++] = leftPcm.toShort()
-                                    pcmBuffer[pcmIndex++] = rightPcm.toShort()
-                                } else {
-                                    pcmBuffer[pcmIndex++] = leftPcm.toShort()
-                                }
-                                
-                                leftAccumulator = 0.0
-                                rightAccumulator = 0.0
-                                dsdBitCount = 0
-                                
-                                if (pcmIndex >= pcmBuffer.size - 2) {
-                                    audioTrack?.write(pcmBuffer, 0, pcmIndex)
-                                    pcmIndex = 0
-                                }
+                            if (pcmIndex >= pcmBuffer.size - 2) {
+                                audioTrack?.write(pcmBuffer, 0, pcmIndex)
+                                pcmIndex = 0
                             }
                         }
                     }
                     
                     if (pcmIndex > 0) {
                         audioTrack?.write(pcmBuffer, 0, pcmIndex)
+                        pcmIndex = 0
                     }
                 }
                 
