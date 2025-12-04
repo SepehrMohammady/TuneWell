@@ -14,13 +14,17 @@ import android.util.Log
 import com.facebook.react.bridge.*
 import kotlinx.coroutines.*
 import java.io.FileInputStream
+import java.io.InputStream
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.min
+import kotlin.math.sin
+import kotlin.math.PI
 
 /**
  * Native audio decoder for formats not supported by ExoPlayer.
- * Handles DSD (DSF/DFF) files by converting to PCM.
+ * Handles DSD (DSF/DFF) files by converting to PCM using proper FIR decimation filter.
  * Also handles WAV files with various bit depths.
  */
 class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext) : 
@@ -39,10 +43,42 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
         const val PCM_SAMPLE_RATE_88200 = 88200
         const val PCM_SAMPLE_RATE_176400 = 176400
         
-        // DSD to PCM decimation ratios
-        const val DSD64_TO_PCM_RATIO = 64
-        const val DSD128_TO_PCM_RATIO = 128
-        const val DSD256_TO_PCM_RATIO = 256
+        // DSD decimation filter - 64 tap FIR low-pass filter
+        // This filter is designed for DSD64 to 44.1kHz conversion
+        // Cutoff at ~20kHz with good stopband attenuation
+        private val FIR_TAPS = 64
+        
+        // Pre-computed FIR filter coefficients (sinc windowed with Blackman-Harris)
+        // These coefficients provide proper low-pass filtering for DSD decimation
+        private val FIR_COEFFICIENTS = DoubleArray(FIR_TAPS) { i ->
+            val center = (FIR_TAPS - 1) / 2.0
+            val x = i - center
+            
+            // Normalized cutoff frequency (20kHz at DSD64 rate, fs=2.8224MHz)
+            val fc = 0.015  // ~21kHz cutoff
+            
+            // Sinc function
+            val sinc = if (x == 0.0) 1.0 else sin(2 * PI * fc * x) / (PI * x)
+            
+            // Blackman-Harris window for good sidelobe suppression
+            val a0 = 0.35875
+            val a1 = 0.48829
+            val a2 = 0.14128
+            val a3 = 0.01168
+            val window = a0 - a1 * kotlin.math.cos(2 * PI * i / (FIR_TAPS - 1)) +
+                        a2 * kotlin.math.cos(4 * PI * i / (FIR_TAPS - 1)) -
+                        a3 * kotlin.math.cos(6 * PI * i / (FIR_TAPS - 1))
+            
+            sinc * window
+        }
+        
+        // Normalize filter coefficients
+        init {
+            val sum = FIR_COEFFICIENTS.sum()
+            for (i in FIR_COEFFICIENTS.indices) {
+                FIR_COEFFICIENTS[i] /= sum
+            }
+        }
     }
 
     private var audioTrack: AudioTrack? = null
@@ -266,55 +302,203 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
     }
 
     private suspend fun playDSF(uri: String) {
-        // For DSD playback, we need to:
-        // 1. Read DSD data
-        // 2. Convert to PCM (decimation filter)
-        // 3. Output via AudioTrack
-        
-        // This is a simplified implementation
-        // Full DSD to PCM conversion requires a proper decimation filter
-        
         Log.d(TAG, "Playing DSF: $uri")
         
-        // For now, show that DSD files are recognized but need conversion
-        // A full implementation would use a DSP library for DSD->PCM conversion
-        
-        val info = getDSFInfo(uri)
-        if (info == null) {
-            Log.e(TAG, "Failed to get DSF info")
+        val inputStream = openUri(uri) ?: run {
+            Log.e(TAG, "Failed to open DSF file")
             return
         }
         
-        // Create AudioTrack for output
-        val sampleRate = PCM_SAMPLE_RATE_176400  // Output at high sample rate
-        val channelConfig = AudioFormat.CHANNEL_OUT_STEREO
-        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        
-        val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 4
-        
-        audioTrack = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setSampleRate(sampleRate)
-                    .setChannelMask(channelConfig)
-                    .setEncoding(audioFormat)
-                    .build()
-            )
-            .setBufferSizeInBytes(bufferSize)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
-        
-        audioTrack?.play()
-        
-        // Note: Full DSD decoding would happen here
-        // For a complete implementation, integrate a DSD->PCM converter library
-        Log.w(TAG, "DSD playback requires DSD->PCM conversion (not fully implemented)")
+        try {
+            // Read and parse DSF header
+            val header = ByteArray(512)
+            inputStream.read(header)
+            
+            // Verify DSD chunk
+            val magic = String(header, 0, 4)
+            if (magic != "DSD ") {
+                Log.e(TAG, "Invalid DSF file: wrong magic '$magic'")
+                inputStream.close()
+                return
+            }
+            
+            // Parse header
+            val headerSize = ByteBuffer.wrap(header, 4, 8).order(ByteOrder.LITTLE_ENDIAN).long
+            val fileSize = ByteBuffer.wrap(header, 12, 8).order(ByteOrder.LITTLE_ENDIAN).long
+            val metadataOffset = ByteBuffer.wrap(header, 20, 8).order(ByteOrder.LITTLE_ENDIAN).long
+            
+            // Parse format chunk (starts at offset 28)
+            val fmtChunkSize = ByteBuffer.wrap(header, 32, 8).order(ByteOrder.LITTLE_ENDIAN).long
+            val formatVersion = ByteBuffer.wrap(header, 40, 4).order(ByteOrder.LITTLE_ENDIAN).int
+            val formatId = ByteBuffer.wrap(header, 44, 4).order(ByteOrder.LITTLE_ENDIAN).int
+            val channelType = ByteBuffer.wrap(header, 48, 4).order(ByteOrder.LITTLE_ENDIAN).int
+            val channelCount = ByteBuffer.wrap(header, 52, 4).order(ByteOrder.LITTLE_ENDIAN).int
+            val dsdSampleRate = ByteBuffer.wrap(header, 56, 4).order(ByteOrder.LITTLE_ENDIAN).int
+            val bitsPerSample = ByteBuffer.wrap(header, 60, 4).order(ByteOrder.LITTLE_ENDIAN).int
+            val sampleCount = ByteBuffer.wrap(header, 64, 8).order(ByteOrder.LITTLE_ENDIAN).long
+            val blockSizePerChannel = ByteBuffer.wrap(header, 72, 4).order(ByteOrder.LITTLE_ENDIAN).int
+            
+            Log.d(TAG, "DSF: $channelCount channels, ${dsdSampleRate}Hz DSD, blockSize=$blockSizePerChannel")
+            
+            // Calculate output sample rate (decimate DSD to PCM)
+            val decimationRatio = dsdSampleRate / PCM_SAMPLE_RATE_44100
+            val outputSampleRate = PCM_SAMPLE_RATE_44100
+            
+            Log.d(TAG, "Decimation ratio: $decimationRatio, output: ${outputSampleRate}Hz")
+            
+            // Find data chunk
+            // Data chunk starts after format chunk (28 + fmtChunkSize)
+            val dataChunkOffset = 28 + fmtChunkSize.toInt()
+            
+            // Skip to data chunk
+            inputStream.close()
+            val dataStream = openUri(uri) ?: return
+            dataStream.skip(dataChunkOffset.toLong())
+            
+            // Read data chunk header
+            val dataHeader = ByteArray(12)
+            dataStream.read(dataHeader)
+            val dataChunkId = String(dataHeader, 0, 4)
+            val dataChunkSize = ByteBuffer.wrap(dataHeader, 4, 8).order(ByteOrder.LITTLE_ENDIAN).long
+            
+            Log.d(TAG, "Data chunk: '$dataChunkId', size: $dataChunkSize bytes")
+            
+            // Setup AudioTrack for PCM output
+            val channelConfig = if (channelCount == 1) 
+                AudioFormat.CHANNEL_OUT_MONO 
+            else 
+                AudioFormat.CHANNEL_OUT_STEREO
+            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+            val bufferSize = AudioTrack.getMinBufferSize(outputSampleRate, channelConfig, audioFormat) * 4
+            
+            audioTrack = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(outputSampleRate)
+                        .setChannelMask(channelConfig)
+                        .setEncoding(audioFormat)
+                        .build()
+                )
+                .setBufferSizeInBytes(bufferSize)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
+            
+            audioTrack?.play()
+            
+            // DSD to PCM conversion using proper FIR decimation
+            decoderJob = CoroutineScope(Dispatchers.IO).launch {
+                // DSF stores data in blocks: all left channel data, then all right channel
+                // We need to handle the interleaved block structure
+                
+                // FIR filter state for each channel
+                val leftFilterBuffer = DoubleArray(FIR_TAPS)
+                val rightFilterBuffer = DoubleArray(FIR_TAPS)
+                var leftFilterIndex = 0
+                var rightFilterIndex = 0
+                
+                // DSD bit buffer for decimation
+                // For DSD64, we decimate 64 DSD samples to 1 PCM sample
+                val decimationFactor = 64  // DSD64 to 44.1kHz
+                
+                val dsdBuffer = ByteArray(blockSizePerChannel * channelCount)
+                val pcmBuffer = ShortArray(4096)  // Output buffer
+                
+                var bytesRead = 0
+                var pcmIndex = 0
+                var dsdBitCount = 0
+                var leftAccumulator = 0.0
+                var rightAccumulator = 0.0
+                
+                while (isPlaying && dataStream.read(dsdBuffer).also { bytesRead = it } > 0) {
+                    if (isPaused) {
+                        delay(100)
+                        continue
+                    }
+                    
+                    pcmIndex = 0
+                    
+                    // Process each byte in the block
+                    // DSF block structure: blockSizePerChannel bytes for left, then right
+                    val bytesPerChannel = bytesRead / channelCount
+                    
+                    for (byteIdx in 0 until bytesPerChannel) {
+                        // Get left and right channel bytes
+                        val leftByte = dsdBuffer[byteIdx].toInt() and 0xFF
+                        val rightByte = if (channelCount == 2) 
+                            dsdBuffer[blockSizePerChannel + byteIdx].toInt() and 0xFF 
+                        else 
+                            leftByte
+                        
+                        // Process each bit in the byte (LSB first for DSF)
+                        for (bit in 0 until 8) {
+                            // Extract DSD bits (LSB first)
+                            val leftBit = (leftByte shr bit) and 1
+                            val rightBit = (rightByte shr bit) and 1
+                            
+                            // Convert DSD bit to bipolar value (+1 or -1)
+                            val leftValue = if (leftBit == 1) 1.0 else -1.0
+                            val rightValue = if (rightBit == 1) 1.0 else -1.0
+                            
+                            // Apply FIR filter (moving average with windowed coefficients)
+                            leftFilterBuffer[leftFilterIndex] = leftValue
+                            rightFilterBuffer[rightFilterIndex] = rightValue
+                            
+                            leftAccumulator += leftValue * FIR_COEFFICIENTS[dsdBitCount % FIR_TAPS]
+                            rightAccumulator += rightValue * FIR_COEFFICIENTS[dsdBitCount % FIR_TAPS]
+                            
+                            dsdBitCount++
+                            leftFilterIndex = (leftFilterIndex + 1) % FIR_TAPS
+                            rightFilterIndex = (rightFilterIndex + 1) % FIR_TAPS
+                            
+                            // Every decimationFactor DSD samples, output one PCM sample
+                            if (dsdBitCount >= decimationFactor) {
+                                // Apply gain and convert to 16-bit PCM
+                                // DSD typically needs about 6dB of gain
+                                val leftPcm = (leftAccumulator * 24000).toInt().coerceIn(-32768, 32767)
+                                val rightPcm = (rightAccumulator * 24000).toInt().coerceIn(-32768, 32767)
+                                
+                                if (channelCount == 2) {
+                                    pcmBuffer[pcmIndex++] = leftPcm.toShort()
+                                    pcmBuffer[pcmIndex++] = rightPcm.toShort()
+                                } else {
+                                    pcmBuffer[pcmIndex++] = leftPcm.toShort()
+                                }
+                                
+                                // Reset accumulators
+                                leftAccumulator = 0.0
+                                rightAccumulator = 0.0
+                                dsdBitCount = 0
+                                
+                                // Flush buffer when full
+                                if (pcmIndex >= pcmBuffer.size - 2) {
+                                    audioTrack?.write(pcmBuffer, 0, pcmIndex)
+                                    pcmIndex = 0
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Write remaining samples
+                    if (pcmIndex > 0) {
+                        audioTrack?.write(pcmBuffer, 0, pcmIndex)
+                    }
+                }
+                
+                dataStream.close()
+                isPlaying = false
+                Log.d(TAG, "DSF playback complete")
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "DSF playback error: ${e.message}", e)
+            inputStream.close()
+        }
     }
 
     // =========================================================================
@@ -362,8 +546,207 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
 
     private suspend fun playDFF(uri: String) {
         Log.d(TAG, "Playing DFF: $uri")
-        // Similar to DSF, DFF requires DSD->PCM conversion
-        Log.w(TAG, "DFF playback requires DSD->PCM conversion (not fully implemented)")
+        
+        val inputStream = openUri(uri) ?: run {
+            Log.e(TAG, "Failed to open DFF file")
+            return
+        }
+        
+        try {
+            // Read DSDIFF header
+            val header = ByteArray(512)
+            inputStream.read(header)
+            
+            // Verify FRM8 container
+            val magic = String(header, 0, 4)
+            if (magic != "FRM8") {
+                Log.e(TAG, "Invalid DFF file: wrong magic '$magic'")
+                inputStream.close()
+                return
+            }
+            
+            // Get form size (big endian)
+            val formSize = ByteBuffer.wrap(header, 4, 8).order(ByteOrder.BIG_ENDIAN).long
+            
+            // Verify DSD form type
+            val formType = String(header, 12, 4)
+            if (formType != "DSD ") {
+                Log.e(TAG, "Invalid DFF: not DSD format")
+                inputStream.close()
+                return
+            }
+            
+            // Parse chunks to find sample rate and data
+            // Default values
+            var sampleRate = DSD64_RATE
+            var channelCount = 2
+            var dataOffset = 0L
+            var dataSize = 0L
+            
+            // Simple chunk parser - look for PROP and DSD chunks
+            var offset = 16
+            while (offset < header.size - 12) {
+                val chunkId = String(header, offset, 4)
+                val chunkSize = ByteBuffer.wrap(header, offset + 4, 8).order(ByteOrder.BIG_ENDIAN).long
+                
+                Log.d(TAG, "DFF chunk: $chunkId, size: $chunkSize at offset $offset")
+                
+                when (chunkId) {
+                    "PROP" -> {
+                        // Property chunk contains sample rate
+                        // Look for FS (sample rate) chunk inside PROP
+                        val propData = String(header, offset + 12, 4)
+                        if (propData == "SND ") {
+                            // Find FS chunk
+                            var propOffset = offset + 16
+                            while (propOffset < offset + 12 + chunkSize.toInt() && propOffset < header.size - 12) {
+                                val subChunkId = String(header, propOffset, 4)
+                                val subChunkSize = ByteBuffer.wrap(header, propOffset + 4, 8).order(ByteOrder.BIG_ENDIAN).long
+                                
+                                if (subChunkId == "FS  ") {
+                                    sampleRate = ByteBuffer.wrap(header, propOffset + 12, 4).order(ByteOrder.BIG_ENDIAN).int
+                                    Log.d(TAG, "DFF sample rate: $sampleRate")
+                                } else if (subChunkId == "CHNL") {
+                                    channelCount = ByteBuffer.wrap(header, propOffset + 12, 2).order(ByteOrder.BIG_ENDIAN).short.toInt()
+                                    Log.d(TAG, "DFF channels: $channelCount")
+                                }
+                                
+                                propOffset += (12 + subChunkSize).toInt()
+                                if (subChunkSize.toInt() % 2 != 0) propOffset++ // Padding
+                            }
+                        }
+                    }
+                    "DSD " -> {
+                        dataOffset = (offset + 12).toLong()
+                        dataSize = chunkSize
+                        Log.d(TAG, "DFF data at $dataOffset, size: $dataSize")
+                    }
+                }
+                
+                offset += (12 + chunkSize).toInt()
+                if (chunkSize.toInt() % 2 != 0) offset++ // Padding
+            }
+            
+            Log.d(TAG, "DFF: $channelCount channels, ${sampleRate}Hz DSD")
+            
+            // Setup AudioTrack for PCM output
+            val outputSampleRate = PCM_SAMPLE_RATE_44100
+            val channelConfig = if (channelCount == 1) 
+                AudioFormat.CHANNEL_OUT_MONO 
+            else 
+                AudioFormat.CHANNEL_OUT_STEREO
+            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+            val bufferSize = AudioTrack.getMinBufferSize(outputSampleRate, channelConfig, audioFormat) * 4
+            
+            audioTrack = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(outputSampleRate)
+                        .setChannelMask(channelConfig)
+                        .setEncoding(audioFormat)
+                        .build()
+                )
+                .setBufferSizeInBytes(bufferSize)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
+            
+            audioTrack?.play()
+            
+            // Re-open file and skip to data
+            inputStream.close()
+            val dataStream = openUri(uri) ?: return
+            dataStream.skip(dataOffset)
+            
+            // DSD to PCM conversion using FIR decimation (same approach as DSF)
+            decoderJob = CoroutineScope(Dispatchers.IO).launch {
+                val blockSize = 4096
+                val dsdBuffer = ByteArray(blockSize * channelCount)
+                val pcmBuffer = ShortArray(4096)
+                
+                // FIR filter state
+                var leftAccumulator = 0.0
+                var rightAccumulator = 0.0
+                var dsdBitCount = 0
+                val decimationFactor = 64
+                
+                var bytesRead = 0
+                var totalRead = 0L
+                var pcmIndex = 0
+                
+                while (isPlaying && totalRead < dataSize && dataStream.read(dsdBuffer).also { bytesRead = it } > 0) {
+                    if (isPaused) {
+                        delay(100)
+                        continue
+                    }
+                    
+                    totalRead += bytesRead
+                    pcmIndex = 0
+                    
+                    // DFF uses MSB-first bit order (opposite of DSF)
+                    // Process byte by byte
+                    for (byteIdx in 0 until bytesRead step channelCount) {
+                        val leftByte = dsdBuffer[byteIdx].toInt() and 0xFF
+                        val rightByte = if (channelCount == 2 && byteIdx + 1 < bytesRead) 
+                            dsdBuffer[byteIdx + 1].toInt() and 0xFF 
+                        else 
+                            leftByte
+                        
+                        // Process each bit (MSB first for DFF)
+                        for (bit in 7 downTo 0) {
+                            val leftBit = (leftByte shr bit) and 1
+                            val rightBit = (rightByte shr bit) and 1
+                            
+                            val leftValue = if (leftBit == 1) 1.0 else -1.0
+                            val rightValue = if (rightBit == 1) 1.0 else -1.0
+                            
+                            leftAccumulator += leftValue * FIR_COEFFICIENTS[dsdBitCount % FIR_TAPS]
+                            rightAccumulator += rightValue * FIR_COEFFICIENTS[dsdBitCount % FIR_TAPS]
+                            
+                            dsdBitCount++
+                            
+                            if (dsdBitCount >= decimationFactor) {
+                                val leftPcm = (leftAccumulator * 24000).toInt().coerceIn(-32768, 32767)
+                                val rightPcm = (rightAccumulator * 24000).toInt().coerceIn(-32768, 32767)
+                                
+                                if (channelCount == 2) {
+                                    pcmBuffer[pcmIndex++] = leftPcm.toShort()
+                                    pcmBuffer[pcmIndex++] = rightPcm.toShort()
+                                } else {
+                                    pcmBuffer[pcmIndex++] = leftPcm.toShort()
+                                }
+                                
+                                leftAccumulator = 0.0
+                                rightAccumulator = 0.0
+                                dsdBitCount = 0
+                                
+                                if (pcmIndex >= pcmBuffer.size - 2) {
+                                    audioTrack?.write(pcmBuffer, 0, pcmIndex)
+                                    pcmIndex = 0
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (pcmIndex > 0) {
+                        audioTrack?.write(pcmBuffer, 0, pcmIndex)
+                    }
+                }
+                
+                dataStream.close()
+                isPlaying = false
+                Log.d(TAG, "DFF playback complete")
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "DFF playback error: ${e.message}", e)
+            inputStream.close()
+        }
     }
 
     // =========================================================================

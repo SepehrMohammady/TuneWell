@@ -19,6 +19,8 @@ class MainApplication : Application(), ReactApplication {
           add(MediaStorePackage())
           add(AudioEqualizerPackage())
           add(NativeAudioDecoderPackage())
+          add(AudioSessionPackage())
+          add(TrackPlayerSessionPackage())
         },
     )
   }

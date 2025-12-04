@@ -174,6 +174,9 @@ export const nativeDecoderService = new NativeDecoderService();
 export {
   NativeAudioDecoder,
   NativeDecoderService,
+};
+
+export type {
   AudioInfo,
   CanPlayResult,
   PlaybackState,

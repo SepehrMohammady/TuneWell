@@ -3,6 +3,8 @@
  * 
  * High-level audio playback service that wraps TrackPlayer
  * and integrates with the app's state management.
+ * 
+ * Uses native decoder for DSD files (DSF/DFF) as ExoPlayer doesn't support them.
  */
 
 import TrackPlayer, {
@@ -13,11 +15,31 @@ import TrackPlayer, {
   useProgress,
   useActiveTrack,
 } from 'react-native-track-player';
-import { usePlayerStore, useEQStore } from '../../store';
+import { usePlayerStore, useEQStore, usePlaylistStore } from '../../store';
 import { setupTrackPlayer, mapPlayerState, mapRepeatMode } from './TrackPlayerService';
 import { eqService } from '../../native/AudioEqualizer';
+import { nativeDecoderService } from '../../native/NativeAudioDecoder';
+import { getPlayerAudioSessionId } from '../../native/TrackPlayerSession';
 import type { Track, QueueItem } from '../../types';
 import { PLAYBACK_STATES } from '../../config/constants';
+
+/**
+ * Check if a format requires the native decoder
+ * DSD formats (DSF/DFF) require our native decoder since ExoPlayer doesn't support them.
+ */
+function requiresNativeDecoder(format: string): boolean {
+  const fmt = (format || '').toLowerCase().replace('.', '');
+  // DSD formats require native decoder
+  return ['dsf', 'dff', 'dsd'].includes(fmt);
+}
+
+/**
+ * Check if this is a DSD format (for showing appropriate messages)
+ */
+function isDSDFormat(format: string): boolean {
+  const fmt = (format || '').toLowerCase().replace('.', '');
+  return ['dsf', 'dff', 'dsd'].includes(fmt);
+}
 
 /**
  * Convert our Track type to TrackPlayer Track type
@@ -26,19 +48,19 @@ import { PLAYBACK_STATES } from '../../config/constants';
  * Get MIME type for audio format
  */
 function getContentType(format: string): string | undefined {
-  const formatLower = format?.toLowerCase() || '';
+  const formatLower = (format || '').toLowerCase().replace('.', '');
   const mimeTypes: Record<string, string> = {
     'mp3': 'audio/mpeg',
     'flac': 'audio/flac',
-    'wav': 'audio/x-wav',  // Use x-wav for better compatibility
-    'wave': 'audio/x-wav',
+    'wav': 'audio/wav',
+    'wave': 'audio/wav',
     'aac': 'audio/aac',
     'm4a': 'audio/mp4',
     'ogg': 'audio/ogg',
     'opus': 'audio/opus',
     'wma': 'audio/x-ms-wma',
-    'aiff': 'audio/x-aiff',
-    'aif': 'audio/x-aiff',
+    'aiff': 'audio/aiff',
+    'aif': 'audio/aiff',
     'dsf': 'audio/x-dsf',
     'dff': 'audio/x-dff',
     'dsd': 'audio/x-dsd',
@@ -49,18 +71,31 @@ function getContentType(format: string): string | undefined {
 function convertToTPTrack(track: Track): TPTrack {
   const contentType = getContentType(track.format);
   
-  // For local files, ensure proper URI format
+  // Use content:// URI for local files (required for scoped storage on Android 10+)
+  // file:// paths don't work reliably on modern Android due to storage restrictions
   let url = track.uri;
+  
+  // If we have a content:// URI, use it (preferred for Android scoped storage)
+  // Otherwise fall back to file path if available
+  if (!url && track.filePath) {
+    // Convert file path to file:// URI as fallback
+    url = track.filePath.startsWith('file://') 
+      ? track.filePath 
+      : `file://${track.filePath}`;
+  }
+  
+  // For DSD formats, log a warning that they won't play
+  if (isDSDFormat(track.format)) {
+    console.warn('[AudioService] DSD format not supported by ExoPlayer:', track.format);
+  }
   
   // Log for debugging
   console.log('[AudioService] Converting track:', {
     title: track.title,
     format: track.format,
-    originalUri: track.uri,
+    uri: track.uri,
     resolvedUrl: url,
     contentType,
-    isContentUri: url?.startsWith('content://'),
-    isFileUri: url?.startsWith('file://'),
   });
   
   // Build the track object
@@ -117,8 +152,22 @@ class AudioService {
     if (this.eqInitialized) return;
 
     try {
-      // Initialize EQ with session 0 (global output)
-      const result = await eqService.initialize(0);
+      // Try to get the actual audio session ID from TrackPlayer's ExoPlayer
+      // This allows EQ effects to be applied to the player's audio output
+      let audioSessionId = 0;
+      
+      try {
+        audioSessionId = await getPlayerAudioSessionId();
+        console.log('[AudioService] Got audio session ID from player:', audioSessionId);
+      } catch (sessionError) {
+        console.warn('[AudioService] Could not get player session, using global output:', sessionError);
+        audioSessionId = 0; // Fallback to global output
+      }
+      
+      // Initialize EQ with the audio session
+      // Note: Session 0 is global output, which works on some devices but not all.
+      // A non-zero session from ExoPlayer should work more reliably.
+      const result = await eqService.initialize(audioSessionId);
       
       if (result) {
         this.eqInitialized = true;
@@ -140,10 +189,13 @@ class AudioService {
           }
         );
         
-        console.log('[AudioService] EQ initialized successfully');
+        console.log('[AudioService] EQ initialized successfully with session 0 (global output)');
+        console.log('[AudioService] Note: EQ may have limited effect on some Android devices.');
+        console.log('[AudioService] For best results, use system-level EQ or DAC-specific apps.');
       }
     } catch (error) {
       console.error('[AudioService] Failed to initialize EQ:', error);
+      console.warn('[AudioService] EQ effects will not be available.');
     }
   }
 
@@ -190,6 +242,13 @@ class AudioService {
           const index = queue.findIndex((item) => item.track.id === event.track?.id);
           if (index !== -1) {
             usePlayerStore.getState().setQueueIndex(index);
+          }
+          
+          // Record play in playlist store for tracking
+          const trackId = event.track.id;
+          if (trackId) {
+            usePlaylistStore.getState().recordPlay(trackId);
+            console.log('[AudioService] Recorded play for track:', trackId);
           }
         }
       }
@@ -257,7 +316,45 @@ class AudioService {
     usePlayerStore.getState().setQueue(queue);
     usePlayerStore.getState().setQueueIndex(startIndex);
 
-    // Convert to TrackPlayer tracks
+    const startTrack = queue[startIndex]?.track;
+    
+    // Check if the starting track needs native decoder (DSD)
+    if (startTrack && requiresNativeDecoder(startTrack.format)) {
+      console.log('[AudioService] DSD format detected, using native decoder:', startTrack.format);
+      
+      // Stop TrackPlayer if playing
+      await TrackPlayer.reset();
+      
+      // Use native decoder for DSD - prefer file path over content:// URI
+      let uri = startTrack.filePath || startTrack.uri;
+      
+      // Ensure we have a proper file:// URI for the native decoder
+      if (uri && !uri.startsWith('content://') && !uri.startsWith('file://')) {
+        uri = `file://${uri}`;
+      }
+      
+      console.log('[AudioService] Playing DSD with native decoder:', uri);
+      
+      if (uri) {
+        try {
+          const success = await nativeDecoderService.play(uri);
+          if (success) {
+            usePlayerStore.getState().setState('playing');
+            console.log('[AudioService] DSD playback started successfully');
+            return;
+          } else {
+            console.error('[AudioService] Native decoder returned false');
+          }
+        } catch (error: any) {
+          console.error('[AudioService] Native decoder failed:', error);
+          throw new Error(`Failed to play DSD file: ${error.message || 'Unknown error'}`);
+        }
+      }
+      
+      throw new Error('Could not determine file path for DSD playback');
+    }
+
+    // Convert to TrackPlayer tracks (for non-DSD formats)
     const tpTracks = queue.map((item) => convertToTPTrack(item.track));
 
     console.log('[AudioService] Playing queue:', {
@@ -267,18 +364,43 @@ class AudioService {
         title: tpTracks[startIndex].title,
         url: tpTracks[startIndex].url,
         contentType: tpTracks[startIndex].contentType,
+        format: queue[startIndex]?.track?.format,
       } : null,
     });
 
     try {
+      // Stop native decoder if it was playing
+      await nativeDecoderService.stop();
+      
       // Reset and load queue
       await TrackPlayer.reset();
       await TrackPlayer.add(tpTracks);
       await TrackPlayer.skip(startIndex);
       await TrackPlayer.play();
+      
+      // Re-initialize EQ with the correct audio session after playback starts
+      // (ExoPlayer session may not be available until playback begins)
+      setTimeout(() => this.reinitializeEQ(), 500);
     } catch (error) {
       console.error('[AudioService] Playback error:', error);
       throw error;
+    }
+  }
+  
+  /**
+   * Re-initialize EQ to get the correct audio session from the player
+   */
+  private async reinitializeEQ(): Promise<void> {
+    try {
+      const audioSessionId = await getPlayerAudioSessionId();
+      if (audioSessionId !== 0) {
+        console.log('[AudioService] Re-initializing EQ with player session:', audioSessionId);
+        await eqService.release();
+        await eqService.initialize(audioSessionId);
+        await this.syncEQFromStore();
+      }
+    } catch (error) {
+      console.warn('[AudioService] Failed to reinitialize EQ:', error);
     }
   }
 
@@ -329,6 +451,13 @@ class AudioService {
    * Play/Resume playback
    */
   async play(): Promise<void> {
+    // Check if native decoder is active
+    const nativeState = await nativeDecoderService.getState();
+    if (nativeState?.isPaused) {
+      await nativeDecoderService.resume();
+      usePlayerStore.getState().setState('playing');
+      return;
+    }
     await TrackPlayer.play();
   }
 
@@ -336,6 +465,13 @@ class AudioService {
    * Pause playback
    */
   async pause(): Promise<void> {
+    // Check if native decoder is active
+    const nativeState = await nativeDecoderService.getState();
+    if (nativeState?.isPlaying) {
+      await nativeDecoderService.pause();
+      usePlayerStore.getState().setState('paused');
+      return;
+    }
     await TrackPlayer.pause();
   }
 
@@ -343,6 +479,17 @@ class AudioService {
    * Toggle play/pause
    */
   async togglePlayPause(): Promise<void> {
+    // Check if native decoder is active
+    const nativeState = await nativeDecoderService.getState();
+    if (nativeState?.currentUri) {
+      if (nativeState.isPaused) {
+        await this.play();
+      } else if (nativeState.isPlaying) {
+        await this.pause();
+      }
+      return;
+    }
+    
     const state = await TrackPlayer.getPlaybackState();
     if (state.state === State.Playing) {
       await this.pause();
@@ -355,6 +502,7 @@ class AudioService {
    * Stop playback
    */
   async stop(): Promise<void> {
+    await nativeDecoderService.stop();
     await TrackPlayer.stop();
   }
 

@@ -7,7 +7,7 @@
  * - User-created playlists
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,25 +20,43 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { THEME, MOOD_CATEGORIES } from '../config';
-import { usePlayerStore } from '../store';
+import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
+import { usePlayerStore, usePlaylistStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
 
 type Section = 'system' | 'mood' | 'custom';
-
-interface CustomPlaylist {
-  id: string;
-  name: string;
-  trackCount: number;
-  createdAt: number;
-}
 
 export default function PlaylistsScreen() {
   const [expandedSection, setExpandedSection] = useState<Section | null>('system');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [customPlaylists, setCustomPlaylists] = useState<CustomPlaylist[]>([]);
   const { currentTrack } = usePlayerStore();
+  
+  // Get playlist store data
+  const { 
+    getFavoriteIds,
+    getRecentlyPlayedIds,
+    getMostPlayedIds,
+    getTracksByMood,
+    customPlaylists,
+    createPlaylist,
+  } = usePlaylistStore();
+  
+  // Calculate track counts
+  const favoritesCount = useMemo(() => getFavoriteIds().length, [getFavoriteIds]);
+  const recentlyPlayedCount = useMemo(() => getRecentlyPlayedIds(50).length, [getRecentlyPlayedIds]);
+  const mostPlayedCount = useMemo(() => getMostPlayedIds(50).length, [getMostPlayedIds]);
+  // Note: recentlyAdded would need to be tracked separately if needed
+  const recentlyAddedCount = 0;
+  
+  // Get mood track counts
+  const moodTrackCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    MOOD_CATEGORIES.forEach(mood => {
+      counts[mood.id] = getTracksByMood(mood.id as MoodId).length;
+    });
+    return counts;
+  }, [getTracksByMood]);
 
   const toggleSection = (section: Section) => {
     setExpandedSection(expandedSection === section ? null : section);
@@ -50,18 +68,53 @@ export default function PlaylistsScreen() {
       return;
     }
     
-    const newPlaylist: CustomPlaylist = {
-      id: Date.now().toString(),
-      name: newPlaylistName.trim(),
-      trackCount: 0,
-      createdAt: Date.now(),
-    };
-    
-    setCustomPlaylists(prev => [...prev, newPlaylist]);
+    createPlaylist(newPlaylistName.trim());
     setNewPlaylistName('');
     setShowCreateModal(false);
-    Alert.alert('Success', `Playlist "${newPlaylist.name}" created!`);
-  }, [newPlaylistName]);
+    Alert.alert('Success', `Playlist "${newPlaylistName.trim()}" created!`);
+  }, [newPlaylistName, createPlaylist]);
+  
+  // Play a system playlist
+  const handlePlaySystemPlaylist = useCallback(async (type: 'favorites' | 'mostPlayed' | 'recentlyAdded' | 'recentlyPlayed') => {
+    let trackIds: string[] = [];
+    
+    switch (type) {
+      case 'favorites':
+        trackIds = getFavoriteIds();
+        break;
+      case 'mostPlayed':
+        trackIds = getMostPlayedIds(50);
+        break;
+      case 'recentlyAdded':
+        // Not yet implemented
+        trackIds = [];
+        break;
+      case 'recentlyPlayed':
+        trackIds = getRecentlyPlayedIds(50);
+        break;
+    }
+    
+    if (trackIds.length === 0) {
+      Alert.alert('Empty Playlist', 'No tracks in this playlist yet.');
+      return;
+    }
+    
+    // TODO: Load actual track data and play
+    Alert.alert('Coming Soon', `Playing ${trackIds.length} tracks from playlist`);
+  }, [getFavoriteIds, getMostPlayedIds, getRecentlyPlayedIds]);
+  
+  // Play a mood playlist
+  const handlePlayMoodPlaylist = useCallback(async (moodId: MoodId) => {
+    const trackIds = getTracksByMood(moodId);
+    
+    if (trackIds.length === 0) {
+      Alert.alert('Empty Playlist', 'No tracks with this mood yet. Add mood to tracks from the player screen.');
+      return;
+    }
+    
+    // TODO: Load actual track data and play
+    Alert.alert('Coming Soon', `Playing ${trackIds.length} ${moodId} tracks`);
+  }, [getTracksByMood]);
 
   const renderSectionHeader = (section: Section, title: string, count: number) => (
     <TouchableOpacity
@@ -137,44 +190,60 @@ export default function PlaylistsScreen() {
         {renderSectionHeader('system', 'System Playlists', 4)}
         {expandedSection === 'system' && (
           <View style={styles.sectionContent}>
-            <TouchableOpacity style={styles.playlistItem}>
+            <TouchableOpacity 
+              style={styles.playlistItem}
+              onPress={() => handlePlaySystemPlaylist('favorites')}
+            >
               <View style={[styles.playlistIcon, { backgroundColor: '#FF6B6B' }]}>
-                <Text style={styles.playlistIconText}>❤️</Text>
+                <Text style={styles.playlistIconText}>♥</Text>
               </View>
               <View style={styles.playlistInfo}>
                 <Text style={styles.playlistName}>Favorites</Text>
-                <Text style={styles.playlistMeta}>0 tracks</Text>
+                <Text style={styles.playlistMeta}>{favoritesCount} tracks</Text>
               </View>
+              <Text style={styles.playArrow}>▶</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.playlistItem}>
+            <TouchableOpacity 
+              style={styles.playlistItem}
+              onPress={() => handlePlaySystemPlaylist('mostPlayed')}
+            >
               <View style={[styles.playlistIcon, { backgroundColor: '#4ECDC4' }]}>
-                <Text style={styles.playlistIconText}>🔥</Text>
+                <Text style={styles.playlistIconText}>⚡</Text>
               </View>
               <View style={styles.playlistInfo}>
                 <Text style={styles.playlistName}>Most Played</Text>
-                <Text style={styles.playlistMeta}>0 tracks</Text>
+                <Text style={styles.playlistMeta}>{mostPlayedCount} tracks</Text>
               </View>
+              <Text style={styles.playArrow}>▶</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.playlistItem}>
+            <TouchableOpacity 
+              style={styles.playlistItem}
+              onPress={() => handlePlaySystemPlaylist('recentlyAdded')}
+            >
               <View style={[styles.playlistIcon, { backgroundColor: '#45B7D1' }]}>
-                <Text style={styles.playlistIconText}>✨</Text>
+                <Text style={styles.playlistIconText}>★</Text>
               </View>
               <View style={styles.playlistInfo}>
                 <Text style={styles.playlistName}>Recently Added</Text>
-                <Text style={styles.playlistMeta}>0 tracks</Text>
+                <Text style={styles.playlistMeta}>{recentlyAddedCount} tracks</Text>
               </View>
+              <Text style={styles.playArrow}>▶</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.playlistItem}>
+            <TouchableOpacity 
+              style={styles.playlistItem}
+              onPress={() => handlePlaySystemPlaylist('recentlyPlayed')}
+            >
               <View style={[styles.playlistIcon, { backgroundColor: '#96CEB4' }]}>
-                <Text style={styles.playlistIconText}>🕐</Text>
+                <Text style={styles.playlistIconText}>◷</Text>
               </View>
               <View style={styles.playlistInfo}>
                 <Text style={styles.playlistName}>Recently Played</Text>
-                <Text style={styles.playlistMeta}>0 tracks</Text>
+                <Text style={styles.playlistMeta}>{recentlyPlayedCount} tracks</Text>
               </View>
+              <Text style={styles.playArrow}>▶</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -184,14 +253,19 @@ export default function PlaylistsScreen() {
         {expandedSection === 'mood' && (
           <View style={styles.sectionContent}>
             {MOOD_CATEGORIES.map((mood) => (
-              <TouchableOpacity key={mood.id} style={styles.playlistItem}>
+              <TouchableOpacity 
+                key={mood.id} 
+                style={styles.playlistItem}
+                onPress={() => handlePlayMoodPlaylist(mood.id as MoodId)}
+              >
                 <View style={[styles.playlistIcon, { backgroundColor: mood.color }]}>
                   <Text style={styles.playlistIconText}>{mood.icon}</Text>
                 </View>
                 <View style={styles.playlistInfo}>
                   <Text style={styles.playlistName}>{mood.name}</Text>
-                  <Text style={styles.playlistMeta}>0 tracks</Text>
+                  <Text style={styles.playlistMeta}>{moodTrackCounts[mood.id] || 0} tracks</Text>
                 </View>
+                <Text style={styles.playArrow}>▶</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -203,7 +277,7 @@ export default function PlaylistsScreen() {
           <View style={styles.sectionContent}>
             {customPlaylists.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateIcon}>📋</Text>
+                <Text style={styles.emptyStateIcon}>♫</Text>
                 <Text style={styles.emptyStateText}>No custom playlists yet</Text>
                 <Text style={styles.emptyStateSubtext}>
                   Tap "+ New" to create your first playlist
@@ -213,12 +287,13 @@ export default function PlaylistsScreen() {
               customPlaylists.map((playlist) => (
                 <TouchableOpacity key={playlist.id} style={styles.playlistItem}>
                   <View style={[styles.playlistIcon, { backgroundColor: THEME.colors.primary }]}>
-                    <Text style={styles.playlistIconText}>🎵</Text>
+                    <Text style={styles.playlistIconText}>♪</Text>
                   </View>
                   <View style={styles.playlistInfo}>
                     <Text style={styles.playlistName}>{playlist.name}</Text>
-                    <Text style={styles.playlistMeta}>{playlist.trackCount} tracks</Text>
+                    <Text style={styles.playlistMeta}>{playlist.tracks.length} tracks</Text>
                   </View>
+                  <Text style={styles.playArrow}>▶</Text>
                 </TouchableOpacity>
               ))
             )}
@@ -331,6 +406,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: THEME.colors.textSecondary,
     marginTop: 2,
+  },
+  playArrow: {
+    fontSize: 14,
+    color: THEME.colors.textSecondary,
+    marginLeft: THEME.spacing.sm,
   },
   emptyState: {
     alignItems: 'center',

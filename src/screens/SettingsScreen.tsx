@@ -22,17 +22,26 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME, VERSION, APP_INFO } from '../config';
-import { useSettingsStore, useLibraryStore, usePlayerStore } from '../store';
+import { useSettingsStore, useLibraryStore, usePlayerStore, useThemeStore } from '../store';
+import type { ThemeMode } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
+
+// Theme mode labels
+const THEME_LABELS: Record<ThemeMode, string> = {
+  dark: 'Dark',
+  light: 'Light',
+  amoled: 'AMOLED Black',
+  system: 'System',
+};
 
 export default function SettingsScreen() {
   const { currentTrack } = usePlayerStore();
   const settings = useSettingsStore();
   const { scanFolders, lastScanAt, stats } = useLibraryStore();
+  const { mode: themeMode, setTheme } = useThemeStore();
 
   const [selectedSampleRate, setSelectedSampleRate] = useState(settings.audioOutput.sampleRate);
   const [selectedBitDepth, setSelectedBitDepth] = useState(settings.audioOutput.bitDepth);
-  const [selectedTheme, setSelectedTheme] = useState('Dark');
   const [selectedDsdOutput, setSelectedDsdOutput] = useState('PCM Conversion');
   const [selectedReplayGain, setSelectedReplayGain] = useState('Off');
   const [selectedArtworkQuality, setSelectedArtworkQuality] = useState('High');
@@ -101,11 +110,28 @@ export default function SettingsScreen() {
   };
 
   const handleThemeSelect = () => {
-    handleSelectOption(
+    Alert.alert(
       'Theme',
-      ['Dark', 'Light', 'AMOLED Black', 'System'],
-      selectedTheme,
-      setSelectedTheme
+      'Select an option:',
+      [
+        {
+          text: 'Dark' + (themeMode === 'dark' ? ' ✓' : ''),
+          onPress: () => setTheme('dark'),
+        },
+        {
+          text: 'Light' + (themeMode === 'light' ? ' ✓' : ''),
+          onPress: () => setTheme('light'),
+        },
+        {
+          text: 'AMOLED Black' + (themeMode === 'amoled' ? ' ✓' : ''),
+          onPress: () => setTheme('amoled'),
+        },
+        {
+          text: 'System' + (themeMode === 'system' ? ' ✓' : ''),
+          onPress: () => setTheme('system'),
+        },
+        { text: 'Cancel', style: 'cancel' as const },
+      ]
     );
   };
 
@@ -278,7 +304,7 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Display</Text>
           <View style={styles.sectionContent}>
-            {renderSettingRow('Theme', selectedTheme, handleThemeSelect)}
+            {renderSettingRow('Theme', THEME_LABELS[themeMode], handleThemeSelect)}
             {renderToggleRow(
               'Show Bitrate',
               settings.showBitrate,

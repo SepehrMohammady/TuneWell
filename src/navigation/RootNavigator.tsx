@@ -45,16 +45,16 @@ import { Text as RNText } from 'react-native';
  */
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   const iconMap: Record<string, string> = {
-    Home: '🏠',
-    Library: '📚',
-    Playlists: '📋',
-    Equalizer: '🎛️',
-    Settings: '⚙️',
+    Home: '⌂',
+    Library: '♫',
+    Playlists: '≡',
+    Equalizer: '⋮⋮⋮',
+    Settings: '⚙',
   };
   
   return (
-    <RNText style={{ fontSize: 22 }}>
-      {iconMap[name] || '📱'}
+    <RNText style={{ fontSize: 22, opacity: focused ? 1 : 0.6 }}>
+      {iconMap[name] || '●'}
     </RNText>
   );
 }

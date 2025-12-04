@@ -302,9 +302,13 @@ export default function LibraryScreen() {
   });
 
   const handlePlayTrack = useCallback(async (scannedTrack: ScannedTrack, index: number) => {
-    // Check for unsupported DSD formats (show warning but still try to play)
+    // Check for DSD formats - these use native decoder
     const ext = scannedTrack.extension.toLowerCase();
     const isDSD = ['.dsf', '.dff', '.dsd'].includes(ext);
+    
+    if (isDSD) {
+      console.log('[LibraryScreen] DSD format detected, using native decoder');
+    }
     
     try {
       // Initialize audio service if needed
@@ -313,9 +317,16 @@ export default function LibraryScreen() {
       // Convert filtered tracks to Track format
       const allTracks: Track[] = filteredTracks.map(convertToTrack);
       
+      // If we filtered out the track, show error
+      if (allTracks.length === 0) {
+        Alert.alert('No Playable Tracks', 'No audio files found.');
+        return;
+      }
+      
       // Find the actual index
-      const trackIndex = allTracks.findIndex(t => t.id === `mediastore_${scannedTrack.id.replace('mediastore_', '')}}` || t.id === scannedTrack.id);
-      const playIndex = trackIndex !== -1 ? trackIndex : index;
+      const trackId = `mediastore_${scannedTrack.id.replace('mediastore_', '')}`;
+      const trackIndex = allTracks.findIndex(t => t.id === trackId || t.id === scannedTrack.id);
+      const playIndex = Math.max(0, trackIndex !== -1 ? trackIndex : Math.min(index, allTracks.length - 1));
       
       // Create queue items
       const queueItems = allTracks.map((track, idx) => ({

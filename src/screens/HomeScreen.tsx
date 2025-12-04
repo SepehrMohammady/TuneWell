@@ -7,7 +7,7 @@
  * - Quick access to favorites and playlists
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,16 +15,42 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { THEME, ROUTES, VERSION } from '../config';
-import { usePlayerStore } from '../store';
+import { THEME, ROUTES, VERSION, MOOD_CATEGORIES, MoodId } from '../config';
+import { usePlayerStore, usePlaylistStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { currentTrack } = usePlayerStore();
+  const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood } = usePlaylistStore();
+  
+  // Calculate counts for quick actions
+  const favoritesCount = useMemo(() => getFavoriteIds().length, [getFavoriteIds]);
+  const recentlyPlayedTracks = useMemo(() => {
+    return getRecentlyPlayedIds(10);
+  }, [getRecentlyPlayedIds]);
+  
+  // Get mood track counts
+  const moodTrackCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    MOOD_CATEGORIES.forEach(mood => {
+      counts[mood.id] = getTracksByMood(mood.id as MoodId).length;
+    });
+    return counts;
+  }, [getTracksByMood]);
+  
+  const handleMoodPress = (moodId: MoodId, moodName: string) => {
+    const count = moodTrackCounts[moodId] || 0;
+    if (count === 0) {
+      Alert.alert('Empty Playlist', `No tracks in ${moodName} yet. Add mood to tracks from the player screen.`);
+    } else {
+      Alert.alert('Coming Soon', `Playing ${count} ${moodName} tracks`);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -49,7 +75,7 @@ export default function HomeScreen() {
               style={styles.quickAction}
               onPress={() => navigation.navigate(ROUTES.LIBRARY as never)}
             >
-              <Text style={styles.quickActionIcon}>📚</Text>
+              <Text style={styles.quickActionIcon}>♫</Text>
               <Text style={styles.quickActionText}>Library</Text>
             </TouchableOpacity>
             
@@ -57,7 +83,12 @@ export default function HomeScreen() {
               style={styles.quickAction}
               onPress={() => navigation.navigate(ROUTES.PLAYLISTS as never)}
             >
-              <Text style={styles.quickActionIcon}>❤️</Text>
+              <View style={styles.quickActionBadge}>
+                <Text style={styles.quickActionIcon}>♥</Text>
+                {favoritesCount > 0 && (
+                  <Text style={styles.badgeText}>{favoritesCount}</Text>
+                )}
+              </View>
               <Text style={styles.quickActionText}>Favorites</Text>
             </TouchableOpacity>
             
@@ -65,7 +96,7 @@ export default function HomeScreen() {
               style={styles.quickAction}
               onPress={() => navigation.navigate(ROUTES.EQUALIZER as never)}
             >
-              <Text style={styles.quickActionIcon}>🎛️</Text>
+              <Text style={styles.quickActionIcon}>≡</Text>
               <Text style={styles.quickActionText}>Equalizer</Text>
             </TouchableOpacity>
             
@@ -73,8 +104,8 @@ export default function HomeScreen() {
               style={styles.quickAction}
               onPress={() => navigation.navigate(ROUTES.SETTINGS as never)}
             >
-              <Text style={styles.quickActionIcon}>📁</Text>
-              <Text style={styles.quickActionText}>Folders</Text>
+              <Text style={styles.quickActionIcon}>⚙</Text>
+              <Text style={styles.quickActionText}>Settings</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -82,13 +113,25 @@ export default function HomeScreen() {
         {/* Recently Played */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recently Played</Text>
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateIcon}>🎵</Text>
-            <Text style={styles.emptyStateText}>No recently played tracks</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Add folders to your library to start listening
-            </Text>
-          </View>
+          {recentlyPlayedTracks.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateIcon}>♪</Text>
+              <Text style={styles.emptyStateText}>No recently played tracks</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Add folders to your library to start listening
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.recentList}>
+              {recentlyPlayedTracks.map((trackId, index) => (
+                <View key={`${trackId}-${index}`} style={styles.recentItem}>
+                  <Text style={styles.recentItemText} numberOfLines={1}>
+                    Track {trackId.substring(0, 20)}...
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Mood Playlists */}
@@ -99,30 +142,17 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.moodContainer}
           >
-            {[
-              { id: 'happy', name: 'Happy', icon: '😊', color: '#FFD700' },
-              { id: 'calm', name: 'Calm', icon: '🌿', color: '#90EE90' },
-              { id: 'energetic', name: 'Energetic', icon: '⚡', color: '#FF4500' },
-              { id: 'focus', name: 'Focus', icon: '🎯', color: '#4169E1' },
-              { id: 'romantic', name: 'Romantic', icon: '💕', color: '#FF69B4' },
-              { id: 'dreamy', name: 'Dreamy', icon: '🌙', color: '#9370DB' },
-              { id: 'melancholy', name: 'Melancholy', icon: '🌧️', color: '#708090' },
-              { id: 'uplifting', name: 'Uplifting', icon: '🌈', color: '#00CED1' },
-              { id: 'chill', name: 'Chill', icon: '❄️', color: '#87CEEB' },
-              { id: 'workout', name: 'Workout', icon: '💪', color: '#DC143C' },
-              { id: 'party', name: 'Party', icon: '🎉', color: '#FF1493' },
-              { id: 'study', name: 'Study', icon: '📚', color: '#8B4513' },
-              { id: 'sleep', name: 'Sleep', icon: '😴', color: '#191970' },
-              { id: 'nature', name: 'Nature', icon: '🌲', color: '#228B22' },
-              { id: 'adventure', name: 'Adventure', icon: '🏔️', color: '#CD853F' },
-              { id: 'nostalgic', name: 'Nostalgic', icon: '📼', color: '#B8860B' },
-            ].map((mood) => (
+            {MOOD_CATEGORIES.map((mood) => (
               <TouchableOpacity
                 key={mood.id}
                 style={[styles.moodCard, { borderColor: mood.color }]}
+                onPress={() => handleMoodPress(mood.id as MoodId, mood.name)}
               >
                 <Text style={styles.moodIcon}>{mood.icon}</Text>
                 <Text style={styles.moodName}>{mood.name}</Text>
+                <Text style={styles.moodCount}>
+                  {moodTrackCounts[mood.id] || 0}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -204,9 +234,28 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     alignItems: 'center',
   },
+  quickActionBadge: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  badgeText: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: THEME.colors.primary,
+    color: THEME.colors.text,
+    fontSize: 10,
+    fontWeight: '600',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 8,
+    minWidth: 16,
+    textAlign: 'center',
+  },
   quickActionIcon: {
     fontSize: 24,
     marginBottom: 8,
+    color: THEME.colors.text,
   },
   quickActionText: {
     fontSize: 12,
@@ -254,6 +303,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: THEME.colors.text,
     fontWeight: '500',
+  },
+  moodCount: {
+    fontSize: 11,
+    color: THEME.colors.textSecondary,
+    marginTop: 4,
+  },
+  recentList: {
+    backgroundColor: THEME.colors.surface,
+    borderRadius: THEME.borderRadius.lg,
+    padding: THEME.spacing.md,
+  },
+  recentItem: {
+    paddingVertical: THEME.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.colors.border,
+  },
+  recentItemText: {
+    fontSize: 14,
+    color: THEME.colors.text,
   },
   qualityCard: {
     backgroundColor: THEME.colors.surface,

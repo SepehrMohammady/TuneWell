@@ -179,6 +179,13 @@ export default function EqualizerScreen() {
         </View>
       </View>
 
+      {/* EQ Notice */}
+      <View style={styles.noticeContainer}>
+        <Text style={styles.noticeText}>
+          ⓘ EQ may have limited effect on some devices. For best results, use device system EQ or DAC app.
+        </Text>
+      </View>
+
       <ScrollView 
         style={styles.content}
         showsVerticalScrollIndicator={false}
@@ -325,6 +332,21 @@ const styles = StyleSheet.create({
     color: THEME.colors.text,
     fontWeight: '600',
     marginRight: THEME.spacing.sm,
+  },
+  noticeContainer: {
+    backgroundColor: THEME.colors.surface,
+    marginHorizontal: THEME.spacing.lg,
+    marginBottom: THEME.spacing.md,
+    paddingHorizontal: THEME.spacing.md,
+    paddingVertical: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: THEME.colors.secondary,
+  },
+  noticeText: {
+    fontSize: 12,
+    color: THEME.colors.textSecondary,
+    lineHeight: 16,
   },
   content: {
     flex: 1,

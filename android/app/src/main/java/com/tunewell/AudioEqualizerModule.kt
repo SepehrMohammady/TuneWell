@@ -1,22 +1,31 @@
 package com.tunewell
 
+import android.content.Context
+import android.media.AudioManager
 import android.media.audiofx.Equalizer
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Virtualizer
 import android.media.audiofx.PresetReverb
+import android.media.audiofx.AudioEffect
 import android.util.Log
 import com.facebook.react.bridge.*
 
 /**
  * Native module for audio equalizer using Android's AudioEffect APIs.
  * Applies EQ effects to the audio output in real-time.
+ * 
+ * Note: For EQ to work with third-party media players, we need to either:
+ * 1. Use session ID 0 (global output) - works on some devices
+ * 2. Get the actual audio session ID from the media player
+ * 3. Use system-level audio routing
  */
 class AudioEqualizerModule(reactContext: ReactApplicationContext) : 
     ReactContextBaseJavaModule(reactContext) {
 
     companion object {
         private const val TAG = "AudioEqualizer"
-        private const val PRIORITY = 0 // Normal priority
+        // Use highest priority to take precedence over other effects
+        private const val PRIORITY = Int.MAX_VALUE
     }
 
     private var equalizer: Equalizer? = null
@@ -39,11 +48,17 @@ class AudioEqualizerModule(reactContext: ReactApplicationContext) :
 
             audioSessionId = sessionId
             
+            Log.d(TAG, "Initializing equalizer with session ID: $audioSessionId, priority: $PRIORITY")
+            
             // Create equalizer for the audio session
-            // Session 0 = global output mix
+            // Session 0 = global output mix (may not work on all devices)
             equalizer = Equalizer(PRIORITY, audioSessionId).apply {
                 enabled = false
             }
+            
+            // Check if the equalizer has control
+            val hasControl = equalizer?.hasControl() ?: false
+            Log.d(TAG, "Equalizer hasControl: $hasControl")
 
             // Create bass boost
             bassBoost = BassBoost(PRIORITY, audioSessionId).apply {
@@ -66,6 +81,7 @@ class AudioEqualizerModule(reactContext: ReactApplicationContext) :
                 putInt("minLevel", minLevel.toInt())
                 putInt("maxLevel", maxLevel.toInt())
                 putInt("audioSessionId", audioSessionId)
+                putBoolean("hasControl", hasControl)
                 
                 // Get center frequencies for each band
                 val frequencies = Arguments.createArray()
@@ -83,7 +99,7 @@ class AudioEqualizerModule(reactContext: ReactApplicationContext) :
                 putArray("presets", presets)
             }
 
-            Log.d(TAG, "Equalizer initialized: $numBands bands, range $minLevel to $maxLevel")
+            Log.d(TAG, "Equalizer initialized: $numBands bands, range $minLevel to $maxLevel, hasControl: $hasControl")
             promise.resolve(result)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize equalizer: ${e.message}", e)

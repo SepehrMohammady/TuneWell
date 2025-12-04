@@ -265,6 +265,9 @@ export const eqService = new EQService();
 export {
   AudioEqualizer,
   EQService,
+};
+
+export type {
   EQInitResult,
   EQInfo,
   EQBandInfo,
