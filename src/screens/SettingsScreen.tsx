@@ -325,7 +325,6 @@ export default function SettingsScreen() {
           <View style={styles.sectionContent}>
             {renderSettingRow('App Name', APP_INFO.name)}
             {renderSettingRow('Version', VERSION.fullVersion)}
-            {renderSettingRow('Codename', VERSION.codename)}
             {renderSettingRow('Release Date', VERSION.releaseDate)}
             <TouchableOpacity
               style={styles.linkRow}

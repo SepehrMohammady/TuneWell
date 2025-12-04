@@ -20,13 +20,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { THEME, ROUTES, VERSION, MOOD_CATEGORIES, MoodId } from '../config';
-import { usePlayerStore, usePlaylistStore } from '../store';
+import { usePlayerStore, usePlaylistStore, useLibraryStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { currentTrack } = usePlayerStore();
   const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood } = usePlaylistStore();
+  const { tracks } = useLibraryStore();
   
   // Calculate counts for quick actions
   const favoritesCount = useMemo(() => getFavoriteIds().length, [getFavoriteIds]);
@@ -83,12 +84,7 @@ export default function HomeScreen() {
               style={styles.quickAction}
               onPress={() => navigation.navigate(ROUTES.PLAYLISTS as never)}
             >
-              <View style={styles.quickActionBadge}>
-                <Text style={styles.quickActionIcon}>♥</Text>
-                {favoritesCount > 0 && (
-                  <Text style={styles.badgeText}>{favoritesCount}</Text>
-                )}
-              </View>
+              <Text style={styles.quickActionIcon}>♥</Text>
               <Text style={styles.quickActionText}>Favorites</Text>
             </TouchableOpacity>
             
@@ -123,13 +119,19 @@ export default function HomeScreen() {
             </View>
           ) : (
             <View style={styles.recentList}>
-              {recentlyPlayedTracks.map((trackId, index) => (
-                <View key={`${trackId}-${index}`} style={styles.recentItem}>
-                  <Text style={styles.recentItemText} numberOfLines={1}>
-                    Track {trackId.substring(0, 20)}...
-                  </Text>
-                </View>
-              ))}
+              {recentlyPlayedTracks.map((trackId, index) => {
+                const track = tracks.find(t => t.id === trackId);
+                return (
+                  <View key={`${trackId}-${index}`} style={styles.recentItem}>
+                    <Text style={styles.recentItemText} numberOfLines={1}>
+                      {track?.title || track?.fileName || 'Unknown Track'}
+                    </Text>
+                    <Text style={styles.recentItemSubtext} numberOfLines={1}>
+                      {track?.artist || 'Unknown Artist'}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
@@ -288,19 +290,21 @@ const styles = StyleSheet.create({
   },
   moodCard: {
     backgroundColor: THEME.colors.surface,
-    borderRadius: THEME.borderRadius.lg,
-    padding: THEME.spacing.lg,
-    marginRight: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    padding: THEME.spacing.md,
+    marginRight: THEME.spacing.sm,
     alignItems: 'center',
     borderWidth: 1,
-    minWidth: 100,
+    width: 90,
+    height: 90,
+    justifyContent: 'center',
   },
   moodIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+    fontSize: 24,
+    marginBottom: 4,
   },
   moodName: {
-    fontSize: 14,
+    fontSize: 11,
     color: THEME.colors.text,
     fontWeight: '500',
   },
@@ -322,6 +326,11 @@ const styles = StyleSheet.create({
   recentItemText: {
     fontSize: 14,
     color: THEME.colors.text,
+  },
+  recentItemSubtext: {
+    fontSize: 12,
+    color: THEME.colors.textSecondary,
+    marginTop: 2,
   },
   qualityCard: {
     backgroundColor: THEME.colors.surface,

@@ -91,20 +91,69 @@ export default function LibraryScreen() {
     stats, 
     addScanFolder, 
     removeScanFolder, 
-    startScan 
+    startScan,
+    setSortBy,
+    toggleSortDirection,
   } = useLibraryStore();
 
-  // Filter tracks based on search query
+  // Sort and filter tracks
   const filteredTracks = useMemo(() => {
-    if (!searchQuery.trim()) return tracks;
-    const query = searchQuery.toLowerCase();
-    return tracks.filter(track => 
-      (track.title?.toLowerCase().includes(query)) ||
-      (track.artist?.toLowerCase().includes(query)) ||
-      (track.album?.toLowerCase().includes(query)) ||
-      (track.filename.toLowerCase().includes(query))
+    let result = [...tracks];
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(track => 
+        (track.title?.toLowerCase().includes(query)) ||
+        (track.artist?.toLowerCase().includes(query)) ||
+        (track.album?.toLowerCase().includes(query)) ||
+        (track.filename.toLowerCase().includes(query))
+      );
+    }
+    
+    // Apply sorting
+    result.sort((a, b) => {
+      let comparison = 0;
+      switch (sortBy) {
+        case 'title':
+          comparison = (a.title || a.filename).localeCompare(b.title || b.filename);
+          break;
+        case 'artist':
+          comparison = (a.artist || 'Unknown').localeCompare(b.artist || 'Unknown');
+          break;
+        case 'album':
+          comparison = (a.album || 'Unknown').localeCompare(b.album || 'Unknown');
+          break;
+        case 'dateAdded':
+          comparison = (a.dateAdded || 0) - (b.dateAdded || 0);
+          break;
+        case 'duration':
+          comparison = (a.duration || 0) - (b.duration || 0);
+          break;
+        default:
+          comparison = (a.title || a.filename).localeCompare(b.title || b.filename);
+      }
+      return sortDescending ? -comparison : comparison;
+    });
+    
+    return result;
+  }, [tracks, searchQuery, sortBy, sortDescending]);
+
+  // Handle sort option selection
+  const handleSortSelect = useCallback(() => {
+    Alert.alert(
+      'Sort By',
+      'Select sort option:',
+      [
+        { text: 'Title', onPress: () => setSortBy('title') },
+        { text: 'Artist', onPress: () => setSortBy('artist') },
+        { text: 'Album', onPress: () => setSortBy('album') },
+        { text: 'Date Added', onPress: () => setSortBy('dateAdded') },
+        { text: 'Duration', onPress: () => setSortBy('duration') },
+        { text: 'Cancel', style: 'cancel' },
+      ]
     );
-  }, [tracks, searchQuery]);
+  }, [setSortBy]);
 
   // Group tracks by album
   const albumGroups = useMemo(() => {
@@ -447,10 +496,20 @@ export default function LibraryScreen() {
         <Text style={styles.sortLabel}>
           {filteredTracks.length} tracks {searchQuery ? `(filtered)` : ''} {stats?.totalSize ? `• ${formatFileSize(stats.totalSize)}` : ''}
         </Text>
-        <TouchableOpacity style={styles.sortButton}>
-          <Text style={styles.sortButtonText}>{sortBy}</Text>
-          <Text style={styles.sortDirection}>{sortDescending ? '↓' : '↑'}</Text>
-        </TouchableOpacity>
+        <View style={styles.sortControls}>
+          <TouchableOpacity style={styles.sortButton} onPress={handleSortSelect}>
+            <Text style={styles.sortButtonText}>
+              {sortBy === 'title' ? 'Title' : 
+               sortBy === 'artist' ? 'Artist' : 
+               sortBy === 'album' ? 'Album' : 
+               sortBy === 'dateAdded' ? 'Date' : 
+               sortBy === 'duration' ? 'Duration' : sortBy}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sortDirectionBtn} onPress={toggleSortDirection}>
+            <Text style={styles.sortDirection}>{sortDescending ? '↓' : '↑'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       
       {filteredTracks.length === 0 ? (
@@ -840,28 +899,39 @@ const styles = StyleSheet.create({
   sortBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: THEME.spacing.md,
   },
   sortLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: THEME.colors.textSecondary,
-    marginRight: THEME.spacing.sm,
+    flex: 1,
   },
-  sortButton: {
+  sortControls: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  sortButton: {
     backgroundColor: THEME.colors.surface,
     paddingHorizontal: THEME.spacing.md,
     paddingVertical: THEME.spacing.sm,
     borderRadius: THEME.borderRadius.md,
+    marginRight: THEME.spacing.xs,
   },
   sortButtonText: {
     color: THEME.colors.text,
-    marginRight: THEME.spacing.xs,
+    fontSize: 13,
+  },
+  sortDirectionBtn: {
+    backgroundColor: THEME.colors.surface,
+    paddingHorizontal: THEME.spacing.sm,
+    paddingVertical: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.md,
   },
   sortDirection: {
     color: THEME.colors.primary,
     fontWeight: '600',
+    fontSize: 14,
   },
   statsInfo: {
     padding: THEME.spacing.md,

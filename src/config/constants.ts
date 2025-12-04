@@ -220,12 +220,12 @@ export const ROUTES = {
 
 export type Route = typeof ROUTES[keyof typeof ROUTES];
 
-// Theme - Minimal neutral design
+// Theme - Minimal neutral design with subtle amber accent
 export const THEME = {
   colors: {
-    primary: '#FFFFFF',
+    primary: '#D4A574',
     secondary: '#E5E5E5',
-    accent: '#D4D4D4',
+    accent: '#C9A065',
     background: '#0A0A0A',
     surface: '#141414',
     surfaceLight: '#1F1F1F',

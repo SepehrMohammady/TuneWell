@@ -343,6 +343,10 @@ class AudioService {
             usePlayerStore.getState().setState('playing');
             console.log('[AudioService] DSD playback started successfully');
             
+            // Record play in playlist store for tracking (DSD files)
+            usePlaylistStore.getState().recordPlay(startTrack.id);
+            console.log('[AudioService] Recorded play for DSD track:', startTrack.id);
+            
             // Reinitialize EQ with the native decoder's audio session
             setTimeout(async () => {
               try {
