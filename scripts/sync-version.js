@@ -20,8 +20,8 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const VERSION = {
   major: 0,
   minor: 0,
-  patch: 18,
-  build: 18,
+  patch: 19,
+  build: 19,
 };
 
 const versionString = `${VERSION.major}.${VERSION.minor}.${VERSION.patch}`;

@@ -8,7 +8,7 @@
  * - Import/export functionality
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,9 +18,11 @@ import {
   StatusBar,
   Switch,
   Alert,
+  Modal,
+  TextInput,
   PanResponder,
-  GestureResponderEvent,
-  PanResponderGestureState,
+  Animated,
+  LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME, EQ_FREQUENCIES, EQ_PRESETS } from '../config';
@@ -57,6 +59,9 @@ export default function EqualizerScreen() {
   } = useEQStore();
 
   const [savedPresets, setSavedPresets] = useState<{name: string, bands: typeof bands, preamp: number}[]>([]);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const sliderHeights = useRef<number[]>(new Array(10).fill(120)).current;
 
   const formatFrequency = (freq: number): string => {
     if (freq >= 1000) {
@@ -73,30 +78,31 @@ export default function EqualizerScreen() {
     setBandGain(index, newGain);
   }, [bands, setBandGain]);
 
+  const handleSliderTouch = useCallback((index: number, locationY: number, height: number) => {
+    // Convert touch position to gain value (-12 to +12)
+    // Top of slider = +12, bottom = -12
+    const ratio = 1 - (locationY / height); // Invert because Y increases downward
+    const gain = Math.round((ratio * 24) - 12);
+    const clampedGain = Math.max(-12, Math.min(12, gain));
+    setBandGain(index, clampedGain);
+  }, [setBandGain]);
+
   const handleSavePreset = useCallback(() => {
-    Alert.prompt(
-      'Save Preset',
-      'Enter a name for this preset:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Save',
-          onPress: (name: string | undefined) => {
-            if (name && name.trim()) {
-              setSavedPresets(prev => [...prev, {
-                name: name.trim(),
-                bands: [...bands],
-                preamp,
-              }]);
-              Alert.alert('Saved', `Preset "${name.trim()}" saved successfully!`);
-            }
-          },
-        },
-      ],
-      'plain-text',
-      'My Custom Preset'
-    );
-  }, [bands, preamp]);
+    setPresetName('');
+    setShowSaveModal(true);
+  }, []);
+
+  const confirmSavePreset = useCallback(() => {
+    if (presetName.trim()) {
+      setSavedPresets(prev => [...prev, {
+        name: presetName.trim(),
+        bands: [...bands],
+        preamp,
+      }]);
+      setShowSaveModal(false);
+      Alert.alert('Saved', `Preset "${presetName.trim()}" saved successfully!`);
+    }
+  }, [presetName, bands, preamp]);
 
   const handleExportPreset = useCallback(() => {
     const presetData = JSON.stringify({
@@ -132,18 +138,25 @@ export default function EqualizerScreen() {
           <Text style={styles.bandAdjustText}>+</Text>
         </TouchableOpacity>
         <Text style={styles.bandGain}>{gain > 0 ? '+' : ''}{gain}</Text>
-        <View style={styles.sliderTrack}>
+        <View 
+          style={styles.sliderTrack}
+          onLayout={(e) => { sliderHeights[index] = e.nativeEvent.layout.height; }}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={(e) => handleSliderTouch(index, e.nativeEvent.locationY, sliderHeights[index])}
+          onResponderMove={(e) => handleSliderTouch(index, e.nativeEvent.locationY, sliderHeights[index])}
+        >
           <View style={styles.sliderTrackBg} />
           <View 
             style={[
               styles.sliderFill,
               { 
                 height: `${normalizedGain}%`,
-                backgroundColor: gain >= 0 ? THEME.colors.primary : THEME.colors.secondary,
+                backgroundColor: gain >= 0 ? THEME.colors.primary : THEME.colors.textSecondary,
               }
             ]} 
           />
-          <View style={[styles.sliderThumb, { bottom: `${Math.max(0, normalizedGain - 5)}%` }]} />
+          <View style={[styles.sliderThumb, { bottom: `${Math.max(0, Math.min(95, normalizedGain - 2.5))}%` }]} />
         </View>
         <TouchableOpacity 
           style={styles.bandAdjustButton}
@@ -294,6 +307,43 @@ export default function EqualizerScreen() {
         {/* Spacer for mini player */}
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      {/* Save Preset Modal */}
+      <Modal
+        visible={showSaveModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSaveModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Save Preset</Text>
+            <Text style={styles.modalSubtitle}>Enter a name for this preset:</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={presetName}
+              onChangeText={setPresetName}
+              placeholder="My Custom Preset"
+              placeholderTextColor={THEME.colors.textMuted}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowSaveModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSaveButton}
+                onPress={confirmSavePreset}
+              >
+                <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Mini Player */}
       {currentTrack && <MiniPlayer />}
@@ -548,5 +598,63 @@ const styles = StyleSheet.create({
   savedPresetName: {
     color: THEME.colors.text,
     fontSize: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: THEME.colors.surface,
+    borderRadius: THEME.borderRadius.lg,
+    padding: THEME.spacing.lg,
+    width: '85%',
+    maxWidth: 340,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: THEME.colors.text,
+    marginBottom: THEME.spacing.xs,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: THEME.colors.textSecondary,
+    marginBottom: THEME.spacing.md,
+  },
+  modalInput: {
+    backgroundColor: THEME.colors.background,
+    borderRadius: THEME.borderRadius.md,
+    padding: THEME.spacing.md,
+    color: THEME.colors.text,
+    fontSize: 16,
+    marginBottom: THEME.spacing.lg,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: THEME.spacing.sm,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    backgroundColor: THEME.colors.surfaceLight,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: THEME.colors.textSecondary,
+    fontWeight: '600',
+  },
+  modalSaveButton: {
+    flex: 1,
+    paddingVertical: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    backgroundColor: THEME.colors.primary,
+    alignItems: 'center',
+  },
+  modalSaveText: {
+    color: THEME.colors.text,
+    fontWeight: '600',
   },
 });

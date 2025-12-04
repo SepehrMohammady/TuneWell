@@ -2,15 +2,18 @@
  * TuneWell Mini Player Component
  * 
  * Compact now-playing bar shown at the bottom of screens.
+ * Swipe down to dismiss, tap to open full player.
  */
 
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Image,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { THEME, ROUTES } from '../../config';
@@ -19,11 +22,49 @@ import { audioService } from '../../services/audio';
 
 export default function MiniPlayer() {
   const navigation = useNavigation();
-  const { currentTrack, state, progress } = usePlayerStore();
+  const { currentTrack, state, progress, setCurrentTrack } = usePlayerStore();
+  const [isDismissed, setIsDismissed] = useState(false);
+  const translateY = useRef(new Animated.Value(0)).current;
   
   const isPlaying = state === 'playing';
 
-  if (!currentTrack) {
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only respond to vertical swipes
+        return Math.abs(gestureState.dy) > 10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Only allow downward movement
+        if (gestureState.dy > 0) {
+          translateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 50) {
+          // Dismiss
+          Animated.timing(translateY, {
+            toValue: 150,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            setIsDismissed(true);
+            // Stop playback
+            audioService.stop();
+          });
+        } else {
+          // Snap back
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  if (!currentTrack || isDismissed) {
     return null;
   }
 
@@ -56,63 +97,68 @@ export default function MiniPlayer() {
   };
 
   return (
-    <TouchableOpacity
-      style={styles.container}
-      onPress={() => navigation.navigate(ROUTES.PLAYER as never)}
-      activeOpacity={0.95}
+    <Animated.View 
+      style={[styles.container, { transform: [{ translateY }] }]}
+      {...panResponder.panHandlers}
     >
-      {/* Progress Bar */}
-      <View style={styles.progressContainer}>
-        <View style={[styles.progressBar, { width: `${progressPercent}%` }]} />
-      </View>
-
-      <View style={styles.content}>
-        {/* Artwork */}
-        {currentTrack.artworkUri ? (
-          <Image
-            source={{ uri: currentTrack.artworkUri }}
-            style={styles.artwork}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.artwork, styles.artworkPlaceholder]}>
-            <Text style={styles.artworkPlaceholderText}>🎵</Text>
-          </View>
-        )}
-
-        {/* Track Info */}
-        <View style={styles.trackInfo}>
-          <Text style={styles.trackTitle} numberOfLines={1}>
-            {currentTrack.title}
-          </Text>
-          <Text style={styles.trackArtist} numberOfLines={1}>
-            {currentTrack.artist}
-          </Text>
+      <TouchableOpacity
+        style={styles.touchable}
+        onPress={() => navigation.navigate(ROUTES.PLAYER as never)}
+        activeOpacity={0.95}
+      >
+        {/* Progress Bar */}
+        <View style={styles.progressContainer}>
+          <View style={[styles.progressBar, { width: `${progressPercent}%` }]} />
         </View>
 
-        {/* Quality Badge */}
-        {currentTrack.isHighRes && (
-          <View style={styles.qualityBadge}>
-            <Text style={styles.qualityBadgeText}>HR</Text>
-          </View>
-        )}
+        <View style={styles.content}>
+          {/* Artwork */}
+          {currentTrack.artworkUri ? (
+            <Image
+              source={{ uri: currentTrack.artworkUri }}
+              style={styles.artwork}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.artwork, styles.artworkPlaceholder]}>
+              <Text style={styles.artworkPlaceholderText}>🎵</Text>
+            </View>
+          )}
 
-        {/* Controls */}
-        <View style={styles.controls}>
-          <TouchableOpacity style={styles.controlButton} onPress={handlePrevious}>
-            <Text style={styles.controlButtonText}>⏮</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.playButton} onPress={handlePlayPause}>
-            <Text style={styles.playButtonText}>
-              {isPlaying ? '⏸' : '▶'}
+          {/* Track Info */}
+          <View style={styles.trackInfo}>
+            <Text style={styles.trackTitle} numberOfLines={1}>
+              {currentTrack.title}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.controlButton} onPress={handleNext}>
-            <Text style={styles.controlButtonText}>⏭</Text>
-          </TouchableOpacity>
+            <Text style={styles.trackArtist} numberOfLines={1}>
+              {currentTrack.artist}
+            </Text>
+          </View>
+
+          {/* Quality Badge */}
+          {currentTrack.isHighRes && (
+            <View style={styles.qualityBadge}>
+              <Text style={styles.qualityBadgeText}>HR</Text>
+            </View>
+          )}
+
+          {/* Controls */}
+          <View style={styles.controls}>
+            <TouchableOpacity style={styles.controlButton} onPress={handlePrevious}>
+              <Text style={styles.controlButtonText}>⏮</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.playButton} onPress={handlePlayPause}>
+              <Text style={styles.playButtonText}>
+                {isPlaying ? '⏸' : '▶'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.controlButton} onPress={handleNext}>
+              <Text style={styles.controlButtonText}>⏭</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -125,6 +171,9 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.surface,
     borderTopWidth: 1,
     borderTopColor: THEME.colors.border,
+  },
+  touchable: {
+    flex: 1,
   },
   progressContainer: {
     height: 2,
