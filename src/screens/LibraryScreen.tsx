@@ -27,7 +27,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { pickDirectory } from '@react-native-documents/picker';
 import { THEME, SORT_OPTIONS } from '../config';
-import { useLibraryStore, usePlayerStore } from '../store';
+import { useLibraryStore, usePlayerStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
 import MiniPlayer from '../components/player/MiniPlayer';
 import type { Track } from '../types';
@@ -81,6 +81,7 @@ export default function LibraryScreen() {
   const [manualPath, setManualPath] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const { currentTrack } = usePlayerStore();
+  const { colors, mode: themeMode } = useThemeStore();
   const { 
     scanFolders, 
     tracks,
@@ -697,21 +698,21 @@ export default function LibraryScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.colors.background} />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Library</Text>
-        <TouchableOpacity style={styles.scanButton} disabled={isScanning} onPress={handleScan}>
-          <Text style={styles.scanButtonText}>
+        <Text style={[styles.title, { color: colors.text }]}>Library</Text>
+        <TouchableOpacity style={[styles.scanButton, { backgroundColor: colors.surface }]} disabled={isScanning} onPress={handleScan}>
+          <Text style={[styles.scanButtonText, { color: colors.text }]}>
             {isScanning ? 'Scanning...' : 'Scan'}
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* View Mode Tabs */}
-      <View style={styles.tabs}>
+      <View style={[styles.tabs, { borderBottomColor: colors.border }]}>
         {renderViewModeTab('folders', 'Folders')}
         {renderViewModeTab('tracks', 'Tracks')}
         {renderViewModeTab('albums', 'Albums')}
@@ -737,35 +738,35 @@ export default function LibraryScreen() {
         onRequestClose={() => setShowFolderModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Folder Manually</Text>
-            <Text style={styles.modalSubtitle}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Add Folder Manually</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
               Enter the full path to your music folder
             </Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { backgroundColor: colors.surfaceLight, color: colors.text, borderColor: colors.border }]}
               value={manualPath}
               onChangeText={setManualPath}
               placeholder="/storage/emulated/0/Music"
-              placeholderTextColor={THEME.colors.textMuted}
+              placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity 
-                style={styles.modalCancelButton}
+                style={[styles.modalCancelButton, { backgroundColor: colors.surfaceLight }]}
                 onPress={() => {
                   setShowFolderModal(false);
                   setManualPath('');
                 }}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.modalAddButton}
+                style={[styles.modalAddButton, { backgroundColor: colors.primary }]}
                 onPress={handleManualAddFolder}
               >
-                <Text style={styles.modalAddText}>Add</Text>
+                <Text style={[styles.modalAddText, { color: colors.background }]}>Add</Text>
               </TouchableOpacity>
             </View>
           </View>

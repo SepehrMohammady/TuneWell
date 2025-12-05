@@ -26,7 +26,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME, EQ_FREQUENCIES, EQ_PRESETS } from '../config';
-import { useEQStore, BUILT_IN_PRESETS } from '../store';
+import { useEQStore, BUILT_IN_PRESETS, useThemeStore } from '../store';
 import { usePlayerStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
 
@@ -46,6 +46,7 @@ const PRESET_NAMES: Record<string, string> = {
 
 export default function EqualizerScreen() {
   const { currentTrack } = usePlayerStore();
+  const { colors, mode: themeMode } = useThemeStore();
   const {
     isEnabled,
     currentPreset,
@@ -170,31 +171,31 @@ export default function EqualizerScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.colors.background} />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
       
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Equalizer</Text>
-          <Text style={styles.subtitle}>10-Band Graphic EQ</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Equalizer</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>10-Band Graphic EQ</Text>
         </View>
         <View style={styles.enableToggle}>
-          <Text style={styles.enableLabel}>
+          <Text style={[styles.enableLabel, { color: colors.text }]}>
             {isEnabled ? 'ON' : 'OFF'}
           </Text>
           <Switch
             value={isEnabled}
             onValueChange={toggleEnabled}
-            trackColor={{ false: THEME.colors.surface, true: THEME.colors.primary }}
-            thumbColor={THEME.colors.text}
+            trackColor={{ false: colors.surface, true: colors.primary }}
+            thumbColor={colors.text}
           />
         </View>
       </View>
 
       {/* EQ Notice */}
-      <View style={styles.noticeContainer}>
-        <Text style={styles.noticeText}>
+      <View style={[styles.noticeContainer, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
           ⓘ EQ may have limited effect on some devices. For best results, use device system EQ or DAC app.
         </Text>
       </View>
@@ -205,22 +206,22 @@ export default function EqualizerScreen() {
       >
         {/* Preamp */}
         <View style={styles.preampSection}>
-          <Text style={styles.sectionTitle}>Preamp</Text>
-          <View style={styles.preampControl}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Preamp</Text>
+          <View style={[styles.preampControl, { backgroundColor: colors.surface }]}>
             <TouchableOpacity
-              style={styles.preampButton}
+              style={[styles.preampButton, { backgroundColor: colors.surfaceLight }]}
               onPress={() => setPreamp(Math.max(-12, preamp - 1))}
             >
-              <Text style={styles.preampButtonText}>−</Text>
+              <Text style={[styles.preampButtonText, { color: colors.text }]}>−</Text>
             </TouchableOpacity>
-            <Text style={styles.preampValue}>
+            <Text style={[styles.preampValue, { color: colors.text }]}>
               {preamp > 0 ? '+' : ''}{preamp} dB
             </Text>
             <TouchableOpacity
-              style={styles.preampButton}
+              style={[styles.preampButton, { backgroundColor: colors.surfaceLight }]}
               onPress={() => setPreamp(Math.min(12, preamp + 1))}
             >
-              <Text style={styles.preampButtonText}>+</Text>
+              <Text style={[styles.preampButtonText, { color: colors.text }]}>+</Text>
             </TouchableOpacity>
           </View>
         </View>

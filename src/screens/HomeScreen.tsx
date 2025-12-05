@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { THEME, ROUTES, VERSION, MOOD_CATEGORIES, MoodId } from '../config';
-import { usePlayerStore, usePlaylistStore, useLibraryStore } from '../store';
+import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
 
 export default function HomeScreen() {
@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const { currentTrack } = usePlayerStore();
   const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood } = usePlaylistStore();
   const { tracks } = useLibraryStore();
+  const { colors, mode: themeMode } = useThemeStore();
   
   // Calculate counts for quick actions
   const favoritesCount = useMemo(() => getFavoriteIds().length, [getFavoriteIds]);
@@ -54,13 +55,13 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.colors.background} />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>TuneWell</Text>
-        <Text style={styles.subtitle}>v{VERSION.versionString}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>TuneWell</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>v{VERSION.versionString}</Text>
       </View>
 
       <ScrollView 
@@ -70,63 +71,63 @@ export default function HomeScreen() {
       >
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Access</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Access</Text>
           <View style={styles.quickActions}>
             <TouchableOpacity
-              style={styles.quickAction}
+              style={[styles.quickAction, { backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate(ROUTES.LIBRARY as never)}
             >
-              <Text style={styles.quickActionIcon}>♫</Text>
-              <Text style={styles.quickActionText}>Library</Text>
+              <Text style={[styles.quickActionIcon, { color: colors.text }]}>♫</Text>
+              <Text style={[styles.quickActionText, { color: colors.text }]}>Library</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={styles.quickAction}
+              style={[styles.quickAction, { backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate(ROUTES.PLAYLISTS as never)}
             >
-              <Text style={styles.quickActionIcon}>♥</Text>
-              <Text style={styles.quickActionText}>Favorites</Text>
+              <Text style={[styles.quickActionIcon, { color: colors.text }]}>♡</Text>
+              <Text style={[styles.quickActionText, { color: colors.text }]}>Favorites</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={styles.quickAction}
+              style={[styles.quickAction, { backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate(ROUTES.EQUALIZER as never)}
             >
-              <Text style={styles.quickActionIcon}>≡</Text>
-              <Text style={styles.quickActionText}>Equalizer</Text>
+              <Text style={[styles.quickActionIcon, { color: colors.text }]}>☰</Text>
+              <Text style={[styles.quickActionText, { color: colors.text }]}>Equalizer</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={styles.quickAction}
+              style={[styles.quickAction, { backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate(ROUTES.SETTINGS as never)}
             >
-              <Text style={styles.quickActionIcon}>⚙</Text>
-              <Text style={styles.quickActionText}>Settings</Text>
+              <Text style={[styles.quickActionIcon, { color: colors.text }]}>⚙</Text>
+              <Text style={[styles.quickActionText, { color: colors.text }]}>Settings</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Recently Played */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recently Played</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Recently Played</Text>
           {recentlyPlayedTracks.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateIcon}>♪</Text>
-              <Text style={styles.emptyStateText}>No recently played tracks</Text>
-              <Text style={styles.emptyStateSubtext}>
+            <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.emptyStateIcon, { color: colors.textMuted }]}>♪</Text>
+              <Text style={[styles.emptyStateText, { color: colors.text }]}>No recently played tracks</Text>
+              <Text style={[styles.emptyStateSubtext, { color: colors.textSecondary }]}>
                 Add folders to your library to start listening
               </Text>
             </View>
           ) : (
-            <View style={styles.recentList}>
+            <View style={[styles.recentList, { backgroundColor: colors.surface }]}>
               {recentlyPlayedTracks.map((trackId, index) => {
                 const track = tracks.find(t => t.id === trackId);
                 return (
-                  <View key={`${trackId}-${index}`} style={styles.recentItem}>
-                    <Text style={styles.recentItemText} numberOfLines={1}>
+                  <View key={`${trackId}-${index}`} style={[styles.recentItem, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.recentItemText, { color: colors.text }]} numberOfLines={1}>
                       {track?.title || track?.fileName || 'Unknown Track'}
                     </Text>
-                    <Text style={styles.recentItemSubtext} numberOfLines={1}>
+                    <Text style={[styles.recentItemSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
                       {track?.artist || 'Unknown Artist'}
                     </Text>
                   </View>
@@ -138,7 +139,7 @@ export default function HomeScreen() {
 
         {/* Mood Playlists */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mood Playlists</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Mood Playlists</Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
@@ -147,12 +148,12 @@ export default function HomeScreen() {
             {MOOD_CATEGORIES.map((mood) => (
               <TouchableOpacity
                 key={mood.id}
-                style={[styles.moodCard, { borderColor: mood.color }]}
+                style={[styles.moodCard, { backgroundColor: colors.surface, borderColor: mood.color }]}
                 onPress={() => handleMoodPress(mood.id as MoodId, mood.name)}
               >
                 <Text style={styles.moodIcon}>{mood.icon}</Text>
-                <Text style={styles.moodName}>{mood.name}</Text>
-                <Text style={styles.moodCount}>
+                <Text style={[styles.moodName, { color: colors.text }]}>{mood.name}</Text>
+                <Text style={[styles.moodCount, { color: colors.textSecondary }]}>
                   {moodTrackCounts[mood.id] || 0}
                 </Text>
               </TouchableOpacity>
@@ -162,19 +163,19 @@ export default function HomeScreen() {
 
         {/* Audio Quality Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Audio Quality</Text>
-          <View style={styles.qualityCard}>
-            <View style={styles.qualityItem}>
-              <Text style={styles.qualityLabel}>Supported Formats</Text>
-              <Text style={styles.qualityValue}>FLAC, DSD, WAV, MP3, AAC</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Audio Quality</Text>
+          <View style={[styles.qualityCard, { backgroundColor: colors.surface }]}>
+            <View style={[styles.qualityItem, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Supported Formats</Text>
+              <Text style={[styles.qualityValue, { color: colors.text }]}>FLAC, DSD, WAV, MP3, AAC</Text>
             </View>
-            <View style={styles.qualityItem}>
-              <Text style={styles.qualityLabel}>High-Res Audio</Text>
-              <Text style={styles.qualityValue}>Up to 32-bit/384kHz, DSD512</Text>
+            <View style={[styles.qualityItem, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>High-Res Audio</Text>
+              <Text style={[styles.qualityValue, { color: colors.text }]}>Up to 32-bit/384kHz, DSD512</Text>
             </View>
-            <View style={styles.qualityItem}>
-              <Text style={styles.qualityLabel}>DAC Support</Text>
-              <Text style={styles.qualityValue}>USB DAC, Bluetooth HD</Text>
+            <View style={[styles.qualityItem, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>DAC Support</Text>
+              <Text style={[styles.qualityValue, { color: colors.text }]}>USB DAC, Bluetooth HD</Text>
             </View>
           </View>
         </View>
@@ -192,7 +193,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   header: {
     paddingHorizontal: THEME.spacing.lg,
@@ -202,11 +202,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700',
-    color: THEME.colors.text,
   },
   subtitle: {
     fontSize: 14,
-    color: THEME.colors.textSecondary,
     marginTop: 4,
   },
   content: {
@@ -221,7 +219,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: THEME.colors.text,
     marginBottom: THEME.spacing.md,
   },
   quickActions: {
@@ -230,7 +227,6 @@ const styles = StyleSheet.create({
   },
   quickAction: {
     flex: 1,
-    backgroundColor: THEME.colors.surface,
     borderRadius: THEME.borderRadius.lg,
     padding: THEME.spacing.md,
     marginHorizontal: 4,
@@ -244,8 +240,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -8,
-    backgroundColor: THEME.colors.primary,
-    color: THEME.colors.text,
     fontSize: 10,
     fontWeight: '600',
     paddingHorizontal: 4,
@@ -257,15 +251,12 @@ const styles = StyleSheet.create({
   quickActionIcon: {
     fontSize: 24,
     marginBottom: 8,
-    color: THEME.colors.text,
   },
   quickActionText: {
     fontSize: 12,
-    color: THEME.colors.text,
     fontWeight: '500',
   },
   emptyState: {
-    backgroundColor: THEME.colors.surface,
     borderRadius: THEME.borderRadius.lg,
     padding: THEME.spacing.xl,
     alignItems: 'center',
@@ -276,20 +267,17 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 16,
-    color: THEME.colors.text,
     fontWeight: '500',
     marginBottom: 4,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: THEME.colors.textSecondary,
     textAlign: 'center',
   },
   moodContainer: {
     paddingRight: THEME.spacing.lg,
   },
   moodCard: {
-    backgroundColor: THEME.colors.surface,
     borderRadius: THEME.borderRadius.md,
     padding: THEME.spacing.md,
     marginRight: THEME.spacing.sm,
@@ -305,35 +293,29 @@ const styles = StyleSheet.create({
   },
   moodName: {
     fontSize: 11,
-    color: THEME.colors.text,
     fontWeight: '500',
+    textAlign: 'center',
   },
   moodCount: {
     fontSize: 11,
-    color: THEME.colors.textSecondary,
     marginTop: 4,
   },
   recentList: {
-    backgroundColor: THEME.colors.surface,
     borderRadius: THEME.borderRadius.lg,
     padding: THEME.spacing.md,
   },
   recentItem: {
     paddingVertical: THEME.spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
   },
   recentItemText: {
     fontSize: 14,
-    color: THEME.colors.text,
   },
   recentItemSubtext: {
     fontSize: 12,
-    color: THEME.colors.textSecondary,
     marginTop: 2,
   },
   qualityCard: {
-    backgroundColor: THEME.colors.surface,
     borderRadius: THEME.borderRadius.lg,
     padding: THEME.spacing.lg,
   },
@@ -343,15 +325,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: THEME.spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
   },
   qualityLabel: {
     fontSize: 14,
-    color: THEME.colors.textSecondary,
   },
   qualityValue: {
     fontSize: 14,
-    color: THEME.colors.text,
     fontWeight: '500',
   },
 });

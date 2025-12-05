@@ -45,55 +45,67 @@ export const BIT_DEPTHS = {
   FLOAT: 32,
 } as const;
 
-// Mood Categories
+// Mood Categories - Simple, understandable vibes for any situation
 export const MOOD_CATEGORIES = [
   {
-    id: 'happy',
-    name: 'Happy/Joyful',
-    icon: '😊',
-    color: '#FFD700',
-  },
-  {
-    id: 'sad',
-    name: 'Sad/Melancholic',
-    icon: '😢',
-    color: '#6495ED',
-  },
-  {
     id: 'energetic',
-    name: 'Energetic/Pumped',
+    name: 'Energetic',
     icon: '⚡',
-    color: '#FF4500',
+    color: '#FF6B35',
   },
   {
-    id: 'calm',
-    name: 'Calm/Relaxed/Chill',
-    icon: '🌿',
-    color: '#90EE90',
+    id: 'relaxed',
+    name: 'Relaxed',
+    icon: '🌊',
+    color: '#4ECDC4',
+  },
+  {
+    id: 'melancholic',
+    name: 'Melancholic',
+    icon: '🌧',
+    color: '#5C7AEA',
   },
   {
     id: 'romantic',
-    name: 'Romantic/Loving',
-    icon: '💕',
-    color: '#FF69B4',
+    name: 'Romantic',
+    icon: '💜',
+    color: '#E056A0',
   },
   {
-    id: 'angry',
-    name: 'Angry/Intense',
+    id: 'aggressive',
+    name: 'Aggressive',
     icon: '🔥',
-    color: '#DC143C',
+    color: '#E63946',
   },
   {
-    id: 'dreamy',
-    name: 'Dreamy/Reflective',
-    icon: '🌙',
-    color: '#9370DB',
+    id: 'nostalgic',
+    name: 'Nostalgic',
+    icon: '📷',
+    color: '#C9A065',
   },
   {
     id: 'focus',
     name: 'Focus',
     icon: '🎯',
-    color: '#4169E1',
+    color: '#3A86FF',
+  },
+  {
+    id: 'ambient',
+    name: 'Ambient',
+    icon: '🌙',
+    color: '#8B5CF6',
+  },
+  {
+    id: 'lively',
+    name: 'Lively',
+    icon: '☀️',
+    color: '#FFB703',
+  },
+  {
+    id: 'ethereal',
+    name: 'Ethereal',
+    icon: '✨',
+    color: '#A8DADC',
   },
 ] as const;
 

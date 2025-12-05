@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
-import { usePlayerStore, usePlaylistStore } from '../store';
+import { usePlayerStore, usePlaylistStore, useThemeStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
 
 type Section = 'system' | 'mood' | 'custom';
@@ -31,6 +31,7 @@ export default function PlaylistsScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const { currentTrack } = usePlayerStore();
+  const { colors, mode: themeMode } = useThemeStore();
   
   // Get playlist store data
   const { 
@@ -132,14 +133,14 @@ export default function PlaylistsScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.colors.background} />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Playlists</Text>
-        <TouchableOpacity style={styles.createButton} onPress={() => setShowCreateModal(true)}>
-          <Text style={styles.createButtonText}>+ New</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Playlists</Text>
+        <TouchableOpacity style={[styles.createButton, { backgroundColor: colors.surface }]} onPress={() => setShowCreateModal(true)}>
+          <Text style={[styles.createButtonText, { color: colors.text }]}>+ New</Text>
         </TouchableOpacity>
       </View>
 
@@ -151,31 +152,31 @@ export default function PlaylistsScreen() {
         onRequestClose={() => setShowCreateModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>New Playlist</Text>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>New Playlist</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { backgroundColor: colors.surfaceLight, color: colors.text, borderColor: colors.border }]}
               placeholder="Playlist name"
-              placeholderTextColor={THEME.colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               value={newPlaylistName}
               onChangeText={setNewPlaylistName}
               autoFocus
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity 
-                style={[styles.modalButton, styles.modalButtonCancel]}
+                style={[styles.modalButton, styles.modalButtonCancel, { backgroundColor: colors.surfaceLight }]}
                 onPress={() => {
                   setShowCreateModal(false);
                   setNewPlaylistName('');
                 }}
               >
-                <Text style={styles.modalButtonText}>Cancel</Text>
+                <Text style={[styles.modalButtonText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={[styles.modalButton, styles.modalButtonCreate]}
+                style={[styles.modalButton, styles.modalButtonCreate, { backgroundColor: colors.primary }]}
                 onPress={handleCreatePlaylist}
               >
-                <Text style={styles.modalButtonText}>Create</Text>
+                <Text style={[styles.modalButtonText, { color: colors.background }]}>Create</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -25,7 +25,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { THEME, ROUTES, MOOD_CATEGORIES } from '../config';
-import { usePlayerStore, useEQStore, usePlaylistStore } from '../store';
+import { usePlayerStore, useEQStore, usePlaylistStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
 import { formatDuration } from '../services/metadata';
 
@@ -34,6 +34,7 @@ const ARTWORK_SIZE = SCREEN_WIDTH - 80;
 
 export default function PlayerScreen() {
   const navigation = useNavigation();
+  const { colors, mode: themeMode } = useThemeStore();
   const {
     currentTrack,
     state,
@@ -96,19 +97,19 @@ export default function PlayerScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.colors.background} />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
       
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
-          <Text style={styles.headerButtonText}>↓</Text>
+          <Text style={[styles.headerButtonText, { color: colors.text }]}>↓</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Now Playing</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Now Playing</Text>
           {currentTrack.isHighRes && (
-            <View style={styles.qualityBadge}>
-              <Text style={styles.qualityBadgeText}>Hi-Res</Text>
+            <View style={[styles.qualityBadge, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.qualityBadgeText, { color: colors.background }]}>Hi-Res</Text>
             </View>
           )}
         </View>
@@ -116,7 +117,7 @@ export default function PlayerScreen() {
           onPress={() => navigation.navigate(ROUTES.QUEUE as never)}
           style={styles.headerButton}
         >
-          <Text style={styles.headerButtonText}>☰</Text>
+          <Text style={[styles.headerButtonText, { color: colors.text }]}>☰</Text>
         </TouchableOpacity>
       </View>
 
@@ -129,29 +130,29 @@ export default function PlayerScreen() {
             resizeMode="cover"
           />
         ) : (
-          <View style={[styles.artwork, styles.artworkPlaceholder]}>
-            <Text style={styles.artworkPlaceholderText}>♪</Text>
+          <View style={[styles.artwork, styles.artworkPlaceholder, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.artworkPlaceholderText, { color: colors.textMuted }]}>♪</Text>
           </View>
         )}
       </View>
 
       {/* Track Info */}
       <View style={styles.trackInfo}>
-        <Text style={styles.trackTitle} numberOfLines={1}>
+        <Text style={[styles.trackTitle, { color: colors.text }]} numberOfLines={1}>
           {currentTrack.title}
         </Text>
-        <Text style={styles.trackArtist} numberOfLines={1}>
+        <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
           {currentTrack.artist} • {currentTrack.album}
         </Text>
         
         {/* Audio Quality Info */}
         <View style={styles.audioInfo}>
-          <Text style={styles.audioInfoText}>
+          <Text style={[styles.audioInfoText, { color: colors.textMuted }]}>
             {currentTrack.format.toUpperCase()} • {currentTrack.sampleRate / 1000}kHz • {currentTrack.bitDepth}-bit
           </Text>
           {eqEnabled && (
-            <View style={styles.eqBadge}>
-              <Text style={styles.eqBadgeText}>EQ</Text>
+            <View style={[styles.eqBadge, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.eqBadgeText, { color: colors.background }]}>EQ</Text>
             </View>
           )}
         </View>
@@ -159,10 +160,11 @@ export default function PlayerScreen() {
 
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
-        <View style={styles.progressBar}>
+        <View style={[styles.progressBar, { backgroundColor: colors.surface }]}>
           <View
             style={[
               styles.progressFill,
+              { backgroundColor: colors.primary },
               {
                 width: progress.duration > 0
                   ? `${(progress.position / progress.duration) * 100}%`
