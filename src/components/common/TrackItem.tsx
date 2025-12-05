@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Track } from '../../types';
 import { Colors, Typography, Spacing, BorderRadius } from '../../theme';
 import { getQualityColor } from '../../theme';
@@ -63,7 +64,7 @@ export const TrackItem: React.FC<TrackItemProps> = ({
             <Image source={{ uri: track.artworkUri }} style={styles.artwork} />
           ) : (
             <View style={styles.artworkPlaceholder}>
-              <Text style={styles.artworkPlaceholderText}>♪</Text>
+              <MaterialIcons name="music-note" size={24} color={Colors.textMuted} />
             </View>
           )}
           {isPlaying && (

@@ -19,6 +19,7 @@ import EqualizerScreen from '../screens/EqualizerScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlayerScreen from '../screens/PlayerScreen';
 import QueueScreen from '../screens/QueueScreen';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabsParamList>();
@@ -38,24 +39,24 @@ const TuneWellTheme = {
   },
 };
 
-import { Text as RNText } from 'react-native';
-
 /**
- * Tab icon component
+ * Tab icon component using Material Icons
  */
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
+function TabIcon({ name, focused, color }: { name: string; focused: boolean; color: string }) {
   const iconMap: Record<string, string> = {
-    Home: '⌂',
-    Library: '♫',
-    Playlists: '≡',
-    Equalizer: '⏛',
-    Settings: '⚙',
+    Home: 'home',
+    Library: 'library-music',
+    Playlists: 'playlist-play',
+    Equalizer: 'tune',
+    Settings: 'settings',
   };
   
   return (
-    <RNText style={{ fontSize: 22, opacity: focused ? 1 : 0.6 }}>
-      {iconMap[name] || '●'}
-    </RNText>
+    <MaterialIcons 
+      name={iconMap[name] || 'circle'} 
+      size={24} 
+      color={color}
+    />
   );
 }
 
@@ -87,7 +88,7 @@ function MainTabs() {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: ({ focused }) => <TabIcon name="Home" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => <TabIcon name="Home" focused={focused} color={color} />,
         }}
       />
       <Tab.Screen
@@ -95,7 +96,7 @@ function MainTabs() {
         component={LibraryScreen}
         options={{
           tabBarLabel: 'Library',
-          tabBarIcon: ({ focused }) => <TabIcon name="Library" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => <TabIcon name="Library" focused={focused} color={color} />,
         }}
       />
       <Tab.Screen
@@ -103,7 +104,7 @@ function MainTabs() {
         component={PlaylistsScreen}
         options={{
           tabBarLabel: 'Playlists',
-          tabBarIcon: ({ focused }) => <TabIcon name="Playlists" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => <TabIcon name="Playlists" focused={focused} color={color} />,
         }}
       />
       <Tab.Screen
@@ -111,7 +112,7 @@ function MainTabs() {
         component={EqualizerScreen}
         options={{
           tabBarLabel: 'EQ',
-          tabBarIcon: ({ focused }) => <TabIcon name="Equalizer" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => <TabIcon name="Equalizer" focused={focused} color={color} />,
         }}
       />
       <Tab.Screen
@@ -119,7 +120,7 @@ function MainTabs() {
         component={SettingsScreen}
         options={{
           tabBarLabel: 'Settings',
-          tabBarIcon: ({ focused }) => <TabIcon name="Settings" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => <TabIcon name="Settings" focused={focused} color={color} />,
         }}
       />
     </Tab.Navigator>

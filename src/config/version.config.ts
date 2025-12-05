@@ -23,9 +23,9 @@ export interface VersionInfo {
 
 // Version components - UPDATE THESE VALUES FOR VERSION CHANGES
 const VERSION_MAJOR = 0;
-const VERSION_MINOR = 1;
-const VERSION_PATCH = 1;
-const BUILD_NUMBER = 23;
+const VERSION_MINOR = 2;
+const VERSION_PATCH = 0;
+const BUILD_NUMBER = 24;
 
 // Version metadata
 const RELEASE_DATE = '2025-12-05';

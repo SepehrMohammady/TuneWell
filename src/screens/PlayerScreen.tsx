@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, ROUTES, MOOD_CATEGORIES } from '../config';
 import { usePlayerStore, useEQStore, usePlaylistStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
@@ -89,7 +90,7 @@ export default function PlayerScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyStateIcon}>♪</Text>
+          <MaterialIcons name="music-off" size={64} color={THEME.colors.textMuted} />
           <Text style={styles.emptyStateText}>No track playing</Text>
         </View>
       </SafeAreaView>
@@ -103,7 +104,7 @@ export default function PlayerScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
-          <Text style={[styles.headerButtonText, { color: colors.text }]}>↓</Text>
+          <MaterialIcons name="keyboard-arrow-down" size={32} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Now Playing</Text>
@@ -117,7 +118,7 @@ export default function PlayerScreen() {
           onPress={() => navigation.navigate(ROUTES.QUEUE as never)}
           style={styles.headerButton}
         >
-          <Text style={[styles.headerButtonText, { color: colors.text }]}>≣</Text>
+          <MaterialIcons name="queue-music" size={28} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -131,7 +132,7 @@ export default function PlayerScreen() {
           />
         ) : (
           <View style={[styles.artwork, styles.artworkPlaceholder, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.artworkPlaceholderText, { color: colors.textMuted }]}>♪</Text>
+            <MaterialIcons name="music-note" size={80} color={colors.textMuted} />
           </View>
         )}
       </View>
@@ -186,26 +187,30 @@ export default function PlayerScreen() {
           style={[styles.secondaryControl, isShuffled && styles.secondaryControlActive]}
           onPress={toggleShuffle}
         >
-          <Text style={[styles.secondaryControlText, isShuffled && styles.secondaryControlTextActive]}>
-            ⤭
-          </Text>
+          <MaterialIcons 
+            name="shuffle" 
+            size={24} 
+            color={isShuffled ? THEME.colors.primary : THEME.colors.textMuted} 
+          />
         </TouchableOpacity>
 
         {/* Previous */}
         <TouchableOpacity style={styles.controlButton} onPress={() => audioService.skipToPrevious()}>
-          <Text style={styles.controlButtonText}>⏮</Text>
+          <MaterialIcons name="skip-previous" size={40} color={THEME.colors.text} />
         </TouchableOpacity>
 
         {/* Play/Pause */}
         <TouchableOpacity style={styles.playButton} onPress={() => audioService.togglePlayPause()}>
-          <Text style={styles.playButtonText}>
-            {isPlaying ? '⏸' : '▶'}
-          </Text>
+          <MaterialIcons 
+            name={isPlaying ? 'pause' : 'play-arrow'} 
+            size={48} 
+            color={THEME.colors.background} 
+          />
         </TouchableOpacity>
 
         {/* Next */}
         <TouchableOpacity style={styles.controlButton} onPress={() => audioService.skipToNext()}>
-          <Text style={styles.controlButtonText}>⏭</Text>
+          <MaterialIcons name="skip-next" size={40} color={THEME.colors.text} />
         </TouchableOpacity>
 
         {/* Repeat */}
@@ -213,9 +218,11 @@ export default function PlayerScreen() {
           style={[styles.secondaryControl, repeatMode !== 'off' && styles.secondaryControlActive]}
           onPress={cycleRepeatMode}
         >
-          <Text style={[styles.secondaryControlText, repeatMode !== 'off' && styles.secondaryControlTextActive]}>
-            {repeatMode === 'track' ? '⟳₁' : '⟳'}
-          </Text>
+          <MaterialIcons 
+            name={repeatMode === 'track' ? 'repeat-one' : 'repeat'} 
+            size={24} 
+            color={repeatMode !== 'off' ? THEME.colors.primary : THEME.colors.textMuted} 
+          />
         </TouchableOpacity>
       </View>
 
@@ -223,9 +230,11 @@ export default function PlayerScreen() {
       <View style={styles.bottomActions}>
         {/* Favorite */}
         <TouchableOpacity style={styles.bottomAction} onPress={handleToggleFavorite}>
-          <Text style={[styles.bottomActionText, trackIsFavorite && styles.bottomActionActive]}>
-            {trackIsFavorite ? '♥' : '♡'}
-          </Text>
+          <MaterialIcons 
+            name={trackIsFavorite ? 'favorite' : 'favorite-outline'} 
+            size={28} 
+            color={trackIsFavorite ? THEME.colors.primary : THEME.colors.text} 
+          />
         </TouchableOpacity>
         
         {/* EQ */}
@@ -233,19 +242,25 @@ export default function PlayerScreen() {
           style={[styles.bottomAction, eqEnabled && styles.activeAction]}
           onPress={() => navigation.navigate(ROUTES.EQUALIZER as never)}
         >
-          <Text style={styles.bottomActionText}>|||</Text>
+          <MaterialIcons 
+            name="tune" 
+            size={28} 
+            color={eqEnabled ? THEME.colors.primary : THEME.colors.text} 
+          />
         </TouchableOpacity>
         
         {/* Mood */}
         <TouchableOpacity style={styles.bottomAction} onPress={() => setShowMoodModal(true)}>
-          <Text style={styles.bottomActionText}>
-            {trackMoods.length > 0 ? MOOD_CATEGORIES.find(m => m.id === trackMoods[0])?.icon || '☺' : '☺'}
-          </Text>
+          <MaterialIcons 
+            name="mood" 
+            size={28} 
+            color={trackMoods.length > 0 ? THEME.colors.primary : THEME.colors.text} 
+          />
         </TouchableOpacity>
         
         {/* Add to Playlist */}
         <TouchableOpacity style={styles.bottomAction} onPress={() => setShowPlaylistModal(true)}>
-          <Text style={styles.bottomActionText}>+</Text>
+          <MaterialIcons name="playlist-add" size={28} color={THEME.colors.text} />
         </TouchableOpacity>
       </View>
 

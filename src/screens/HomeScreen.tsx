@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, ROUTES, VERSION, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
@@ -77,7 +78,7 @@ export default function HomeScreen() {
               style={[styles.quickAction, { backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate(ROUTES.LIBRARY as never)}
             >
-              <Text style={[styles.quickActionIcon, { color: colors.text }]}>♫</Text>
+              <MaterialIcons name="library-music" size={28} color={colors.text} />
               <Text style={[styles.quickActionText, { color: colors.text }]}>Library</Text>
             </TouchableOpacity>
             
@@ -85,7 +86,7 @@ export default function HomeScreen() {
               style={[styles.quickAction, { backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate(ROUTES.PLAYLISTS as never)}
             >
-              <Text style={[styles.quickActionIcon, { color: colors.text }]}>♡</Text>
+              <MaterialIcons name="favorite-outline" size={28} color={colors.text} />
               <Text style={[styles.quickActionText, { color: colors.text }]}>Favorites</Text>
             </TouchableOpacity>
             
@@ -93,7 +94,7 @@ export default function HomeScreen() {
               style={[styles.quickAction, { backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate(ROUTES.EQUALIZER as never)}
             >
-              <Text style={[styles.quickActionIcon, { color: colors.text }]}>⏛</Text>
+              <MaterialIcons name="tune" size={28} color={colors.text} />
               <Text style={[styles.quickActionText, { color: colors.text }]}>Equalizer</Text>
             </TouchableOpacity>
             
@@ -101,7 +102,7 @@ export default function HomeScreen() {
               style={[styles.quickAction, { backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate(ROUTES.SETTINGS as never)}
             >
-              <Text style={[styles.quickActionIcon, { color: colors.text }]}>⚙</Text>
+              <MaterialIcons name="settings" size={28} color={colors.text} />
               <Text style={[styles.quickActionText, { color: colors.text }]}>Settings</Text>
             </TouchableOpacity>
           </View>
@@ -112,7 +113,7 @@ export default function HomeScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Recently Played</Text>
           {recentlyPlayedTracks.length === 0 ? (
             <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.emptyStateIcon, { color: colors.textMuted }]}>♪</Text>
+              <MaterialIcons name="music-note" size={48} color={colors.textMuted} />
               <Text style={[styles.emptyStateText, { color: colors.text }]}>No recently played tracks</Text>
               <Text style={[styles.emptyStateSubtext, { color: colors.textSecondary }]}>
                 Add folders to your library to start listening

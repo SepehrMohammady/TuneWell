@@ -16,6 +16,7 @@ import {
   PanResponder,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, ROUTES } from '../../config';
 import { usePlayerStore } from '../../store';
 import { audioService } from '../../services/audio';
@@ -121,7 +122,7 @@ export default function MiniPlayer() {
             />
           ) : (
             <View style={[styles.artwork, styles.artworkPlaceholder]}>
-              <Text style={styles.artworkPlaceholderText}>🎵</Text>
+              <MaterialIcons name="music-note" size={24} color={THEME.colors.textMuted} />
             </View>
           )}
 
@@ -145,15 +146,17 @@ export default function MiniPlayer() {
           {/* Controls */}
           <View style={styles.controls}>
             <TouchableOpacity style={styles.controlButton} onPress={handlePrevious}>
-              <Text style={styles.controlButtonText}>⏮</Text>
+              <MaterialIcons name="skip-previous" size={28} color={THEME.colors.text} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.playButton} onPress={handlePlayPause}>
-              <Text style={styles.playButtonText}>
-                {isPlaying ? '⏸' : '▶'}
-              </Text>
+              <MaterialIcons 
+                name={isPlaying ? 'pause' : 'play-arrow'} 
+                size={32} 
+                color={THEME.colors.text} 
+              />
             </TouchableOpacity>
             <TouchableOpacity style={styles.controlButton} onPress={handleNext}>
-              <Text style={styles.controlButtonText}>⏭</Text>
+              <MaterialIcons name="skip-next" size={28} color={THEME.colors.text} />
             </TouchableOpacity>
           </View>
         </View>

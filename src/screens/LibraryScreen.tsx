@@ -26,6 +26,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { pickDirectory } from '@react-native-documents/picker';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, SORT_OPTIONS } from '../config';
 import { useLibraryStore, usePlayerStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
@@ -407,7 +408,7 @@ export default function LibraryScreen() {
 
   const renderEmptyLibrary = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyStateIcon}>📁</Text>
+      <MaterialIcons name="folder-open" size={64} color={THEME.colors.textMuted} />
       <Text style={styles.emptyStateTitle}>No Music Found</Text>
       <Text style={styles.emptyStateSubtext}>
         Add folders containing your music files to start building your library.
@@ -422,7 +423,7 @@ export default function LibraryScreen() {
     <View style={styles.viewContent}>
       {/* Add Folder Button - always visible */}
       <TouchableOpacity style={styles.addFolderRow} onPress={handleAddFolder}>
-        <Text style={styles.addFolderRowIcon}>➕</Text>
+        <MaterialIcons name="add" size={24} color={THEME.colors.primary} />
         <Text style={styles.addFolderRowText}>Add Music Folder</Text>
       </TouchableOpacity>
       
@@ -437,7 +438,7 @@ export default function LibraryScreen() {
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
             <View style={styles.folderItem}>
-              <Text style={styles.folderIcon}>📂</Text>
+              <MaterialIcons name="folder" size={32} color={THEME.colors.primary} style={styles.folderIcon} />
               <View style={styles.folderInfo}>
                 <Text style={styles.folderName} numberOfLines={1}>
                   {decodeURIComponent(item.split('/').pop() || item.split('%2F').pop() || 'Folder')}
@@ -450,7 +451,7 @@ export default function LibraryScreen() {
                 style={styles.removeFolderButton}
                 onPress={() => handleRemoveFolder(item)}
               >
-                <Text style={styles.removeFolderText}>✕</Text>
+                <MaterialIcons name="close" size={20} color={THEME.colors.textMuted} />
               </TouchableOpacity>
             </View>
           )}
@@ -471,7 +472,7 @@ export default function LibraryScreen() {
     <View style={styles.viewContent}>
       {/* Search Box */}
       <View style={styles.searchContainer}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <MaterialIcons name="search" size={20} color={THEME.colors.textMuted} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search tracks, artists, albums..."
@@ -481,7 +482,7 @@ export default function LibraryScreen() {
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
-            <Text style={styles.searchClearText}>✕</Text>
+            <MaterialIcons name="close" size={18} color={THEME.colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
@@ -542,7 +543,7 @@ export default function LibraryScreen() {
                 </View>
               ) : (
                 <View style={styles.trackIcon}>
-                  <Text style={styles.trackIconText}>🎵</Text>
+                  <MaterialIcons name="music-note" size={24} color={THEME.colors.textMuted} />
                 </View>
               )}
               <View style={styles.trackInfo}>
@@ -559,7 +560,7 @@ export default function LibraryScreen() {
                 </Text>
               </View>
               <View style={styles.playIcon}>
-                <Text style={styles.playIconText}>▶</Text>
+                <MaterialIcons name="play-arrow" size={24} color={THEME.colors.primary} />
               </View>
             </TouchableOpacity>
           )}
@@ -590,7 +591,7 @@ export default function LibraryScreen() {
     <View style={styles.viewContent}>
       {/* Search Box */}
       <View style={styles.searchContainer}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <MaterialIcons name="search" size={20} color={THEME.colors.textMuted} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search albums..."
@@ -600,7 +601,7 @@ export default function LibraryScreen() {
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
-            <Text style={styles.searchClearText}>✕</Text>
+            <MaterialIcons name="close" size={18} color={THEME.colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
@@ -624,7 +625,7 @@ export default function LibraryScreen() {
                 />
               ) : (
                 <View style={[styles.albumArtwork, styles.albumArtworkPlaceholder]}>
-                  <Text style={styles.albumArtworkPlaceholderText}>💿</Text>
+                  <MaterialIcons name="album" size={40} color={THEME.colors.textMuted} />
                 </View>
               )}
               <Text style={styles.albumName} numberOfLines={1}>{item.name}</Text>
@@ -643,7 +644,7 @@ export default function LibraryScreen() {
     <View style={styles.viewContent}>
       {/* Search Box */}
       <View style={styles.searchContainer}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <MaterialIcons name="search" size={20} color={THEME.colors.textMuted} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search artists..."
@@ -653,7 +654,7 @@ export default function LibraryScreen() {
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
-            <Text style={styles.searchClearText}>✕</Text>
+            <MaterialIcons name="close" size={18} color={THEME.colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
@@ -676,7 +677,7 @@ export default function LibraryScreen() {
                 />
               ) : (
                 <View style={[styles.artistArtwork, styles.artistArtworkPlaceholder]}>
-                  <Text style={styles.artistArtworkPlaceholderText}>👤</Text>
+                  <MaterialIcons name="person" size={32} color={THEME.colors.textMuted} />
                 </View>
               )}
               <View style={styles.artistInfo}>
@@ -686,7 +687,7 @@ export default function LibraryScreen() {
                 </Text>
               </View>
               <View style={styles.playIcon}>
-                <Text style={styles.playIconText}>▶</Text>
+                <MaterialIcons name="play-arrow" size={24} color={THEME.colors.primary} />
               </View>
             </TouchableOpacity>
           )}

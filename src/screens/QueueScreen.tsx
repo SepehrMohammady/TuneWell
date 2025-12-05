@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME } from '../config';
 import { usePlayerStore } from '../store';
 import { formatDuration } from '../services/metadata';
@@ -40,9 +41,11 @@ export default function QueueScreen() {
         onPress={() => skipToIndex(index)}
       >
         <View style={styles.queueItemIndex}>
-          <Text style={[styles.queueItemIndexText, isCurrentTrack && styles.queueItemIndexTextActive]}>
-            {isCurrentTrack ? '▶' : index + 1}
-          </Text>
+          {isCurrentTrack ? (
+            <MaterialIcons name="play-arrow" size={20} color={THEME.colors.primary} />
+          ) : (
+            <Text style={styles.queueItemIndexText}>{index + 1}</Text>
+          )}
         </View>
         <View style={styles.queueItemInfo}>
           <Text
@@ -62,7 +65,7 @@ export default function QueueScreen() {
           style={styles.queueItemRemove}
           onPress={() => removeFromQueue(index)}
         >
-          <Text style={styles.queueItemRemoveText}>✕</Text>
+          <MaterialIcons name="close" size={20} color={THEME.colors.textMuted} />
         </TouchableOpacity>
       </TouchableOpacity>
     );
@@ -77,7 +80,7 @@ export default function QueueScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
-          <Text style={styles.headerButtonText}>←</Text>
+          <MaterialIcons name="arrow-back" size={24} color={THEME.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Queue</Text>

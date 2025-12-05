@@ -20,6 +20,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useThemeStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
@@ -126,9 +127,11 @@ export default function PlaylistsScreen() {
         <Text style={styles.sectionTitle}>{title}</Text>
         <Text style={styles.sectionCount}>{count}</Text>
       </View>
-      <Text style={styles.chevron}>
-        {expandedSection === section ? '▼' : '▶'}
-      </Text>
+      <MaterialIcons 
+        name={expandedSection === section ? 'expand-more' : 'chevron-right'} 
+        size={24} 
+        color={THEME.colors.textSecondary} 
+      />
     </TouchableOpacity>
   );
 
@@ -196,13 +199,13 @@ export default function PlaylistsScreen() {
               onPress={() => handlePlaySystemPlaylist('favorites')}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#FF6B6B' }]}>
-                <Text style={styles.playlistIconText}>♥</Text>
+                <MaterialIcons name="favorite" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.playlistInfo}>
                 <Text style={styles.playlistName}>Favorites</Text>
                 <Text style={styles.playlistMeta}>{favoritesCount} tracks</Text>
               </View>
-              <Text style={styles.playArrow}>▶</Text>
+              <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -210,13 +213,13 @@ export default function PlaylistsScreen() {
               onPress={() => handlePlaySystemPlaylist('mostPlayed')}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#4ECDC4' }]}>
-                <Text style={styles.playlistIconText}>⚡</Text>
+                <MaterialIcons name="bolt" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.playlistInfo}>
                 <Text style={styles.playlistName}>Most Played</Text>
                 <Text style={styles.playlistMeta}>{mostPlayedCount} tracks</Text>
               </View>
-              <Text style={styles.playArrow}>▶</Text>
+              <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -224,13 +227,13 @@ export default function PlaylistsScreen() {
               onPress={() => handlePlaySystemPlaylist('recentlyAdded')}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#45B7D1' }]}>
-                <Text style={styles.playlistIconText}>★</Text>
+                <MaterialIcons name="star" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.playlistInfo}>
                 <Text style={styles.playlistName}>Recently Added</Text>
                 <Text style={styles.playlistMeta}>{recentlyAddedCount} tracks</Text>
               </View>
-              <Text style={styles.playArrow}>▶</Text>
+              <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -238,13 +241,13 @@ export default function PlaylistsScreen() {
               onPress={() => handlePlaySystemPlaylist('recentlyPlayed')}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#96CEB4' }]}>
-                <Text style={styles.playlistIconText}>◷</Text>
+                <MaterialIcons name="history" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.playlistInfo}>
                 <Text style={styles.playlistName}>Recently Played</Text>
                 <Text style={styles.playlistMeta}>{recentlyPlayedCount} tracks</Text>
               </View>
-              <Text style={styles.playArrow}>▶</Text>
+              <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
             </TouchableOpacity>
           </View>
         )}
@@ -266,7 +269,7 @@ export default function PlaylistsScreen() {
                   <Text style={styles.playlistName}>{mood.name}</Text>
                   <Text style={styles.playlistMeta}>{moodTrackCounts[mood.id] || 0} tracks</Text>
                 </View>
-                <Text style={styles.playArrow}>▶</Text>
+                <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
               </TouchableOpacity>
             ))}
           </View>
@@ -278,7 +281,7 @@ export default function PlaylistsScreen() {
           <View style={styles.sectionContent}>
             {customPlaylists.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateIcon}>♫</Text>
+                <MaterialIcons name="queue-music" size={48} color={THEME.colors.textMuted} />
                 <Text style={styles.emptyStateText}>No custom playlists yet</Text>
                 <Text style={styles.emptyStateSubtext}>
                   Tap "+ New" to create your first playlist
@@ -288,13 +291,13 @@ export default function PlaylistsScreen() {
               customPlaylists.map((playlist) => (
                 <TouchableOpacity key={playlist.id} style={styles.playlistItem}>
                   <View style={[styles.playlistIcon, { backgroundColor: THEME.colors.primary }]}>
-                    <Text style={styles.playlistIconText}>♪</Text>
+                    <MaterialIcons name="playlist-play" size={20} color="#FFFFFF" />
                   </View>
                   <View style={styles.playlistInfo}>
                     <Text style={styles.playlistName}>{playlist.name}</Text>
                     <Text style={styles.playlistMeta}>{playlist.tracks.length} tracks</Text>
                   </View>
-                  <Text style={styles.playArrow}>▶</Text>
+                  <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
                 </TouchableOpacity>
               ))
             )}
