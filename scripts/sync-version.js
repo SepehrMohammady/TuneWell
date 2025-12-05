@@ -19,9 +19,9 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 // Current version - single source of truth
 const VERSION = {
   major: 0,
-  minor: 0,
-  patch: 21,
-  build: 21,
+  minor: 1,
+  patch: 0,
+  build: 22,
 };
 
 const versionString = `${VERSION.major}.${VERSION.minor}.${VERSION.patch}`;
