@@ -48,7 +48,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
     Home: '⌂',
     Library: '♫',
     Playlists: '≡',
-    Equalizer: '⋮⋮⋮',
+    Equalizer: '⏛',
     Settings: '⚙',
   };
   

@@ -93,7 +93,7 @@ export default function HomeScreen() {
               style={[styles.quickAction, { backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate(ROUTES.EQUALIZER as never)}
             >
-              <Text style={[styles.quickActionIcon, { color: colors.text }]}>☰</Text>
+              <Text style={[styles.quickActionIcon, { color: colors.text }]}>⏛</Text>
               <Text style={[styles.quickActionText, { color: colors.text }]}>Equalizer</Text>
             </TouchableOpacity>
             

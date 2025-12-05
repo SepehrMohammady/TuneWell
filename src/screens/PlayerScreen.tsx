@@ -117,7 +117,7 @@ export default function PlayerScreen() {
           onPress={() => navigation.navigate(ROUTES.QUEUE as never)}
           style={styles.headerButton}
         >
-          <Text style={[styles.headerButtonText, { color: colors.text }]}>☰</Text>
+          <Text style={[styles.headerButtonText, { color: colors.text }]}>≣</Text>
         </TouchableOpacity>
       </View>
 
