@@ -120,17 +120,17 @@ export default function PlaylistsScreen() {
 
   const renderSectionHeader = (section: Section, title: string, count: number) => (
     <TouchableOpacity
-      style={styles.sectionHeader}
+      style={[styles.sectionHeader, { borderBottomColor: colors.border }]}
       onPress={() => toggleSection(section)}
     >
       <View style={styles.sectionHeaderLeft}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <Text style={styles.sectionCount}>{count}</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.sectionCount, { color: colors.textSecondary, backgroundColor: colors.surface }]}>{count}</Text>
       </View>
       <MaterialIcons 
         name={expandedSection === section ? 'expand-more' : 'chevron-right'} 
         size={24} 
-        color={THEME.colors.textSecondary} 
+        color={colors.textSecondary} 
       />
     </TouchableOpacity>
   );
@@ -195,59 +195,59 @@ export default function PlaylistsScreen() {
         {expandedSection === 'system' && (
           <View style={styles.sectionContent}>
             <TouchableOpacity 
-              style={styles.playlistItem}
+              style={[styles.playlistItem, { borderBottomColor: colors.border }]}
               onPress={() => handlePlaySystemPlaylist('favorites')}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#FF6B6B' }]}>
                 <MaterialIcons name="favorite" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.playlistInfo}>
-                <Text style={styles.playlistName}>Favorites</Text>
-                <Text style={styles.playlistMeta}>{favoritesCount} tracks</Text>
+                <Text style={[styles.playlistName, { color: colors.text }]}>Favorites</Text>
+                <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{favoritesCount} tracks</Text>
               </View>
-              <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
+              <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.playlistItem}
+              style={[styles.playlistItem, { borderBottomColor: colors.border }]}
               onPress={() => handlePlaySystemPlaylist('mostPlayed')}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#4ECDC4' }]}>
                 <MaterialIcons name="bolt" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.playlistInfo}>
-                <Text style={styles.playlistName}>Most Played</Text>
-                <Text style={styles.playlistMeta}>{mostPlayedCount} tracks</Text>
+                <Text style={[styles.playlistName, { color: colors.text }]}>Most Played</Text>
+                <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{mostPlayedCount} tracks</Text>
               </View>
-              <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
+              <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.playlistItem}
+              style={[styles.playlistItem, { borderBottomColor: colors.border }]}
               onPress={() => handlePlaySystemPlaylist('recentlyAdded')}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#45B7D1' }]}>
                 <MaterialIcons name="star" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.playlistInfo}>
-                <Text style={styles.playlistName}>Recently Added</Text>
-                <Text style={styles.playlistMeta}>{recentlyAddedCount} tracks</Text>
+                <Text style={[styles.playlistName, { color: colors.text }]}>Recently Added</Text>
+                <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{recentlyAddedCount} tracks</Text>
               </View>
-              <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
+              <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.playlistItem}
+              style={[styles.playlistItem, { borderBottomColor: colors.border }]}
               onPress={() => handlePlaySystemPlaylist('recentlyPlayed')}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#96CEB4' }]}>
                 <MaterialIcons name="history" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.playlistInfo}>
-                <Text style={styles.playlistName}>Recently Played</Text>
-                <Text style={styles.playlistMeta}>{recentlyPlayedCount} tracks</Text>
+                <Text style={[styles.playlistName, { color: colors.text }]}>Recently Played</Text>
+                <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{recentlyPlayedCount} tracks</Text>
               </View>
-              <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
+              <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
         )}
@@ -259,17 +259,17 @@ export default function PlaylistsScreen() {
             {MOOD_CATEGORIES.map((mood) => (
               <TouchableOpacity 
                 key={mood.id} 
-                style={styles.playlistItem}
+                style={[styles.playlistItem, { borderBottomColor: colors.border }]}
                 onPress={() => handlePlayMoodPlaylist(mood.id as MoodId)}
               >
                 <View style={[styles.playlistIcon, { backgroundColor: mood.color }]}>
                   <Text style={styles.playlistIconText}>{mood.icon}</Text>
                 </View>
                 <View style={styles.playlistInfo}>
-                  <Text style={styles.playlistName}>{mood.name}</Text>
-                  <Text style={styles.playlistMeta}>{moodTrackCounts[mood.id] || 0} tracks</Text>
+                  <Text style={[styles.playlistName, { color: colors.text }]}>{mood.name}</Text>
+                  <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{moodTrackCounts[mood.id] || 0} tracks</Text>
                 </View>
-                <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
+                <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             ))}
           </View>
@@ -281,23 +281,23 @@ export default function PlaylistsScreen() {
           <View style={styles.sectionContent}>
             {customPlaylists.length === 0 ? (
               <View style={styles.emptyState}>
-                <MaterialIcons name="queue-music" size={48} color={THEME.colors.textMuted} />
-                <Text style={styles.emptyStateText}>No custom playlists yet</Text>
-                <Text style={styles.emptyStateSubtext}>
+                <MaterialIcons name="queue-music" size={48} color={colors.textMuted} />
+                <Text style={[styles.emptyStateText, { color: colors.text }]}>No custom playlists yet</Text>
+                <Text style={[styles.emptyStateSubtext, { color: colors.textSecondary }]}>
                   Tap "+ New" to create your first playlist
                 </Text>
               </View>
             ) : (
               customPlaylists.map((playlist) => (
-                <TouchableOpacity key={playlist.id} style={styles.playlistItem}>
-                  <View style={[styles.playlistIcon, { backgroundColor: THEME.colors.primary }]}>
+                <TouchableOpacity key={playlist.id} style={[styles.playlistItem, { borderBottomColor: colors.border }]}>
+                  <View style={[styles.playlistIcon, { backgroundColor: colors.primary }]}>
                     <MaterialIcons name="playlist-play" size={20} color="#FFFFFF" />
                   </View>
                   <View style={styles.playlistInfo}>
-                    <Text style={styles.playlistName}>{playlist.name}</Text>
-                    <Text style={styles.playlistMeta}>{playlist.tracks.length} tracks</Text>
+                    <Text style={[styles.playlistName, { color: colors.text }]}>{playlist.name}</Text>
+                    <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{playlist.tracks.length} tracks</Text>
                   </View>
-                  <MaterialIcons name="play-arrow" size={24} color={THEME.colors.textSecondary} />
+                  <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
               ))
             )}

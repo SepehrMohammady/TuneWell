@@ -88,10 +88,10 @@ export default function PlayerScreen() {
 
   if (!currentTrack) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.emptyState}>
-          <MaterialIcons name="music-off" size={64} color={THEME.colors.textMuted} />
-          <Text style={styles.emptyStateText}>No track playing</Text>
+          <MaterialIcons name="music-off" size={64} color={colors.textMuted} />
+          <Text style={[styles.emptyStateText, { color: colors.text }]}>No track playing</Text>
         </View>
       </SafeAreaView>
     );
@@ -190,27 +190,27 @@ export default function PlayerScreen() {
           <MaterialIcons 
             name="shuffle" 
             size={24} 
-            color={isShuffled ? THEME.colors.primary : THEME.colors.textMuted} 
+            color={isShuffled ? colors.primary : colors.textMuted} 
           />
         </TouchableOpacity>
 
         {/* Previous */}
         <TouchableOpacity style={styles.controlButton} onPress={() => audioService.skipToPrevious()}>
-          <MaterialIcons name="skip-previous" size={40} color={THEME.colors.text} />
+          <MaterialIcons name="skip-previous" size={40} color={colors.text} />
         </TouchableOpacity>
 
         {/* Play/Pause */}
-        <TouchableOpacity style={styles.playButton} onPress={() => audioService.togglePlayPause()}>
+        <TouchableOpacity style={[styles.playButton, { backgroundColor: colors.primary }]} onPress={() => audioService.togglePlayPause()}>
           <MaterialIcons 
             name={isPlaying ? 'pause' : 'play-arrow'} 
             size={48} 
-            color={THEME.colors.background} 
+            color={colors.background} 
           />
         </TouchableOpacity>
 
         {/* Next */}
         <TouchableOpacity style={styles.controlButton} onPress={() => audioService.skipToNext()}>
-          <MaterialIcons name="skip-next" size={40} color={THEME.colors.text} />
+          <MaterialIcons name="skip-next" size={40} color={colors.text} />
         </TouchableOpacity>
 
         {/* Repeat */}
@@ -221,7 +221,7 @@ export default function PlayerScreen() {
           <MaterialIcons 
             name={repeatMode === 'track' ? 'repeat-one' : 'repeat'} 
             size={24} 
-            color={repeatMode !== 'off' ? THEME.colors.primary : THEME.colors.textMuted} 
+            color={repeatMode !== 'off' ? colors.primary : colors.textMuted} 
           />
         </TouchableOpacity>
       </View>
@@ -233,7 +233,7 @@ export default function PlayerScreen() {
           <MaterialIcons 
             name={trackIsFavorite ? 'favorite' : 'favorite-outline'} 
             size={28} 
-            color={trackIsFavorite ? THEME.colors.primary : THEME.colors.text} 
+            color={trackIsFavorite ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
         
@@ -245,7 +245,7 @@ export default function PlayerScreen() {
           <MaterialIcons 
             name="tune" 
             size={28} 
-            color={eqEnabled ? THEME.colors.primary : THEME.colors.text} 
+            color={eqEnabled ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
         
@@ -254,13 +254,13 @@ export default function PlayerScreen() {
           <MaterialIcons 
             name="mood" 
             size={28} 
-            color={trackMoods.length > 0 ? THEME.colors.primary : THEME.colors.text} 
+            color={trackMoods.length > 0 ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
         
         {/* Add to Playlist */}
         <TouchableOpacity style={styles.bottomAction} onPress={() => setShowPlaylistModal(true)}>
-          <MaterialIcons name="playlist-add" size={28} color={THEME.colors.text} />
+          <MaterialIcons name="playlist-add" size={28} color={colors.text} />
         </TouchableOpacity>
       </View>
 

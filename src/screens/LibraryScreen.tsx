@@ -559,8 +559,8 @@ export default function LibraryScreen() {
                   {item.sampleRate ? ` • ${item.sampleRate} Hz` : ''}
                 </Text>
               </View>
-              <View style={styles.playIcon}>
-                <MaterialIcons name="play-arrow" size={24} color={THEME.colors.primary} />
+              <View style={[styles.playIcon, { backgroundColor: colors.primary }]}>
+                <MaterialIcons name="play-arrow" size={24} color={colors.background} />
               </View>
             </TouchableOpacity>
           )}
@@ -677,17 +677,17 @@ export default function LibraryScreen() {
                 />
               ) : (
                 <View style={[styles.artistArtwork, styles.artistArtworkPlaceholder]}>
-                  <MaterialIcons name="person" size={32} color={THEME.colors.textMuted} />
+                  <MaterialIcons name="person" size={32} color={colors.textMuted} />
                 </View>
               )}
               <View style={styles.artistInfo}>
-                <Text style={styles.artistName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.artistStats}>
+                <Text style={[styles.artistName, { color: colors.text }]} numberOfLines={1}>{item.name}</Text>
+                <Text style={[styles.artistStats, { color: colors.textSecondary }]}>
                   {item.albums.size} albums • {item.tracks.length} tracks
                 </Text>
               </View>
-              <View style={styles.playIcon}>
-                <MaterialIcons name="play-arrow" size={24} color={THEME.colors.primary} />
+              <View style={[styles.playIcon, { backgroundColor: colors.primary }]}>
+                <MaterialIcons name="play-arrow" size={24} color={colors.background} />
               </View>
             </TouchableOpacity>
           )}

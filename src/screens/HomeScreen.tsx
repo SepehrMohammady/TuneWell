@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   StatusBar,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -24,12 +25,19 @@ import { THEME, ROUTES, VERSION, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
 
+// Import logo
+const logoLight = require('../../assets/logo.png');
+const logoDark = require('../../assets/logo-invert.png');
+
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { currentTrack } = usePlayerStore();
   const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood } = usePlaylistStore();
-  const { tracks } = useLibraryStore();
+  const { tracks, stats, scanFolders } = useLibraryStore();
   const { colors, mode: themeMode } = useThemeStore();
+  
+  // Choose logo based on theme
+  const logo = themeMode === 'light' ? logoLight : logoDark;
   
   // Calculate counts for quick actions
   const favoritesCount = useMemo(() => getFavoriteIds().length, [getFavoriteIds]);
@@ -55,13 +63,20 @@ export default function HomeScreen() {
     }
   };
 
+  // Format file size
+  const formatSize = (bytes: number): string => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
       
-      {/* Header */}
+      {/* Header with Logo */}
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>TuneWell</Text>
+        <Image source={logo} style={styles.logo} resizeMode="contain" />
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>v{VERSION.versionString}</Text>
       </View>
 
@@ -70,41 +85,32 @@ export default function HomeScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Quick Actions */}
+        {/* Library Stats */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Access</Text>
-          <View style={styles.quickActions}>
-            <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: colors.surface }]}
-              onPress={() => navigation.navigate(ROUTES.LIBRARY as never)}
-            >
-              <MaterialIcons name="library-music" size={28} color={colors.text} />
-              <Text style={[styles.quickActionText, { color: colors.text }]}>Library</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: colors.surface }]}
-              onPress={() => navigation.navigate(ROUTES.PLAYLISTS as never)}
-            >
-              <MaterialIcons name="favorite-outline" size={28} color={colors.text} />
-              <Text style={[styles.quickActionText, { color: colors.text }]}>Favorites</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: colors.surface }]}
-              onPress={() => navigation.navigate(ROUTES.EQUALIZER as never)}
-            >
-              <MaterialIcons name="tune" size={28} color={colors.text} />
-              <Text style={[styles.quickActionText, { color: colors.text }]}>Equalizer</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: colors.surface }]}
-              onPress={() => navigation.navigate(ROUTES.SETTINGS as never)}
-            >
-              <MaterialIcons name="settings" size={28} color={colors.text} />
-              <Text style={[styles.quickActionText, { color: colors.text }]}>Settings</Text>
-            </TouchableOpacity>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Library</Text>
+          <View style={[styles.statsCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <MaterialIcons name="music-note" size={24} color={colors.primary} />
+                <Text style={[styles.statValue, { color: colors.text }]}>{stats?.totalTracks || tracks.length || 0}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Tracks</Text>
+              </View>
+              <View style={styles.statItem}>
+                <MaterialIcons name="folder" size={24} color={colors.primary} />
+                <Text style={[styles.statValue, { color: colors.text }]}>{scanFolders.length}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Folders</Text>
+              </View>
+              <View style={styles.statItem}>
+                <MaterialIcons name="favorite" size={24} color={colors.primary} />
+                <Text style={[styles.statValue, { color: colors.text }]}>{favoritesCount}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Favorites</Text>
+              </View>
+              <View style={styles.statItem}>
+                <MaterialIcons name="storage" size={24} color={colors.primary} />
+                <Text style={[styles.statValue, { color: colors.text }]}>{formatSize(stats?.totalSize || 0)}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Size</Text>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -125,12 +131,15 @@ export default function HomeScreen() {
                 const track = tracks.find(t => t.id === trackId);
                 return (
                   <View key={`${trackId}-${index}`} style={[styles.recentItem, { borderBottomColor: colors.border }]}>
-                    <Text style={[styles.recentItemText, { color: colors.text }]} numberOfLines={1}>
-                      {track?.title || track?.fileName || 'Unknown Track'}
-                    </Text>
-                    <Text style={[styles.recentItemSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {track?.artist || 'Unknown Artist'}
-                    </Text>
+                    <MaterialIcons name="music-note" size={20} color={colors.textMuted} style={styles.recentIcon} />
+                    <View style={styles.recentInfo}>
+                      <Text style={[styles.recentItemText, { color: colors.text }]} numberOfLines={1}>
+                        {track?.title || track?.fileName || 'Unknown Track'}
+                      </Text>
+                      <Text style={[styles.recentItemSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {track?.artist || 'Unknown Artist'}
+                      </Text>
+                    </View>
                   </View>
                 );
               })}
@@ -162,25 +171,6 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        {/* Audio Quality Info */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Audio Quality</Text>
-          <View style={[styles.qualityCard, { backgroundColor: colors.surface }]}>
-            <View style={[styles.qualityItem, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Supported Formats</Text>
-              <Text style={[styles.qualityValue, { color: colors.text }]}>FLAC, DSD, WAV, MP3, AAC</Text>
-            </View>
-            <View style={[styles.qualityItem, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>High-Res Audio</Text>
-              <Text style={[styles.qualityValue, { color: colors.text }]}>Up to 32-bit/384kHz, DSD512</Text>
-            </View>
-            <View style={[styles.qualityItem, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>DAC Support</Text>
-              <Text style={[styles.qualityValue, { color: colors.text }]}>USB DAC, Bluetooth HD</Text>
-            </View>
-          </View>
-        </View>
-
         {/* Spacer for mini player */}
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -198,14 +188,15 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: THEME.spacing.lg,
     paddingTop: THEME.spacing.md,
-    paddingBottom: THEME.spacing.lg,
+    paddingBottom: THEME.spacing.sm,
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
+  logo: {
+    height: 48,
+    width: 160,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 12,
     marginTop: 4,
   },
   content: {
@@ -222,58 +213,63 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: THEME.spacing.md,
   },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  quickAction: {
-    flex: 1,
+  statsCard: {
     borderRadius: THEME.borderRadius.lg,
-    padding: THEME.spacing.md,
-    marginHorizontal: 4,
+    padding: THEME.spacing.lg,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
     alignItems: 'center',
   },
-  quickActionBadge: {
-    position: 'relative',
-    marginBottom: 8,
+  statValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 8,
   },
-  badgeText: {
-    position: 'absolute',
-    top: -4,
-    right: -8,
-    fontSize: 10,
-    fontWeight: '600',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 8,
-    minWidth: 16,
-    textAlign: 'center',
-  },
-  quickActionIcon: {
-    fontSize: 24,
-    marginBottom: 8,
-  },
-  quickActionText: {
+  statLabel: {
     fontSize: 12,
-    fontWeight: '500',
+    marginTop: 4,
   },
   emptyState: {
     borderRadius: THEME.borderRadius.lg,
     padding: THEME.spacing.xl,
     alignItems: 'center',
   },
-  emptyStateIcon: {
-    fontSize: 48,
-    marginBottom: THEME.spacing.md,
-  },
   emptyStateText: {
     fontSize: 16,
     fontWeight: '500',
+    marginTop: THEME.spacing.md,
     marginBottom: 4,
   },
   emptyStateSubtext: {
     fontSize: 14,
     textAlign: 'center',
+  },
+  recentList: {
+    borderRadius: THEME.borderRadius.lg,
+    padding: THEME.spacing.md,
+  },
+  recentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: THEME.spacing.sm,
+    borderBottomWidth: 1,
+  },
+  recentIcon: {
+    marginRight: THEME.spacing.sm,
+  },
+  recentInfo: {
+    flex: 1,
+  },
+  recentItemText: {
+    fontSize: 14,
+  },
+  recentItemSubtext: {
+    fontSize: 12,
+    marginTop: 2,
   },
   moodContainer: {
     paddingRight: THEME.spacing.lg,
@@ -300,38 +296,5 @@ const styles = StyleSheet.create({
   moodCount: {
     fontSize: 11,
     marginTop: 4,
-  },
-  recentList: {
-    borderRadius: THEME.borderRadius.lg,
-    padding: THEME.spacing.md,
-  },
-  recentItem: {
-    paddingVertical: THEME.spacing.sm,
-    borderBottomWidth: 1,
-  },
-  recentItemText: {
-    fontSize: 14,
-  },
-  recentItemSubtext: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  qualityCard: {
-    borderRadius: THEME.borderRadius.lg,
-    padding: THEME.spacing.lg,
-  },
-  qualityItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: THEME.spacing.sm,
-    borderBottomWidth: 1,
-  },
-  qualityLabel: {
-    fontSize: 14,
-  },
-  qualityValue: {
-    fontSize: 14,
-    fontWeight: '500',
   },
 });

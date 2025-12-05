@@ -133,39 +133,39 @@ export default function EqualizerScreen() {
     return (
       <View key={frequency} style={styles.bandContainer}>
         <TouchableOpacity 
-          style={styles.bandAdjustButton}
+          style={[styles.bandAdjustButton, { backgroundColor: colors.surface }]}
           onPress={() => handleBandAdjust(index, 'up')}
         >
-          <Text style={styles.bandAdjustText}>+</Text>
+          <Text style={[styles.bandAdjustText, { color: colors.text }]}>+</Text>
         </TouchableOpacity>
-        <Text style={styles.bandGain}>{gain > 0 ? '+' : ''}{gain}</Text>
+        <Text style={[styles.bandGain, { color: colors.textSecondary }]}>{gain > 0 ? '+' : ''}{gain}</Text>
         <View 
-          style={styles.sliderTrack}
+          style={[styles.sliderTrack, { backgroundColor: colors.surfaceLight }]}
           onLayout={(e) => { sliderHeights[index] = e.nativeEvent.layout.height; }}
           onStartShouldSetResponder={() => true}
           onMoveShouldSetResponder={() => true}
           onResponderGrant={(e) => handleSliderTouch(index, e.nativeEvent.locationY, sliderHeights[index])}
           onResponderMove={(e) => handleSliderTouch(index, e.nativeEvent.locationY, sliderHeights[index])}
         >
-          <View style={styles.sliderTrackBg} />
+          <View style={[styles.sliderTrackBg, { backgroundColor: colors.textMuted }]} />
           <View 
             style={[
               styles.sliderFill,
               { 
                 height: `${normalizedGain}%`,
-                backgroundColor: gain >= 0 ? THEME.colors.primary : THEME.colors.textSecondary,
+                backgroundColor: gain >= 0 ? colors.primary : colors.textSecondary,
               }
             ]} 
           />
-          <View style={[styles.sliderThumb, { bottom: `${Math.max(0, Math.min(95, normalizedGain - 2.5))}%` }]} />
+          <View style={[styles.sliderThumb, { bottom: `${Math.max(0, Math.min(95, normalizedGain - 2.5))}%`, backgroundColor: colors.text }]} />
         </View>
         <TouchableOpacity 
-          style={styles.bandAdjustButton}
+          style={[styles.bandAdjustButton, { backgroundColor: colors.surface }]}
           onPress={() => handleBandAdjust(index, 'down')}
         >
-          <Text style={styles.bandAdjustText}>−</Text>
+          <Text style={[styles.bandAdjustText, { color: colors.text }]}>−</Text>
         </TouchableOpacity>
-        <Text style={styles.bandFreq}>{formatFrequency(frequency)}</Text>
+        <Text style={[styles.bandFreq, { color: colors.textSecondary }]}>{formatFrequency(frequency)}</Text>
       </View>
     );
   };
@@ -227,11 +227,11 @@ export default function EqualizerScreen() {
         </View>
 
         {/* EQ Bands */}
-        <View style={styles.eqSection}>
+        <View style={[styles.eqSection, { backgroundColor: colors.surface }]}>
           <View style={styles.scaleLabels}>
-            <Text style={styles.scaleLabel}>+12 dB</Text>
-            <Text style={styles.scaleLabel}>0 dB</Text>
-            <Text style={styles.scaleLabel}>−12 dB</Text>
+            <Text style={[styles.scaleLabel, { color: colors.textSecondary }]}>+12 dB</Text>
+            <Text style={[styles.scaleLabel, { color: colors.textSecondary }]}>0 dB</Text>
+            <Text style={[styles.scaleLabel, { color: colors.textSecondary }]}>−12 dB</Text>
           </View>
           <View style={styles.bandsContainer}>
             {bands.map((band, index) => 
@@ -243,9 +243,9 @@ export default function EqualizerScreen() {
         {/* Presets */}
         <View style={styles.presetsSection}>
           <View style={styles.presetHeader}>
-            <Text style={styles.sectionTitle}>Presets</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Presets</Text>
             <TouchableOpacity onPress={resetToFlat}>
-              <Text style={styles.resetButton}>Reset</Text>
+              <Text style={[styles.resetButton, { color: colors.primary }]}>Reset</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.presetsGrid}>
@@ -254,14 +254,16 @@ export default function EqualizerScreen() {
                 key={preset}
                 style={[
                   styles.presetChip,
-                  currentPreset === preset && styles.presetChipActive,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                  currentPreset === preset && { backgroundColor: colors.primary, borderColor: colors.primary },
                 ]}
                 onPress={() => setPreset(preset as any)}
               >
                 <Text
                   style={[
                     styles.presetChipText,
-                    currentPreset === preset && styles.presetChipTextActive,
+                    { color: colors.textSecondary },
+                    currentPreset === preset && { color: colors.text },
                   ]}
                 >
                   {PRESET_NAMES[preset]}
@@ -273,32 +275,32 @@ export default function EqualizerScreen() {
 
         {/* Custom Presets */}
         <View style={styles.customSection}>
-          <Text style={styles.sectionTitle}>Custom Presets</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Custom Presets</Text>
           <View style={styles.customActions}>
-            <TouchableOpacity style={styles.customButton} onPress={handleSavePreset}>
-              <Text style={styles.customButtonText}>💾 Save</Text>
+            <TouchableOpacity style={[styles.customButton, { backgroundColor: colors.surface }]} onPress={handleSavePreset}>
+              <Text style={[styles.customButtonText, { color: colors.text }]}>💾 Save</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.customButton} onPress={handleExportPreset}>
-              <Text style={styles.customButtonText}>📤 Export</Text>
+            <TouchableOpacity style={[styles.customButton, { backgroundColor: colors.surface }]} onPress={handleExportPreset}>
+              <Text style={[styles.customButtonText, { color: colors.text }]}>📤 Export</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.customButton} onPress={handleImportPreset}>
-              <Text style={styles.customButtonText}>📥 Import</Text>
+            <TouchableOpacity style={[styles.customButton, { backgroundColor: colors.surface }]} onPress={handleImportPreset}>
+              <Text style={[styles.customButtonText, { color: colors.text }]}>📥 Import</Text>
             </TouchableOpacity>
           </View>
           {savedPresets.length > 0 && (
-            <View style={styles.savedPresetsContainer}>
-              <Text style={styles.savedPresetsTitle}>Saved Presets:</Text>
+            <View style={[styles.savedPresetsContainer, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.savedPresetsTitle, { color: colors.textSecondary }]}>Saved Presets:</Text>
               {savedPresets.map((preset, idx) => (
                 <TouchableOpacity 
                   key={idx} 
-                  style={styles.savedPresetItem}
+                  style={[styles.savedPresetItem, { backgroundColor: colors.surfaceLight }]}
                   onPress={() => {
                     preset.bands.forEach((band, i) => setBandGain(i, band.gain));
                     setPreamp(preset.preamp);
                     Alert.alert('Applied', `Preset "${preset.name}" applied`);
                   }}
                 >
-                  <Text style={styles.savedPresetName}>{preset.name}</Text>
+                  <Text style={[styles.savedPresetName, { color: colors.text }]}>{preset.name}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -317,29 +319,29 @@ export default function EqualizerScreen() {
         onRequestClose={() => setShowSaveModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Save Preset</Text>
-            <Text style={styles.modalSubtitle}>Enter a name for this preset:</Text>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Save Preset</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>Enter a name for this preset:</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { backgroundColor: colors.background, color: colors.text }]}
               value={presetName}
               onChangeText={setPresetName}
               placeholder="My Custom Preset"
-              placeholderTextColor={THEME.colors.textMuted}
+              placeholderTextColor={colors.textMuted}
               autoFocus
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={styles.modalCancelButton}
+                style={[styles.modalCancelButton, { backgroundColor: colors.surfaceLight }]}
                 onPress={() => setShowSaveModal(false)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.modalSaveButton}
+                style={[styles.modalSaveButton, { backgroundColor: colors.primary }]}
                 onPress={confirmSavePreset}
               >
-                <Text style={styles.modalSaveText}>Save</Text>
+                <Text style={[styles.modalSaveText, { color: colors.text }]}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>

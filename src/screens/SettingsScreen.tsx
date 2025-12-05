@@ -18,6 +18,7 @@ import {
   StatusBar,
   Switch,
   Linking,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME, VERSION, APP_INFO } from '../config';
@@ -25,6 +26,10 @@ import { useSettingsStore, useLibraryStore, usePlayerStore, useThemeStore } from
 import type { ThemeMode } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
 import OptionPicker from '../components/common/OptionPicker';
+
+// Import logo
+const logoLight = require('../../assets/logo.png');
+const logoDark = require('../../assets/logo-invert.png');
 
 // Theme mode options
 const THEME_OPTIONS = [
@@ -282,10 +287,19 @@ export default function SettingsScreen() {
         {/* About Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
-          <View style={[styles.sectionContent, { backgroundColor: colors.surface }]}>
-            {renderSettingRow('App Name', APP_INFO.name)}
-            {renderSettingRow('Version', VERSION.fullVersion)}
-            {renderSettingRow('Release Date', VERSION.releaseDate)}
+          <View style={[styles.sectionContent, styles.aboutContent, { backgroundColor: colors.surface }]}>
+            <Image 
+              source={themeMode === 'light' ? logoLight : logoDark} 
+              style={styles.aboutLogo} 
+              resizeMode="contain" 
+            />
+            <Text style={[styles.aboutTagline, { color: colors.textSecondary }]}>
+              Engineering-Ready Music Player
+            </Text>
+            <View style={styles.aboutInfo}>
+              {renderSettingRow('Version', VERSION.fullVersion)}
+              {renderSettingRow('Release Date', VERSION.releaseDate)}
+            </View>
             <TouchableOpacity
               style={styles.linkRow}
               onPress={() => {
@@ -449,6 +463,22 @@ const styles = StyleSheet.create({
   chevron: {
     fontSize: 20,
     marginLeft: THEME.spacing.xs,
+  },
+  aboutContent: {
+    alignItems: 'center',
+    paddingVertical: THEME.spacing.lg,
+  },
+  aboutLogo: {
+    height: 60,
+    width: 200,
+    marginBottom: THEME.spacing.sm,
+  },
+  aboutTagline: {
+    fontSize: 14,
+    marginBottom: THEME.spacing.lg,
+  },
+  aboutInfo: {
+    width: '100%',
   },
   linkRow: {
     flexDirection: 'row',
