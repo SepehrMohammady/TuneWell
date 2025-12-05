@@ -7,6 +7,7 @@ export {
   formatBitDepth,
   formatBitRate,
   getQualityLabel,
+  scannedTrackToTrack,
 } from './MetadataService';
 
 export type { AudioMetadata } from './MetadataService';

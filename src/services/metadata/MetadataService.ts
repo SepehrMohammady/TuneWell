@@ -10,6 +10,7 @@
  */
 
 import type { Track } from '../../types';
+import type { ScannedTrack } from '../libraryScanner';
 import {
   SUPPORTED_AUDIO_FORMATS,
   LOSSLESS_FORMATS,
@@ -292,6 +293,42 @@ export function getQualityLabel(track: Track): string {
   return track.format.toUpperCase();
 }
 
+/**
+ * Convert ScannedTrack to Track format for playback
+ */
+export function scannedTrackToTrack(scannedTrack: ScannedTrack): Track {
+  return {
+    id: scannedTrack.id,
+    uri: scannedTrack.uri,
+    filePath: scannedTrack.path,
+    fileName: scannedTrack.filename,
+    folderPath: scannedTrack.folder,
+    folderName: scannedTrack.folder.split('/').pop() || 'Music',
+    title: scannedTrack.title || scannedTrack.filename.replace(/\.[^/.]+$/, ''),
+    artist: scannedTrack.artist || 'Unknown Artist',
+    album: scannedTrack.album || 'Unknown Album',
+    albumArtist: scannedTrack.albumArtist,
+    genre: scannedTrack.genre,
+    year: scannedTrack.year ? parseInt(scannedTrack.year, 10) : undefined,
+    trackNumber: scannedTrack.trackNumber ? parseInt(scannedTrack.trackNumber, 10) : undefined,
+    duration: scannedTrack.duration || 0,
+    sampleRate: scannedTrack.sampleRate ? parseInt(scannedTrack.sampleRate, 10) : 44100,
+    bitDepth: 16,
+    bitRate: scannedTrack.bitrate ? parseInt(scannedTrack.bitrate, 10) : undefined,
+    channels: 2,
+    format: scannedTrack.extension.replace('.', '').toUpperCase(),
+    isLossless: ['.flac', '.wav', '.aiff', '.alac', '.ape'].includes(scannedTrack.extension.toLowerCase()),
+    isHighRes: scannedTrack.sampleRate ? parseInt(scannedTrack.sampleRate, 10) > 48000 : false,
+    isDSD: ['.dff', '.dsf', '.dsd'].includes(scannedTrack.extension.toLowerCase()),
+    artworkUri: scannedTrack.albumArtUri || scannedTrack.artwork || undefined,
+    playCount: 0,
+    isFavorite: false,
+    moods: [],
+    dateAdded: scannedTrack.modifiedAt,
+    dateModified: scannedTrack.modifiedAt,
+  };
+}
+
 export default {
   isSupportedAudioFile,
   parseAudioMetadata,
@@ -301,4 +338,5 @@ export default {
   formatBitDepth,
   formatBitRate,
   getQualityLabel,
+  scannedTrackToTrack,
 };
