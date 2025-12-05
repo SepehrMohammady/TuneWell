@@ -161,7 +161,18 @@ export default function PlayerScreen() {
 
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
-        <View style={[styles.progressBar, { backgroundColor: colors.surface }]}>
+        <TouchableOpacity
+          style={[styles.progressBar, { backgroundColor: colors.surface }]}
+          activeOpacity={0.8}
+          onPress={(e) => {
+            const { locationX } = e.nativeEvent;
+            const barWidth = SCREEN_WIDTH - (THEME.spacing.xl * 2);
+            const seekPosition = (locationX / barWidth) * progress.duration;
+            if (seekPosition >= 0 && seekPosition <= progress.duration) {
+              audioService.seekTo(seekPosition);
+            }
+          }}
+        >
           <View
             style={[
               styles.progressFill,
@@ -173,10 +184,10 @@ export default function PlayerScreen() {
               },
             ]}
           />
-        </View>
+        </TouchableOpacity>
         <View style={styles.progressTime}>
-          <Text style={styles.timeText}>{formatDuration(progress.position)}</Text>
-          <Text style={styles.timeText}>{formatDuration(progress.duration)}</Text>
+          <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(progress.position)}</Text>
+          <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(progress.duration)}</Text>
         </View>
       </View>
 
@@ -439,15 +450,16 @@ const styles = StyleSheet.create({
     marginTop: THEME.spacing.xl,
   },
   progressBar: {
-    height: 4,
+    height: 8,
     backgroundColor: THEME.colors.surface,
-    borderRadius: 2,
+    borderRadius: 4,
     overflow: 'hidden',
+    justifyContent: 'center',
   },
   progressFill: {
     height: '100%',
     backgroundColor: THEME.colors.text,
-    borderRadius: 2,
+    borderRadius: 4,
   },
   progressTime: {
     flexDirection: 'row',

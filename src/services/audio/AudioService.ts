@@ -551,10 +551,32 @@ class AudioService {
         await TrackPlayer.seekTo(0);
         return true;
       }
-      await TrackPlayer.skipToPrevious();
+      
+      const queue = await TrackPlayer.getQueue();
+      const currentIndex = await TrackPlayer.getActiveTrackIndex();
+      
+      if (currentIndex === undefined || currentIndex === null) {
+        return false;
+      }
+      
+      let prevIndex = currentIndex - 1;
+      const { repeatMode } = usePlayerStore.getState();
+      
+      if (prevIndex < 0) {
+        if (repeatMode === 'queue') {
+          prevIndex = queue.length - 1;
+        } else {
+          // At the beginning, restart current track
+          await TrackPlayer.seekTo(0);
+          return true;
+        }
+      }
+      
+      await TrackPlayer.skip(prevIndex);
       usePlayerStore.getState().skipToPrevious();
       return true;
-    } catch {
+    } catch (error) {
+      console.error('[AudioService] skipToPrevious error:', error);
       return false;
     }
   }

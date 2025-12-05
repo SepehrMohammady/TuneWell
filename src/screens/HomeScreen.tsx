@@ -16,18 +16,13 @@ import {
   TouchableOpacity,
   StatusBar,
   Alert,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { THEME, ROUTES, VERSION, MOOD_CATEGORIES, MoodId } from '../config';
+import { THEME, ROUTES, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
-
-// Import logo
-const logoLight = require('../../assets/logo.png');
-const logoDark = require('../../assets/logo-invert.png');
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -35,9 +30,6 @@ export default function HomeScreen() {
   const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood } = usePlaylistStore();
   const { tracks, stats, scanFolders } = useLibraryStore();
   const { colors, mode: themeMode } = useThemeStore();
-  
-  // Choose logo based on theme
-  const logo = themeMode === 'light' ? logoLight : logoDark;
   
   // Calculate counts for quick actions
   const favoritesCount = useMemo(() => getFavoriteIds().length, [getFavoriteIds]);
@@ -73,12 +65,6 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
-      
-      {/* Header with Logo */}
-      <View style={styles.header}>
-        <Image source={logo} style={styles.logo} resizeMode="contain" />
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>v{VERSION.versionString}</Text>
-      </View>
 
       <ScrollView 
         style={styles.content}
@@ -150,11 +136,7 @@ export default function HomeScreen() {
         {/* Mood Playlists */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Mood Playlists</Text>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.moodContainer}
-          >
+          <View style={styles.moodGrid}>
             {MOOD_CATEGORIES.map((mood) => (
               <TouchableOpacity
                 key={mood.id}
@@ -168,7 +150,7 @@ export default function HomeScreen() {
                 </Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
         </View>
 
         {/* Spacer for mini player */}
@@ -185,25 +167,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: THEME.spacing.lg,
-    paddingTop: THEME.spacing.md,
-    paddingBottom: THEME.spacing.sm,
-    alignItems: 'center',
-  },
-  logo: {
-    height: 48,
-    width: 160,
-  },
-  subtitle: {
-    fontSize: 12,
-    marginTop: 4,
-  },
   content: {
     flex: 1,
   },
   contentContainer: {
     paddingHorizontal: THEME.spacing.lg,
+    paddingTop: THEME.spacing.md,
   },
   section: {
     marginBottom: THEME.spacing.xl,
@@ -271,17 +240,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  moodContainer: {
-    paddingRight: THEME.spacing.lg,
+  moodGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
   moodCard: {
     borderRadius: THEME.borderRadius.md,
     padding: THEME.spacing.md,
-    marginRight: THEME.spacing.sm,
+    marginBottom: THEME.spacing.sm,
     alignItems: 'center',
     borderWidth: 1,
-    width: 90,
-    height: 90,
+    width: '31%',
+    aspectRatio: 1,
     justifyContent: 'center',
   },
   moodIcon: {

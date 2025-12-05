@@ -127,7 +127,7 @@ export default function LibraryScreen() {
           comparison = (a.album || 'Unknown').localeCompare(b.album || 'Unknown');
           break;
         case 'dateAdded':
-          comparison = (a.dateAdded || 0) - (b.dateAdded || 0);
+          comparison = (a.modifiedAt || 0) - (b.modifiedAt || 0);
           break;
         case 'duration':
           comparison = (a.duration || 0) - (b.duration || 0);

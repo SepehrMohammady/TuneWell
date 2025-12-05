@@ -293,9 +293,6 @@ export default function SettingsScreen() {
               style={styles.aboutLogo} 
               resizeMode="contain" 
             />
-            <Text style={[styles.aboutTagline, { color: colors.textSecondary }]}>
-              Engineering-Ready Music Player
-            </Text>
             <View style={styles.aboutInfo}>
               {renderSettingRow('Version', VERSION.fullVersion)}
               {renderSettingRow('Release Date', VERSION.releaseDate)}
@@ -469,12 +466,8 @@ const styles = StyleSheet.create({
     paddingVertical: THEME.spacing.lg,
   },
   aboutLogo: {
-    height: 60,
-    width: 200,
-    marginBottom: THEME.spacing.sm,
-  },
-  aboutTagline: {
-    fontSize: 14,
+    height: 80,
+    width: 260,
     marginBottom: THEME.spacing.lg,
   },
   aboutInfo: {

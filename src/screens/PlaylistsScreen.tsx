@@ -22,7 +22,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
-import { usePlayerStore, usePlaylistStore, useThemeStore } from '../store';
+import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
+import { audioService } from '../services/audio';
+import { scannedTrackToTrack } from '../services/metadata';
 import MiniPlayer from '../components/player/MiniPlayer';
 
 type Section = 'system' | 'mood' | 'custom';
@@ -33,6 +35,7 @@ export default function PlaylistsScreen() {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const { currentTrack } = usePlayerStore();
   const { colors, mode: themeMode } = useThemeStore();
+  const { tracks } = useLibraryStore();
   
   // Get playlist store data
   const { 
@@ -101,9 +104,26 @@ export default function PlaylistsScreen() {
       return;
     }
     
-    // TODO: Load actual track data and play
-    Alert.alert('Coming Soon', `Playing ${trackIds.length} tracks from playlist`);
-  }, [getFavoriteIds, getMostPlayedIds, getRecentlyPlayedIds]);
+    // Get actual track data from library
+    const playlistTracks = trackIds
+      .map(id => tracks.find(t => t.id === id))
+      .filter((t): t is NonNullable<typeof t> => t !== undefined);
+    
+    if (playlistTracks.length === 0) {
+      Alert.alert('Error', 'Could not find tracks in library.');
+      return;
+    }
+    
+    // Convert to queue items and play
+    const queueItems = playlistTracks.map(track => ({
+      id: `queue_${track.id}_${Date.now()}`,
+      track: scannedTrackToTrack(track),
+      addedAt: Date.now(),
+      source: 'playlist' as const,
+    }));
+    
+    await audioService.playQueue(queueItems, 0);
+  }, [getFavoriteIds, getMostPlayedIds, getRecentlyPlayedIds, tracks]);
   
   // Play a mood playlist
   const handlePlayMoodPlaylist = useCallback(async (moodId: MoodId) => {
@@ -114,9 +134,26 @@ export default function PlaylistsScreen() {
       return;
     }
     
-    // TODO: Load actual track data and play
-    Alert.alert('Coming Soon', `Playing ${trackIds.length} ${moodId} tracks`);
-  }, [getTracksByMood]);
+    // Get actual track data from library
+    const playlistTracks = trackIds
+      .map(id => tracks.find(t => t.id === id))
+      .filter((t): t is NonNullable<typeof t> => t !== undefined);
+    
+    if (playlistTracks.length === 0) {
+      Alert.alert('Error', 'Could not find tracks in library.');
+      return;
+    }
+    
+    // Convert to queue items and play
+    const queueItems = playlistTracks.map(track => ({
+      id: `queue_${track.id}_${Date.now()}`,
+      track: scannedTrackToTrack(track),
+      addedAt: Date.now(),
+      source: 'playlist' as const,
+    }));
+    
+    await audioService.playQueue(queueItems, 0);
+  }, [getTracksByMood, tracks]);
 
   const renderSectionHeader = (section: Section, title: string, count: number) => (
     <TouchableOpacity
@@ -295,7 +332,7 @@ export default function PlaylistsScreen() {
                   </View>
                   <View style={styles.playlistInfo}>
                     <Text style={[styles.playlistName, { color: colors.text }]}>{playlist.name}</Text>
-                    <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{playlist.tracks.length} tracks</Text>
+                    <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{playlist.trackIds.length} tracks</Text>
                   </View>
                   <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
