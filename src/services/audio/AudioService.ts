@@ -479,6 +479,21 @@ class AudioService {
       usePlayerStore.getState().setState('playing');
       return;
     }
+    
+    // Check if there's a queue loaded in TrackPlayer
+    const queue = await TrackPlayer.getQueue();
+    if (queue.length === 0) {
+      // No queue - try to reload from store
+      const storeQueue = usePlayerStore.getState().queue;
+      if (storeQueue.length > 0) {
+        const queueIndex = usePlayerStore.getState().queueIndex;
+        await this.playQueue(storeQueue, queueIndex);
+        return;
+      }
+      console.warn('[AudioService] No queue to play');
+      return;
+    }
+    
     await TrackPlayer.play();
   }
 
@@ -498,9 +513,13 @@ class AudioService {
 
   /**
    * Toggle play/pause
+   * Optimized for responsiveness - uses store state to avoid extra async calls
    */
   async togglePlayPause(): Promise<void> {
-    // Check if native decoder is active
+    // Use store state for immediate response instead of querying TrackPlayer
+    const storeState = usePlayerStore.getState().state;
+    
+    // Check if native decoder is active (quick async check)
     const nativeState = await nativeDecoderService.getState();
     if (nativeState?.currentUri) {
       if (nativeState.isPaused) {
@@ -511,8 +530,8 @@ class AudioService {
       return;
     }
     
-    const state = await TrackPlayer.getPlaybackState();
-    if (state.state === State.Playing) {
+    // Use store state for faster response
+    if (storeState === 'playing') {
       await this.pause();
     } else {
       await this.play();
@@ -555,29 +574,24 @@ class AudioService {
       const queue = await TrackPlayer.getQueue();
       const currentIndex = await TrackPlayer.getActiveTrackIndex();
       
-      if (currentIndex === undefined || currentIndex === null) {
-        return false;
+      // If at the beginning or no track, just seek to start
+      if (currentIndex === undefined || currentIndex === null || currentIndex === 0) {
+        await TrackPlayer.seekTo(0);
+        return true;
       }
       
-      let prevIndex = currentIndex - 1;
-      const { repeatMode } = usePlayerStore.getState();
-      
-      if (prevIndex < 0) {
-        if (repeatMode === 'queue') {
-          prevIndex = queue.length - 1;
-        } else {
-          // At the beginning, restart current track
-          await TrackPlayer.seekTo(0);
-          return true;
-        }
-      }
-      
-      await TrackPlayer.skip(prevIndex);
-      usePlayerStore.getState().skipToPrevious();
+      // Skip to previous track
+      await TrackPlayer.skipToPrevious();
       return true;
     } catch (error) {
       console.error('[AudioService] skipToPrevious error:', error);
-      return false;
+      // On error, try to seek to beginning
+      try {
+        await TrackPlayer.seekTo(0);
+        return true;
+      } catch {
+        return false;
+      }
     }
   }
 

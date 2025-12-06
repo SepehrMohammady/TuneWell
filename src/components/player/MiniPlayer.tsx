@@ -73,28 +73,24 @@ export default function MiniPlayer() {
     ? (progress.position / progress.duration) * 100
     : 0;
 
-  const handlePlayPause = async () => {
-    try {
-      await audioService.togglePlayPause();
-    } catch (error) {
+  // Fire-and-forget handlers for immediate UI response
+  // The store state will be updated by TrackPlayer event listeners
+  const handlePlayPause = () => {
+    audioService.togglePlayPause().catch(error => {
       console.error('Play/pause error:', error);
-    }
+    });
   };
 
-  const handlePrevious = async () => {
-    try {
-      await audioService.skipToPrevious();
-    } catch (error) {
+  const handlePrevious = () => {
+    audioService.skipToPrevious().catch(error => {
       console.error('Previous error:', error);
-    }
+    });
   };
 
-  const handleNext = async () => {
-    try {
-      await audioService.skipToNext();
-    } catch (error) {
+  const handleNext = () => {
+    audioService.skipToNext().catch(error => {
       console.error('Next error:', error);
-    }
+    });
   };
 
   return (
