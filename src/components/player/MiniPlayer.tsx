@@ -17,13 +17,16 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { useProgress } from 'react-native-track-player';
 import { THEME, ROUTES } from '../../config';
 import { usePlayerStore } from '../../store';
 import { audioService } from '../../services/audio';
 
 export default function MiniPlayer() {
   const navigation = useNavigation();
-  const { currentTrack, state, progress, setCurrentTrack } = usePlayerStore();
+  // Use TrackPlayer's useProgress hook directly for real-time updates
+  const progress = useProgress();
+  const { currentTrack, state, setCurrentTrack } = usePlayerStore();
   const [isDismissed, setIsDismissed] = useState(false);
   const translateY = useRef(new Animated.Value(0)).current;
   

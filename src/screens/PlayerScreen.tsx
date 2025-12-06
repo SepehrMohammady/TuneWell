@@ -25,6 +25,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { useProgress } from 'react-native-track-player';
 import { THEME, ROUTES, MOOD_CATEGORIES } from '../config';
 import { usePlayerStore, useEQStore, usePlaylistStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
@@ -36,10 +37,11 @@ const ARTWORK_SIZE = SCREEN_WIDTH - 80;
 export default function PlayerScreen() {
   const navigation = useNavigation();
   const { colors, mode: themeMode } = useThemeStore();
+  // Use TrackPlayer's useProgress hook directly for real-time updates
+  const progress = useProgress();
   const {
     currentTrack,
     state,
-    progress,
     repeatMode,
     isShuffled,
     cycleRepeatMode,

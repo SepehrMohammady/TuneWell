@@ -15,7 +15,7 @@ import TrackPlayer, {
   useProgress,
   useActiveTrack,
 } from 'react-native-track-player';
-import { usePlayerStore, useEQStore, usePlaylistStore } from '../../store';
+import { usePlayerStore, useEQStore, usePlaylistStore, useSettingsStore } from '../../store';
 import { setupTrackPlayer, mapPlayerState, mapRepeatMode } from './TrackPlayerService';
 import { eqService } from '../../native/AudioEqualizer';
 import { nativeDecoderService } from '../../native/NativeAudioDecoder';
@@ -133,6 +133,43 @@ class AudioService {
   private eqInitialized = false;
   private eventSubscriptions: (() => void)[] = [];
   private eqUnsubscribe: (() => void) | null = null;
+  private isFading = false;
+  private savedVolume = 1.0;
+
+  /**
+   * Fade volume over duration
+   */
+  private async fadeVolume(
+    fromVolume: number,
+    toVolume: number,
+    durationMs: number,
+    onComplete?: () => Promise<void>
+  ): Promise<void> {
+    if (durationMs <= 0) {
+      await TrackPlayer.setVolume(toVolume);
+      if (onComplete) await onComplete();
+      return;
+    }
+
+    const steps = 20; // Number of steps for smooth fade
+    const stepDuration = durationMs / steps;
+    const volumeStep = (toVolume - fromVolume) / steps;
+
+    this.isFading = true;
+    let currentVolume = fromVolume;
+
+    for (let i = 0; i < steps && this.isFading; i++) {
+      currentVolume += volumeStep;
+      await TrackPlayer.setVolume(Math.max(0, Math.min(1, currentVolume)));
+      await new Promise(resolve => setTimeout(resolve, stepDuration));
+    }
+
+    // Ensure we end at exact target volume
+    await TrackPlayer.setVolume(toVolume);
+    this.isFading = false;
+
+    if (onComplete) await onComplete();
+  }
 
   /**
    * Initialize the audio service
@@ -266,10 +303,45 @@ class AudioService {
       }
     );
 
+    // Listen for progress updates to implement crossfade
+    const progressListener = TrackPlayer.addEventListener(
+      Event.PlaybackProgressUpdated,
+      async (event) => {
+        const { crossfade, crossfadeDuration } = useSettingsStore.getState();
+        if (!crossfade || crossfadeDuration <= 0) return;
+        
+        const { duration, position } = event;
+        const crossfadeSeconds = crossfadeDuration / 1000;
+        const remainingTime = duration - position;
+        
+        // Start crossfade when we're within the crossfade duration of the end
+        if (remainingTime > 0 && remainingTime <= crossfadeSeconds && !this.isFading) {
+          const queue = await TrackPlayer.getQueue();
+          const currentIndex = await TrackPlayer.getActiveTrackIndex();
+          
+          // Check if there's a next track
+          if (currentIndex !== undefined && currentIndex < queue.length - 1) {
+            console.log('[AudioService] Starting crossfade with', remainingTime, 'seconds remaining');
+            
+            // Fade out current track and skip to next
+            this.savedVolume = usePlayerStore.getState().volume;
+            await this.fadeVolume(this.savedVolume, 0, remainingTime * 1000, async () => {
+              await TrackPlayer.skipToNext();
+              // Fade in the new track
+              await TrackPlayer.setVolume(0);
+              await TrackPlayer.play();
+              await this.fadeVolume(0, this.savedVolume, crossfadeDuration);
+            });
+          }
+        }
+      }
+    );
+
     this.eventSubscriptions = [
       playbackStateListener.remove,
       activeTrackListener.remove,
       queueEndedListener.remove,
+      progressListener.remove,
     ];
   }
 
@@ -494,11 +566,24 @@ class AudioService {
       return;
     }
     
+    // Restore volume if it was faded
+    if (this.savedVolume < 1.0) {
+      await TrackPlayer.setVolume(this.savedVolume);
+    }
+    
     await TrackPlayer.play();
+    
+    // Fade in if resuming from pause and fade is enabled
+    const { fadeOnPause, fadeDuration } = useSettingsStore.getState();
+    if (fadeOnPause && fadeDuration > 0) {
+      // Start from 0 and fade to saved volume
+      await TrackPlayer.setVolume(0);
+      await this.fadeVolume(0, this.savedVolume, fadeDuration);
+    }
   }
 
   /**
-   * Pause playback
+   * Pause playback with optional fade out
    */
   async pause(): Promise<void> {
     // Check if native decoder is active
@@ -508,7 +593,20 @@ class AudioService {
       usePlayerStore.getState().setState('paused');
       return;
     }
-    await TrackPlayer.pause();
+    
+    // Check if fade on pause is enabled
+    const { fadeOnPause, fadeDuration } = useSettingsStore.getState();
+    if (fadeOnPause && fadeDuration > 0) {
+      // Save current volume and fade out
+      this.savedVolume = usePlayerStore.getState().volume;
+      await this.fadeVolume(this.savedVolume, 0, fadeDuration, async () => {
+        await TrackPlayer.pause();
+        // Restore volume for next play (will fade in)
+        await TrackPlayer.setVolume(this.savedVolume);
+      });
+    } else {
+      await TrackPlayer.pause();
+    }
   }
 
   /**
