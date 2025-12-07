@@ -34,8 +34,8 @@ const defaultSettings: AppSettings = {
   resumeOnStartup: true,
   fadeOnPause: true,
   fadeDuration: 200,
-  crossfade: false,
-  crossfadeDuration: 3000,
+  crossfade: true,
+  crossfadeDuration: 5000,
   
   // Audio Output
   audioOutput: defaultAudioOutput,

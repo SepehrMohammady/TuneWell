@@ -17,6 +17,7 @@ interface PlayerState {
   queue: QueueItem[];
   queueIndex: number;
   originalQueue: QueueItem[]; // For un-shuffling
+  lastPosition: number; // For resume on startup
   
   // Playback state
   state: PlaybackState;
@@ -35,6 +36,7 @@ interface PlayerState {
   removeFromQueue: (index: number) => void;
   clearQueue: () => void;
   setQueueIndex: (index: number) => void;
+  setLastPosition: (position: number) => void;
   
   setState: (state: PlaybackState) => void;
   setProgress: (progress: PlaybackProgress) => void;
@@ -59,6 +61,7 @@ const initialState = {
   queue: [],
   queueIndex: -1,
   originalQueue: [],
+  lastPosition: 0,
   state: PLAYBACK_STATES.IDLE as PlaybackState,
   progress: { position: 0, duration: 0, buffered: 0 },
   volume: 1,
@@ -132,6 +135,8 @@ export const usePlayerStore = create<PlayerState>()(
           });
         }
       },
+      
+      setLastPosition: (position) => set({ lastPosition: position }),
       
       setState: (state) => set({ state }),
       

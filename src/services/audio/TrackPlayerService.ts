@@ -29,12 +29,16 @@ export async function PlaybackService(): Promise<void> {
     TrackPlayer.stop();
   });
 
-  TrackPlayer.addEventListener(Event.RemoteNext, () => {
-    TrackPlayer.skipToNext();
+  TrackPlayer.addEventListener(Event.RemoteNext, async () => {
+    // Import dynamically to avoid circular dependency
+    const { audioService } = await import('./AudioService');
+    await audioService.skipToNext();
   });
 
-  TrackPlayer.addEventListener(Event.RemotePrevious, () => {
-    TrackPlayer.skipToPrevious();
+  TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
+    // Import dynamically to avoid circular dependency
+    const { audioService } = await import('./AudioService');
+    await audioService.skipToPrevious();
   });
 
   TrackPlayer.addEventListener(Event.RemoteSeek, (event) => {
@@ -42,15 +46,14 @@ export async function PlaybackService(): Promise<void> {
   });
 
   TrackPlayer.addEventListener(Event.RemoteJumpForward, async (event) => {
-    const position = await TrackPlayer.getPosition();
-    const duration = await TrackPlayer.getDuration();
-    const newPosition = Math.min(position + event.interval, duration);
+    const progress = await TrackPlayer.getProgress();
+    const newPosition = Math.min(progress.position + event.interval, progress.duration);
     TrackPlayer.seekTo(newPosition);
   });
 
   TrackPlayer.addEventListener(Event.RemoteJumpBackward, async (event) => {
-    const position = await TrackPlayer.getPosition();
-    const newPosition = Math.max(position - event.interval, 0);
+    const progress = await TrackPlayer.getProgress();
+    const newPosition = Math.max(progress.position - event.interval, 0);
     TrackPlayer.seekTo(newPosition);
   });
 
@@ -95,37 +98,40 @@ export async function setupTrackPlayer(): Promise<boolean> {
         autoUpdateMetadata: true,
         autoHandleInterruptions: true,
       });
-
-      await TrackPlayer.updateOptions({
-        // Capabilities for lock screen / notification
-        capabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.Stop,
-          Capability.SkipToNext,
-          Capability.SkipToPrevious,
-          Capability.SeekTo,
-          Capability.JumpForward,
-          Capability.JumpBackward,
-        ],
-        compactCapabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.SkipToNext,
-          Capability.SkipToPrevious,
-        ],
-        
-        // Progress update interval
-        progressUpdateEventInterval: 1,
-        
-        // Android specific
-        android: {
-          appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
-        },
-      });
       
       console.log('[TrackPlayer] Setup complete');
     }
+
+    // Always update options (in case they changed or weren't set)
+    await TrackPlayer.updateOptions({
+      // Capabilities for lock screen / notification
+      capabilities: [
+        Capability.Play,
+        Capability.Pause,
+        Capability.Stop,
+        Capability.SkipToNext,
+        Capability.SkipToPrevious,
+        Capability.SeekTo,
+        Capability.JumpForward,
+        Capability.JumpBackward,
+      ],
+      compactCapabilities: [
+        Capability.Play,
+        Capability.Pause,
+        Capability.SkipToNext,
+        Capability.SkipToPrevious,
+      ],
+      
+      // Progress update interval - required for crossfade
+      progressUpdateEventInterval: 1,
+      
+      // Android specific
+      android: {
+        appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
+      },
+    });
+    
+    console.log('[TrackPlayer] Options updated');
 
     return true;
   } catch (error) {

@@ -72,11 +72,11 @@ export default function EqualizerScreen() {
   };
 
   const handleBandAdjust = useCallback((index: number, direction: 'up' | 'down') => {
-    const currentGain = bands[index].gain;
+    const band = bands[index];
     const newGain = direction === 'up' 
-      ? Math.min(12, currentGain + 1)
-      : Math.max(-12, currentGain - 1);
-    setBandGain(index, newGain);
+      ? Math.min(12, band.gain + 1)
+      : Math.max(-12, band.gain - 1);
+    setBandGain(band.frequency, newGain);
   }, [bands, setBandGain]);
 
   const handleSliderTouch = useCallback((index: number, locationY: number, height: number) => {
@@ -85,8 +85,8 @@ export default function EqualizerScreen() {
     const ratio = 1 - (locationY / height); // Invert because Y increases downward
     const gain = Math.round((ratio * 24) - 12);
     const clampedGain = Math.max(-12, Math.min(12, gain));
-    setBandGain(index, clampedGain);
-  }, [setBandGain]);
+    setBandGain(bands[index].frequency, clampedGain);
+  }, [bands, setBandGain]);
 
   const handleSavePreset = useCallback(() => {
     setPresetName('');
@@ -295,7 +295,7 @@ export default function EqualizerScreen() {
                   key={idx} 
                   style={[styles.savedPresetItem, { backgroundColor: colors.surfaceLight }]}
                   onPress={() => {
-                    preset.bands.forEach((band, i) => setBandGain(i, band.gain));
+                    preset.bands.forEach((band) => setBandGain(band.frequency, band.gain));
                     setPreamp(preset.preamp);
                     Alert.alert('Applied', `Preset "${preset.name}" applied`);
                   }}
@@ -338,10 +338,10 @@ export default function EqualizerScreen() {
                 <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalSaveButton, { backgroundColor: colors.primary }]}
+                style={styles.modalSaveButton}
                 onPress={confirmSavePreset}
               >
-                <Text style={[styles.modalSaveText, { color: colors.text }]}>Save</Text>
+                <Text style={styles.modalSaveText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -653,11 +653,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: THEME.spacing.md,
     borderRadius: THEME.borderRadius.md,
-    backgroundColor: THEME.colors.primary,
+    backgroundColor: '#6C5CE7', // Purple accent - always visible with white text
     alignItems: 'center',
   },
   modalSaveText: {
-    color: THEME.colors.text,
+    color: '#FFFFFF',
     fontWeight: '600',
   },
 });

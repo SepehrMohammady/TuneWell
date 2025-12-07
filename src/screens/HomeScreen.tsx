@@ -27,24 +27,27 @@ import MiniPlayer from '../components/player/MiniPlayer';
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { currentTrack } = usePlayerStore();
-  const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood } = usePlaylistStore();
+  const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood, trackMeta, recentlyPlayed } = usePlaylistStore();
   const { tracks, stats, scanFolders } = useLibraryStore();
   const { colors, mode: themeMode } = useThemeStore();
   
-  // Calculate counts for quick actions
-  const favoritesCount = useMemo(() => getFavoriteIds().length, [getFavoriteIds]);
-  const recentlyPlayedTracks = useMemo(() => {
-    return getRecentlyPlayedIds(10);
-  }, [getRecentlyPlayedIds]);
+  // Calculate counts for quick actions - use trackMeta as dependency
+  const favoritesCount = useMemo(() => {
+    return Object.values(trackMeta).filter(m => m.isFavorite).length;
+  }, [trackMeta]);
   
-  // Get mood track counts
+  const recentlyPlayedTracks = useMemo(() => {
+    return recentlyPlayed.slice(0, 10);
+  }, [recentlyPlayed]);
+  
+  // Get mood track counts - use trackMeta as dependency
   const moodTrackCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     MOOD_CATEGORIES.forEach(mood => {
-      counts[mood.id] = getTracksByMood(mood.id as MoodId).length;
+      counts[mood.id] = Object.values(trackMeta).filter(m => m.moods?.includes(mood.id as MoodId)).length;
     });
     return counts;
-  }, [getTracksByMood]);
+  }, [trackMeta]);
   
   const handleMoodPress = (moodId: MoodId, moodName: string) => {
     const count = moodTrackCounts[moodId] || 0;

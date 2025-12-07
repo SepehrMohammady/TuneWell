@@ -94,27 +94,69 @@ class TrackPlayerSessionModule(private val reactContext: ReactApplicationContext
         try {
             // Get the player field from MusicService
             val serviceClass = service.javaClass
+            
+            // Log all fields for debugging
+            Log.d(TAG, "MusicService class: ${serviceClass.name}")
+            serviceClass.declaredFields.forEach { field ->
+                Log.d(TAG, "  Field: ${field.name} - ${field.type.name}")
+            }
+            
             val playerField = serviceClass.getDeclaredField("player")
             playerField.isAccessible = true
-            val player = playerField.get(service) ?: return null
+            val player = playerField.get(service) ?: run {
+                Log.e(TAG, "Player is null")
+                return null
+            }
             
             Log.d(TAG, "Got player: ${player.javaClass.name}")
             
-            // Get exoPlayer from the player (QueuedAudioPlayer or BaseAudioPlayer)
-            val playerClass = player.javaClass
-            val exoPlayerField = playerClass.superclass?.getDeclaredField("exoPlayer")
-                ?: playerClass.getDeclaredField("exoPlayer")
-            exoPlayerField.isAccessible = true
-            val exoPlayer = exoPlayerField.get(player) ?: return null
+            // Log player class hierarchy
+            var cls: Class<*>? = player.javaClass
+            while (cls != null) {
+                Log.d(TAG, "  Player class: ${cls.name}")
+                cls.declaredFields.forEach { field ->
+                    Log.d(TAG, "    Field: ${field.name} - ${field.type.name}")
+                }
+                cls = cls.superclass
+            }
             
-            Log.d(TAG, "Got ExoPlayer: ${exoPlayer.javaClass.name}")
+            // Try to get exoPlayer directly using property getter
+            try {
+                val getExoPlayerMethod = player.javaClass.getMethod("getExoPlayer")
+                val exoPlayer = getExoPlayerMethod.invoke(player)
+                if (exoPlayer != null) {
+                    Log.d(TAG, "Got ExoPlayer via getter: ${exoPlayer.javaClass.name}")
+                    val getAudioSessionId = exoPlayer.javaClass.getMethod("getAudioSessionId")
+                    val sessionId = getAudioSessionId.invoke(exoPlayer) as Int
+                    Log.d(TAG, "Got audio session ID via getter: $sessionId")
+                    return sessionId
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Could not get exoPlayer via getter: ${e.message}")
+            }
             
-            // Get audioSessionId from ExoPlayer
-            val getAudioSessionId = exoPlayer.javaClass.getMethod("getAudioSessionId")
-            val sessionId = getAudioSessionId.invoke(exoPlayer) as Int
+            // Try field access on player class hierarchy
+            var playerClass: Class<*>? = player.javaClass
+            while (playerClass != null) {
+                try {
+                    val exoPlayerField = playerClass.getDeclaredField("exoPlayer")
+                    exoPlayerField.isAccessible = true
+                    val exoPlayer = exoPlayerField.get(player)
+                    if (exoPlayer != null) {
+                        Log.d(TAG, "Got ExoPlayer via field in ${playerClass.name}: ${exoPlayer.javaClass.name}")
+                        val getAudioSessionId = exoPlayer.javaClass.getMethod("getAudioSessionId")
+                        val sessionId = getAudioSessionId.invoke(exoPlayer) as Int
+                        Log.d(TAG, "Got audio session ID: $sessionId")
+                        return sessionId
+                    }
+                } catch (e: NoSuchFieldException) {
+                    // Try next class in hierarchy
+                }
+                playerClass = playerClass.superclass
+            }
             
-            Log.d(TAG, "Got audio session ID: $sessionId")
-            return sessionId
+            Log.e(TAG, "Could not find exoPlayer field in player hierarchy")
+            return null
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get audio session from service: ${e.message}", e)
             return null

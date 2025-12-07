@@ -15,6 +15,7 @@ import type { RootStackParamList, MainTabsParamList } from '../types';
 import HomeScreen from '../screens/HomeScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import PlaylistsScreen from '../screens/PlaylistsScreen';
+import PlaylistDetailScreen from '../screens/PlaylistDetailScreen';
 import EqualizerScreen from '../screens/EqualizerScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlayerScreen from '../screens/PlayerScreen';
@@ -154,6 +155,13 @@ export function RootNavigator() {
           component={QueueScreen}
           options={{
             presentation: 'modal',
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen
+          name="MoodPlaylistDetail"
+          component={PlaylistDetailScreen}
+          options={{
             animation: 'slide_from_right',
           }}
         />

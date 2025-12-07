@@ -129,12 +129,25 @@ function convertToTPTrack(track: Track): TPTrack {
 }
 
 class AudioService {
+  private static instance: AudioService | null = null;
   private initialized = false;
   private eqInitialized = false;
   private eventSubscriptions: (() => void)[] = [];
   private eqUnsubscribe: (() => void) | null = null;
   private isFading = false;
+  private crossfadeInProgress = false;
   private savedVolume = 1.0;
+  private lastPreviousPressTime = 0; // For double-press detection
+
+  /**
+   * Get singleton instance
+   */
+  static getInstance(): AudioService {
+    if (!AudioService.instance) {
+      AudioService.instance = new AudioService();
+    }
+    return AudioService.instance;
+  }
 
   /**
    * Fade volume over duration
@@ -190,21 +203,20 @@ class AudioService {
     if (this.eqInitialized) return;
 
     try {
-      // Try to get the actual audio session ID from TrackPlayer's ExoPlayer
-      // This allows EQ effects to be applied to the player's audio output
+      // First initialize with session 0 (global output) as fallback
+      // We'll try to reinitialize with the actual session later when playback starts
       let audioSessionId = 0;
       
+      // Try to get the actual audio session ID from TrackPlayer's ExoPlayer
       try {
         audioSessionId = await getPlayerAudioSessionId();
         console.log('[AudioService] Got audio session ID from player:', audioSessionId);
       } catch (sessionError) {
-        console.warn('[AudioService] Could not get player session, using global output:', sessionError);
+        console.warn('[AudioService] Could not get player session yet, using global output. Will retry when playback starts.');
         audioSessionId = 0; // Fallback to global output
       }
       
       // Initialize EQ with the audio session
-      // Note: Session 0 is global output, which works on some devices but not all.
-      // A non-zero session from ExoPlayer should work more reliably.
       const result = await eqService.initialize(audioSessionId);
       
       if (result) {
@@ -227,13 +239,39 @@ class AudioService {
           }
         );
         
-        console.log('[AudioService] EQ initialized successfully with session 0 (global output)');
-        console.log('[AudioService] Note: EQ may have limited effect on some Android devices.');
-        console.log('[AudioService] For best results, use system-level EQ or DAC-specific apps.');
+        if (audioSessionId === 0) {
+          console.log('[AudioService] EQ initialized with session 0 (global output)');
+          console.log('[AudioService] Note: EQ may have limited effect. Will reinitialize when playback starts.');
+        } else {
+          console.log('[AudioService] EQ initialized successfully with session', audioSessionId);
+        }
       }
     } catch (error) {
       console.error('[AudioService] Failed to initialize EQ:', error);
       console.warn('[AudioService] EQ effects will not be available.');
+    }
+  }
+
+  /**
+   * Try to reinitialize EQ with the actual player session ID
+   * Called when playback starts to get the real audio session
+   */
+  private async tryReinitializeEQWithPlayerSession(): Promise<void> {
+    try {
+      const audioSessionId = await getPlayerAudioSessionId();
+      if (audioSessionId && audioSessionId !== 0) {
+        console.log('[AudioService] Reinitializing EQ with player session:', audioSessionId);
+        
+        // Reinitialize with the actual session
+        const result = await eqService.initialize(audioSessionId);
+        if (result) {
+          // Reapply current settings
+          await this.syncEQFromStore();
+          console.log('[AudioService] EQ reinitialized successfully with session', audioSessionId);
+        }
+      }
+    } catch (error) {
+      console.log('[AudioService] Could not reinitialize EQ with player session:', error);
     }
   }
 
@@ -264,11 +302,23 @@ class AudioService {
    * Set up event listeners to sync with store
    */
   private setupEventListeners(): void {
+    // Track if we've tried to reinitialize EQ with player session
+    let eqReinitAttempted = false;
+    
     const playbackStateListener = TrackPlayer.addEventListener(
       Event.PlaybackState,
       async (event) => {
         const state = mapPlayerState(event.state);
         usePlayerStore.getState().setState(state as any);
+        
+        // When playback starts for the first time, try to reinitialize EQ with actual session
+        if (state === 'playing' && !eqReinitAttempted) {
+          eqReinitAttempted = true;
+          // Small delay to ensure ExoPlayer is fully initialized
+          setTimeout(() => {
+            this.tryReinitializeEQWithPlayerSession();
+          }, 500);
+        }
       }
     );
 
@@ -307,32 +357,104 @@ class AudioService {
     const progressListener = TrackPlayer.addEventListener(
       Event.PlaybackProgressUpdated,
       async (event) => {
-        const { crossfade, crossfadeDuration } = useSettingsStore.getState();
-        if (!crossfade || crossfadeDuration <= 0) return;
-        
-        const { duration, position } = event;
-        const crossfadeSeconds = crossfadeDuration / 1000;
-        const remainingTime = duration - position;
-        
-        // Start crossfade when we're within the crossfade duration of the end
-        if (remainingTime > 0 && remainingTime <= crossfadeSeconds && !this.isFading) {
-          const queue = await TrackPlayer.getQueue();
-          const currentIndex = await TrackPlayer.getActiveTrackIndex();
+        try {
+          const { position, duration, buffered } = event;
+          const { crossfade, crossfadeDuration } = useSettingsStore.getState();
           
-          // Check if there's a next track
-          if (currentIndex !== undefined && currentIndex < queue.length - 1) {
-            console.log('[AudioService] Starting crossfade with', remainingTime, 'seconds remaining');
-            
-            // Fade out current track and skip to next
-            this.savedVolume = usePlayerStore.getState().volume;
-            await this.fadeVolume(this.savedVolume, 0, remainingTime * 1000, async () => {
-              await TrackPlayer.skipToNext();
-              // Fade in the new track
-              await TrackPlayer.setVolume(0);
-              await TrackPlayer.play();
-              await this.fadeVolume(0, this.savedVolume, crossfadeDuration);
-            });
+          // DEBUG: Log all progress events when crossfade is enabled
+          if (crossfade) {
+            // Log every second to debug crossfade
+            if (Math.floor(position) !== Math.floor(position - 1)) {
+              console.log('[CROSSFADE DEBUG] pos:', position.toFixed(1), 
+                'dur:', duration?.toFixed(1) || 'N/A', 
+                'xfadeDur:', crossfadeDuration,
+                'inProgress:', this.crossfadeInProgress);
+            }
           }
+          
+          if (!crossfade || crossfadeDuration <= 0) return;
+          if (this.crossfadeInProgress) return;
+          
+          // Get duration from TrackPlayer if event doesn't have it
+          let trackDuration = duration;
+          if (!trackDuration || trackDuration <= 0) {
+            const progress = await TrackPlayer.getProgress();
+            trackDuration = progress.duration;
+            if (crossfade && trackDuration > 0) {
+              console.log('[CROSSFADE DEBUG] Got duration from TrackPlayer:', trackDuration);
+            }
+          }
+          
+          if (!trackDuration || trackDuration <= 0) {
+            // Still no duration, can't do crossfade
+            return;
+          }
+          
+          const crossfadeSeconds = crossfadeDuration / 1000;
+          const remainingTime = trackDuration - position;
+          
+          // Log when we're getting close to crossfade time (within 30 seconds for debugging)
+          if (remainingTime <= 30 && remainingTime > 0) {
+            console.log('[CROSSFADE DEBUG] NEAR END - remaining:', remainingTime.toFixed(1), 
+              'xfadeSeconds:', crossfadeSeconds, 
+              'triggerAt:', `<= ${(crossfadeSeconds + 0.5).toFixed(1)}s`);
+          }
+          
+          // Start crossfade when we're within the crossfade duration of the end
+          // Add a small buffer (0.5s) to ensure we don't miss it
+          if (remainingTime > 0.5 && remainingTime <= crossfadeSeconds + 0.5) {
+            const queue = await TrackPlayer.getQueue();
+            const currentIndex = await TrackPlayer.getActiveTrackIndex();
+            
+            console.log('[CROSSFADE DEBUG] TRIGGER CHECK - queueLen:', queue.length, 
+              'currentIndex:', currentIndex, 
+              'hasNext:', currentIndex !== undefined && currentIndex < queue.length - 1);
+            
+            // Check if there's a next track
+            if (currentIndex !== undefined && currentIndex !== null && currentIndex < queue.length - 1) {
+              this.crossfadeInProgress = true;
+              console.log('[CROSSFADE] Starting crossfade with', remainingTime.toFixed(1), 'seconds remaining');
+              
+              // Save current volume and start fading out
+              this.savedVolume = usePlayerStore.getState().volume || 1.0;
+              const fadeOutTime = Math.min(remainingTime * 1000 - 500, crossfadeDuration);
+              console.log('[CROSSFADE] Fading out over', fadeOutTime, 'ms');
+              
+              await this.fadeVolume(this.savedVolume, 0, fadeOutTime);
+              
+              // Skip to next and fade in
+              console.log('[CROSSFADE] Skipping to next track');
+              await TrackPlayer.skipToNext();
+              await TrackPlayer.setVolume(0);
+              
+              // Small delay to let the new track start
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              console.log('[CROSSFADE] Fading in over', crossfadeDuration, 'ms');
+              await this.fadeVolume(0, this.savedVolume, crossfadeDuration);
+              
+              this.crossfadeInProgress = false;
+              console.log('[CROSSFADE] Crossfade complete');
+            } else {
+              console.log('[CROSSFADE DEBUG] No next track available');
+            }
+          }
+        } catch (error) {
+          console.error('[CROSSFADE] Error:', error);
+          this.crossfadeInProgress = false;
+          // Restore volume on error
+          await TrackPlayer.setVolume(this.savedVolume || 1.0);
+        }
+      }
+    );
+
+    // Reset crossfade flag on track change
+    const trackChangeListener = TrackPlayer.addEventListener(
+      Event.PlaybackActiveTrackChanged,
+      () => {
+        // Reset crossfade flag when track actually changes (unless we're doing crossfade)
+        if (!this.crossfadeInProgress) {
+          this.crossfadeInProgress = false;
         }
       }
     );
@@ -342,6 +464,7 @@ class AudioService {
       activeTrackListener.remove,
       queueEndedListener.remove,
       progressListener.remove,
+      trackChangeListener.remove,
     ];
   }
 
@@ -586,6 +709,15 @@ class AudioService {
    * Pause playback with optional fade out
    */
   async pause(): Promise<void> {
+    // Save current position for resume on startup
+    try {
+      const progress = await TrackPlayer.getProgress();
+      usePlayerStore.getState().setLastPosition(progress.position);
+      console.log('[AudioService] Saved position for resume:', progress.position);
+    } catch (e) {
+      console.warn('[AudioService] Could not save position:', e);
+    }
+    
     // Check if native decoder is active
     const nativeState = await nativeDecoderService.getState();
     if (nativeState?.isPlaying) {
@@ -659,27 +791,73 @@ class AudioService {
 
   /**
    * Skip to previous track
+   * - Double press (within 2 seconds of a restart): go to previous track
+   * - Single press when position > 3 seconds: restart current track
+   * - Single press when position <= 3 seconds: go to previous track
+   * - If at first track: restart current track
    */
   async skipToPrevious(): Promise<boolean> {
     try {
-      const position = await TrackPlayer.getPosition();
-      if (position > 3) {
-        // Restart current track if more than 3 seconds in
-        await TrackPlayer.seekTo(0);
-        return true;
+      const now = Date.now();
+      const timeSinceLastPress = now - this.lastPreviousPressTime;
+      
+      console.log('[AudioService] skipToPrevious called, lastPress:', this.lastPreviousPressTime, 'timeSince:', timeSinceLastPress, 'ms');
+      
+      // First ensure we have a queue loaded
+      let queue = await TrackPlayer.getQueue();
+      let currentIndex = await TrackPlayer.getActiveTrackIndex();
+      
+      console.log('[AudioService] skipToPrevious queue length:', queue.length, 'currentIndex:', currentIndex);
+      
+      // If queue is empty, try to reload from store
+      if (queue.length === 0) {
+        const storeQueue = usePlayerStore.getState().queue;
+        if (storeQueue.length > 0) {
+          console.log('[AudioService] Reloading queue from store for previous button');
+          const queueIndex = usePlayerStore.getState().queueIndex;
+          await this.playQueue(storeQueue, queueIndex);
+          return true;
+        }
+        console.warn('[AudioService] No queue available for previous');
+        return false;
       }
       
-      const queue = await TrackPlayer.getQueue();
-      const currentIndex = await TrackPlayer.getActiveTrackIndex();
+      const progress = await TrackPlayer.getProgress();
+      const position = progress.position;
+      console.log('[AudioService] Current position:', position, 'seconds');
       
-      // If at the beginning or no track, just seek to start
+      // If at the first track or no valid index, just seek to start
       if (currentIndex === undefined || currentIndex === null || currentIndex === 0) {
+        console.log('[AudioService] At first track, seeking to start');
         await TrackPlayer.seekTo(0);
         return true;
       }
       
-      // Skip to previous track
+      // Double press detection: if pressed within 2 seconds AND position is near start (< 5s),
+      // it means user just restarted and wants to go to previous
+      const isDoublePressAfterRestart = timeSinceLastPress < 2000 && position < 5;
+      
+      if (isDoublePressAfterRestart) {
+        console.log('[AudioService] Double press after restart detected, skipping to previous track');
+        await TrackPlayer.skipToPrevious();
+        usePlayerStore.getState().skipToPrevious();
+        this.lastPreviousPressTime = 0; // Reset so next press starts fresh
+        return true;
+      }
+      
+      // Single press: if more than 3 seconds in, restart current track
+      if (position > 3) {
+        console.log('[AudioService] Restarting current track (position > 3s)');
+        await TrackPlayer.seekTo(0);
+        this.lastPreviousPressTime = now; // Record this restart for double-press detection
+        return true;
+      }
+      
+      // Single press within first 3 seconds: go to previous track
+      console.log('[AudioService] Skipping to previous track (position <= 3s)');
       await TrackPlayer.skipToPrevious();
+      usePlayerStore.getState().skipToPrevious();
+      this.lastPreviousPressTime = 0; // Reset
       return true;
     } catch (error) {
       console.error('[AudioService] skipToPrevious error:', error);
@@ -751,21 +929,24 @@ class AudioService {
    * Get current playback position
    */
   async getPosition(): Promise<number> {
-    return await TrackPlayer.getPosition();
+    const progress = await TrackPlayer.getProgress();
+    return progress.position;
   }
 
   /**
    * Get current track duration
    */
   async getDuration(): Promise<number> {
-    return await TrackPlayer.getDuration();
+    const progress = await TrackPlayer.getProgress();
+    return progress.duration;
   }
 
   /**
    * Get current buffered position
    */
   async getBufferedPosition(): Promise<number> {
-    return await TrackPlayer.getBufferedPosition();
+    const progress = await TrackPlayer.getProgress();
+    return progress.buffered;
   }
 
   /**
@@ -778,7 +959,10 @@ class AudioService {
 }
 
 // Export singleton instance
-export const audioService = new AudioService();
+export const audioService = AudioService.getInstance();
+
+// Export the class for getInstance access
+export { AudioService };
 
 // Export hooks for React components
 export { usePlaybackState, useProgress, useActiveTrack };

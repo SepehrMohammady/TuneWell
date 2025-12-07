@@ -52,16 +52,45 @@ export default function App() {
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // Dynamically import navigation and audio services
-        const [navModule, audioModule, configModule] = await Promise.all([
+        const [navModule, audioModule, configModule, storeModule] = await Promise.all([
           import('./navigation'),
           import('./services/audio'),
           import('./config'),
+          import('./store'),
         ]);
         
         // Setup track player
         try {
           await audioModule.setupTrackPlayer();
           console.log(`[TuneWell] Player ready - v${configModule.VERSION.versionString}`);
+          
+          // Initialize audio service (sets up EQ and event listeners)
+          await audioModule.audioService.initialize();
+          console.log('[TuneWell] Audio service initialized');
+          
+          // Resume on startup: restore last queue if setting is enabled
+          const { resumeOnStartup } = storeModule.useSettingsStore.getState();
+          console.log('[TuneWell] Resume on startup:', resumeOnStartup);
+          
+          if (resumeOnStartup) {
+            const { queue, queueIndex, lastPosition } = storeModule.usePlayerStore.getState();
+            console.log('[TuneWell] Stored queue length:', queue.length, 'index:', queueIndex, 'lastPosition:', lastPosition);
+            
+            if (queue.length > 0) {
+              console.log('[TuneWell] Restoring queue...');
+              await audioModule.audioService.playQueue(queue, queueIndex);
+              
+              // Seek to last position if available
+              if (lastPosition && lastPosition > 0) {
+                console.log('[TuneWell] Seeking to last position:', lastPosition);
+                await audioModule.audioService.seekTo(lastPosition);
+              }
+              
+              // Pause immediately (user will press play when ready)
+              await audioModule.audioService.pause();
+              console.log('[TuneWell] Queue restored and paused');
+            }
+          }
         } catch (playerError) {
           console.warn('[TuneWell] Player setup failed, continuing:', playerError);
         }

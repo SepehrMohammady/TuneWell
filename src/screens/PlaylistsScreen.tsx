@@ -1,4 +1,4 @@
-/**
+        /**
  * TuneWell Playlists Screen
  * 
  * Manage playlists:
@@ -7,7 +7,7 @@
  * - User-created playlists
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
@@ -30,6 +31,7 @@ import MiniPlayer from '../components/player/MiniPlayer';
 type Section = 'system' | 'mood' | 'custom';
 
 export default function PlaylistsScreen() {
+  const navigation = useNavigation();
   const [expandedSection, setExpandedSection] = useState<Section | null>('system');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -37,7 +39,7 @@ export default function PlaylistsScreen() {
   const { colors, mode: themeMode } = useThemeStore();
   const { tracks } = useLibraryStore();
   
-  // Get playlist store data
+  // Get playlist store data - subscribe to trackMeta changes for counts
   const { 
     getFavoriteIds,
     getRecentlyPlayedIds,
@@ -45,23 +47,45 @@ export default function PlaylistsScreen() {
     getTracksByMood,
     customPlaylists,
     createPlaylist,
+    trackMeta,
+    recentlyPlayed,
   } = usePlaylistStore();
   
-  // Calculate track counts
-  const favoritesCount = useMemo(() => getFavoriteIds().length, [getFavoriteIds]);
-  const recentlyPlayedCount = useMemo(() => getRecentlyPlayedIds(50).length, [getRecentlyPlayedIds]);
-  const mostPlayedCount = useMemo(() => getMostPlayedIds(50).length, [getMostPlayedIds]);
+  // Calculate track counts - use trackMeta as dependency to trigger updates
+  const favoritesCount = useMemo(() => {
+    return Object.values(trackMeta).filter(m => m.isFavorite).length;
+  }, [trackMeta]);
+  
+  const recentlyPlayedCount = useMemo(() => {
+    return recentlyPlayed.slice(0, 50).length;
+  }, [recentlyPlayed]);
+  
+  const mostPlayedCount = useMemo(() => {
+    return Object.values(trackMeta).filter(m => m.playCount > 0).length;
+  }, [trackMeta]);
+  
   // Note: recentlyAdded would need to be tracked separately if needed
   const recentlyAddedCount = 0;
   
-  // Get mood track counts
+  // Get mood track counts - use trackMeta as dependency to trigger updates
+  // Also use a refresh counter to force recalculation on screen focus
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  
+  // Force refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      setRefreshCounter(c => c + 1);
+    }, [])
+  );
+  
   const moodTrackCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     MOOD_CATEGORIES.forEach(mood => {
-      counts[mood.id] = getTracksByMood(mood.id as MoodId).length;
+      counts[mood.id] = Object.values(trackMeta).filter(m => m.moods?.includes(mood.id as MoodId)).length;
     });
     return counts;
-  }, [getTracksByMood]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackMeta, refreshCounter]);
 
   const toggleSection = (section: Section) => {
     setExpandedSection(expandedSection === section ? null : section);
@@ -297,7 +321,7 @@ export default function PlaylistsScreen() {
               <TouchableOpacity 
                 key={mood.id} 
                 style={[styles.playlistItem, { borderBottomColor: colors.border }]}
-                onPress={() => handlePlayMoodPlaylist(mood.id as MoodId)}
+                onPress={() => navigation.navigate('MoodPlaylistDetail' as never, { mood: mood.id } as never)}
               >
                 <View style={[styles.playlistIcon, { backgroundColor: mood.color }]}>
                   <Text style={styles.playlistIconText}>{mood.icon}</Text>
@@ -306,7 +330,12 @@ export default function PlaylistsScreen() {
                   <Text style={[styles.playlistName, { color: colors.text }]}>{mood.name}</Text>
                   <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{moodTrackCounts[mood.id] || 0} tracks</Text>
                 </View>
-                <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+                <TouchableOpacity 
+                  onPress={() => handlePlayMoodPlaylist(mood.id as MoodId)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
               </TouchableOpacity>
             ))}
           </View>
