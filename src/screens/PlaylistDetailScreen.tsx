@@ -26,9 +26,9 @@ import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from
 import { audioService } from '../services/audio';
 import { scannedTrackToTrack } from '../services/metadata';
 import MiniPlayer from '../components/player/MiniPlayer';
-import { MainStackParamList } from '../types';
+import { PlaylistsStackParamList } from '../types';
 
-type PlaylistDetailRouteProp = RouteProp<MainStackParamList, 'MoodPlaylistDetail'>;
+type PlaylistDetailRouteProp = RouteProp<PlaylistsStackParamList, 'MoodPlaylistDetail'>;
 
 export default function PlaylistDetailScreen() {
   const navigation = useNavigation();
@@ -41,9 +41,9 @@ export default function PlaylistDetailScreen() {
   const { getTracksByMood, removeMoodFromTrack, trackMeta } = usePlaylistStore();
   
   // Get mood info
-  const moodInfo = MOOD_CATEGORIES[mood];
+  const moodInfo = MOOD_CATEGORIES.find(m => m.id === mood);
   const moodName = moodInfo?.name || mood;
-  const moodEmoji = moodInfo?.emoji || '🎵';
+  const moodIcon = moodInfo?.icon || '🎵';
   
   // Get tracks for this mood - use trackMeta as dependency to update when moods change
   const playlistTracks = useMemo(() => {
@@ -121,8 +121,8 @@ export default function PlaylistDetailScreen() {
       activeOpacity={0.7}
     >
       {/* Artwork */}
-      {item.artworkUri ? (
-        <Image source={{ uri: item.artworkUri }} style={styles.trackArtwork} />
+      {item.artwork ? (
+        <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
       ) : (
         <View style={[styles.trackArtwork, styles.trackArtworkPlaceholder, { backgroundColor: colors.surfaceLight }]}>
           <MaterialIcons name="music-note" size={20} color={colors.textMuted} />
@@ -132,17 +132,17 @@ export default function PlaylistDetailScreen() {
       {/* Track Info */}
       <View style={styles.trackInfo}>
         <Text style={[styles.trackTitle, { color: colors.text }]} numberOfLines={1}>
-          {item.title}
+          {item.title || 'Unknown'}
         </Text>
         <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
-          {item.artist} • {formatDuration(item.duration)}
+          {item.artist || 'Unknown'} • {formatDuration(item.duration || 0)}
         </Text>
       </View>
       
       {/* Remove Button */}
       <TouchableOpacity 
         style={styles.removeButton}
-        onPress={() => handleRemoveTrack(item.id, item.title)}
+        onPress={() => handleRemoveTrack(item.id, item.title || 'Unknown')}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
         <MaterialIcons name="remove-circle-outline" size={24} color={colors.error || '#FF6B6B'} />
@@ -160,7 +160,7 @@ export default function PlaylistDetailScreen() {
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerEmoji}>{moodEmoji}</Text>
+          <Text style={styles.headerEmoji}>{moodIcon}</Text>
           <Text style={[styles.headerTitle, { color: colors.text }]}>{moodName}</Text>
         </View>
         <Text style={[styles.trackCount, { color: colors.textSecondary }]}>
@@ -189,7 +189,7 @@ export default function PlaylistDetailScreen() {
       {/* Track List */}
       {playlistTracks.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>{moodEmoji}</Text>
+          <Text style={styles.emptyEmoji}>{moodIcon}</Text>
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
             No tracks in this playlist yet
           </Text>

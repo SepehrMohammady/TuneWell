@@ -21,17 +21,20 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
 import { scannedTrackToTrack } from '../services/metadata';
 import MiniPlayer from '../components/player/MiniPlayer';
+import { PlaylistsStackParamList } from '../types';
 
 type Section = 'system' | 'mood' | 'custom';
+type PlaylistsNavigation = NativeStackNavigationProp<PlaylistsStackParamList>;
 
 export default function PlaylistsScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<PlaylistsNavigation>();
   const [expandedSection, setExpandedSection] = useState<Section | null>('system');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -321,7 +324,7 @@ export default function PlaylistsScreen() {
               <TouchableOpacity 
                 key={mood.id} 
                 style={[styles.playlistItem, { borderBottomColor: colors.border }]}
-                onPress={() => navigation.navigate('MoodPlaylistDetail' as never, { mood: mood.id } as never)}
+                onPress={() => navigation.navigate('MoodPlaylistDetail', { mood: mood.id as MoodId })}
               >
                 <View style={[styles.playlistIcon, { backgroundColor: mood.color }]}>
                   <Text style={styles.playlistIconText}>{mood.icon}</Text>
