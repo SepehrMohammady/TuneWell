@@ -6,7 +6,7 @@
  * - WAV with high bit-depth
  */
 
-import { NativeModules, Platform } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 
 interface AudioInfo {
   format: string;
@@ -29,6 +29,19 @@ interface PlaybackState {
   isPlaying: boolean;
   isPaused: boolean;
   currentUri: string | null;
+  position?: number;
+  duration?: number;
+}
+
+interface ProgressEvent {
+  position: number;
+  duration: number;
+  buffered: number;
+}
+
+interface StateEvent {
+  state: 'playing' | 'paused' | 'stopped' | 'ended';
+  uri: string | null;
 }
 
 interface NativeAudioDecoderModuleType {
@@ -39,7 +52,10 @@ interface NativeAudioDecoderModuleType {
   pause(): Promise<boolean>;
   resume(): Promise<boolean>;
   stop(): Promise<boolean>;
+  seekTo(positionSeconds: number): Promise<boolean>;
   getState(): Promise<PlaybackState>;
+  getPosition(): Promise<number>;
+  getDuration(): Promise<number>;
   getAudioSessionId(): Promise<number>;
   setAudioSessionId(sessionId: number): Promise<boolean>;
 }
@@ -49,12 +65,106 @@ const { NativeAudioDecoderModule } = NativeModules;
 const NativeAudioDecoder: NativeAudioDecoderModuleType | null = 
   Platform.OS === 'android' ? NativeAudioDecoderModule : null;
 
+// Event emitter for native decoder events
+const eventEmitter = NativeAudioDecoderModule ? new NativeEventEmitter(NativeAudioDecoderModule) : null;
+
 /**
  * Native Decoder Service
  * Provides a higher-level interface for the native decoder
  */
 class NativeDecoderService {
   private currentUri: string | null = null;
+  private progressListener: any = null;
+  private stateListener: any = null;
+  private onProgressCallback: ((progress: ProgressEvent) => void) | null = null;
+  private onStateCallback: ((state: StateEvent) => void) | null = null;
+
+  constructor() {
+    this.setupEventListeners();
+  }
+
+  /**
+   * Set up event listeners for native decoder events
+   */
+  private setupEventListeners(): void {
+    if (!eventEmitter) return;
+
+    this.progressListener = eventEmitter.addListener(
+      'NativeDecoderProgress',
+      (event: ProgressEvent) => {
+        if (this.onProgressCallback) {
+          this.onProgressCallback(event);
+        }
+      }
+    );
+
+    this.stateListener = eventEmitter.addListener(
+      'NativeDecoderState',
+      (event: StateEvent) => {
+        if (this.onStateCallback) {
+          this.onStateCallback(event);
+        }
+      }
+    );
+  }
+
+  /**
+   * Set callback for progress updates
+   */
+  setOnProgress(callback: ((progress: ProgressEvent) => void) | null): void {
+    this.onProgressCallback = callback;
+  }
+
+  /**
+   * Set callback for state changes
+   */
+  setOnState(callback: ((state: StateEvent) => void) | null): void {
+    this.onStateCallback = callback;
+  }
+
+  /**
+   * Get current playback position
+   */
+  async getPosition(): Promise<number> {
+    if (!NativeAudioDecoder) return 0;
+    
+    try {
+      return await NativeAudioDecoder.getPosition();
+    } catch (error) {
+      console.error('[NativeDecoder] getPosition error:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get current track duration
+   */
+  async getDuration(): Promise<number> {
+    if (!NativeAudioDecoder) return 0;
+    
+    try {
+      return await NativeAudioDecoder.getDuration();
+    } catch (error) {
+      console.error('[NativeDecoder] getDuration error:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Clean up event listeners
+   */
+  destroy(): void {
+    if (this.progressListener) {
+      this.progressListener.remove();
+      this.progressListener = null;
+    }
+    if (this.stateListener) {
+      this.stateListener.remove();
+      this.stateListener = null;
+    }
+    this.onProgressCallback = null;
+    this.onStateCallback = null;
+  }
 
   /**
    * Check if a file should use the native decoder
@@ -158,6 +268,21 @@ class NativeDecoderService {
   }
 
   /**
+   * Seek to position in seconds
+   */
+  async seekTo(positionSeconds: number): Promise<boolean> {
+    if (!NativeAudioDecoder) return false;
+    
+    try {
+      await NativeAudioDecoder.seekTo(positionSeconds);
+      return true;
+    } catch (error) {
+      console.error('[NativeDecoder] seekTo error:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get current playback state
    */
   async getState(): Promise<PlaybackState | null> {
@@ -216,4 +341,6 @@ export type {
   AudioInfo,
   CanPlayResult,
   PlaybackState,
+  ProgressEvent,
+  StateEvent,
 };

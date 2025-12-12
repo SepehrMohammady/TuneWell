@@ -58,6 +58,7 @@ function getContentType(format: string): string | undefined {
     'wave': 'audio/wav',
     'aac': 'audio/aac',
     'm4a': 'audio/mp4',
+    'alac': 'audio/mp4', // ALAC is stored in M4A container
     'ogg': 'audio/ogg',
     'opus': 'audio/opus',
     'wma': 'audio/x-ms-wma',
@@ -72,10 +73,21 @@ function getContentType(format: string): string | undefined {
 
 function convertToTPTrack(track: Track): TPTrack {
   const contentType = getContentType(track.format);
+  const formatLower = (track.format || '').toLowerCase().replace('.', '');
   
   // Use content:// URI for local files (required for scoped storage on Android 10+)
   // file:// paths don't work reliably on modern Android due to storage restrictions
   let url = track.uri;
+  
+  // For M4A/ALAC files, try using file:// path if available
+  // Some content providers don't stream ALAC properly
+  if ((formatLower === 'm4a' || formatLower === 'alac') && track.filePath) {
+    const filePath = track.filePath.startsWith('file://') 
+      ? track.filePath 
+      : `file://${track.filePath}`;
+    console.log('[AudioService] Using file:// path for M4A/ALAC:', filePath);
+    url = filePath;
+  }
   
   // If we have a content:// URI, use it (preferred for Android scoped storage)
   // Otherwise fall back to file path if available
@@ -89,6 +101,17 @@ function convertToTPTrack(track: Track): TPTrack {
   // For DSD formats, log a warning that they won't play
   if (isDSDFormat(track.format)) {
     console.warn('[AudioService] DSD format not supported by ExoPlayer:', track.format);
+  }
+  
+  // Warn if no URL is available
+  if (!url) {
+    console.error('[AudioService] No URL available for track:', {
+      title: track.title,
+      id: track.id,
+      format: track.format,
+      uri: track.uri,
+      filePath: track.filePath,
+    });
   }
   
   // Log for debugging
@@ -204,24 +227,27 @@ class AudioService {
     if (this.eqInitialized) return;
 
     try {
-      // First initialize with session 0 (global output) as fallback
-      // We'll try to reinitialize with the actual session later when playback starts
+      // First try to get audio session from TrackPlayer's ExoPlayer
       let audioSessionId = 0;
       
-      // Try to get the actual audio session ID from TrackPlayer's ExoPlayer
       try {
         audioSessionId = await getPlayerAudioSessionId();
         console.log('[AudioService] Got audio session ID from player:', audioSessionId);
       } catch (sessionError) {
-        console.warn('[AudioService] Could not get player session yet, using global output. Will retry when playback starts.');
-        audioSessionId = 0; // Fallback to global output
+        console.warn('[AudioService] Could not get player session yet, will retry when playback starts.');
       }
       
-      // Initialize EQ with the audio session
+      // If we got a valid session (non-zero), use it. Otherwise use 0 (global output)
+      // On modern Android, session 0 should work for global EQ
       const result = await eqService.initialize(audioSessionId);
       
       if (result) {
         this.eqInitialized = true;
+        console.log(`[AudioService] EQ initialized with session ${audioSessionId}`, {
+          bands: result.numberOfBands,
+          hasControl: result.hasControl,
+          isEnabled: result.isEnabled,
+        });
         
         // Apply current EQ settings from store
         await this.syncEQFromStore();
@@ -234,18 +260,17 @@ class AudioService {
               await eqService.setEnabled(state.isEnabled);
             }
             
-            if (state.bands !== prevState.bands || state.preamp !== prevState.preamp) {
+            if (state.bands !== prevState.bands) {
               await this.applyEQBands();
+            }
+            
+            // Apply preamp changes
+            if (state.preamp !== prevState.preamp) {
+              console.log('[AudioService] Preamp changed:', prevState.preamp, '->', state.preamp);
+              await eqService.setPreamp(state.preamp);
             }
           }
         );
-        
-        if (audioSessionId === 0) {
-          console.log('[AudioService] EQ initialized with session 0 (global output)');
-          console.log('[AudioService] Note: EQ may have limited effect. Will reinitialize when playback starts.');
-        } else {
-          console.log('[AudioService] EQ initialized successfully with session', audioSessionId);
-        }
       }
     } catch (error) {
       console.error('[AudioService] Failed to initialize EQ:', error);
@@ -263,13 +288,24 @@ class AudioService {
       if (audioSessionId && audioSessionId !== 0) {
         console.log('[AudioService] Reinitializing EQ with player session:', audioSessionId);
         
+        // Release existing EQ first
+        await eqService.release();
+        
         // Reinitialize with the actual session
         const result = await eqService.initialize(audioSessionId);
         if (result) {
+          console.log('[AudioService] EQ reinitialized with session', audioSessionId, {
+            bands: result.numberOfBands,
+            hasControl: result.hasControl,
+            isEnabled: result.isEnabled,
+          });
+          
           // Reapply current settings
           await this.syncEQFromStore();
-          console.log('[AudioService] EQ reinitialized successfully with session', audioSessionId);
+          console.log('[AudioService] EQ settings reapplied after reinitialization');
         }
+      } else {
+        console.log('[AudioService] Could not get valid player session (got:', audioSessionId, ')');
       }
     } catch (error) {
       console.log('[AudioService] Could not reinitialize EQ with player session:', error);
@@ -282,13 +318,13 @@ class AudioService {
   private async syncEQFromStore(): Promise<void> {
     const { isEnabled, bands, preamp } = useEQStore.getState();
     
+    console.log('[AudioService] Syncing EQ settings:', { isEnabled, preamp, bandCount: bands.length });
+    
     await eqService.setEnabled(isEnabled);
     await this.applyEQBands();
     
-    // Apply preamp as bass boost (approximation)
-    if (preamp > 0) {
-      await eqService.setBassBoost(preamp * 5); // Scale preamp to bass boost
-    }
+    // Apply preamp using LoudnessEnhancer
+    await eqService.setPreamp(preamp);
   }
 
   /**
@@ -467,6 +503,28 @@ class AudioService {
       progressListener.remove,
       trackChangeListener.remove,
     ];
+
+    // Set up native decoder progress callback for DSD/WAV playback
+    nativeDecoderService.setOnProgress((event) => {
+      // Update player store with native decoder progress
+      usePlayerStore.getState().setProgress({
+        position: event.position,
+        duration: event.duration,
+        buffered: event.buffered,
+      });
+    });
+
+    nativeDecoderService.setOnState((event) => {
+      // Map native decoder state to player state
+      const stateMap: Record<string, any> = {
+        'playing': PLAYBACK_STATES.PLAYING,
+        'paused': PLAYBACK_STATES.PAUSED,
+        'stopped': PLAYBACK_STATES.IDLE,
+        'ended': PLAYBACK_STATES.IDLE,
+      };
+      const state = stateMap[event.state] || PLAYBACK_STATES.IDLE;
+      usePlayerStore.getState().setState(state);
+    });
   }
 
   /**
@@ -475,6 +533,10 @@ class AudioService {
   destroy(): void {
     this.eventSubscriptions.forEach((unsubscribe) => unsubscribe());
     this.eventSubscriptions = [];
+    
+    // Cleanup native decoder callbacks
+    nativeDecoderService.setOnProgress(null);
+    nativeDecoderService.setOnState(null);
     
     // Cleanup EQ
     if (this.eqUnsubscribe) {
@@ -899,7 +961,21 @@ class AudioService {
    * Seek to position in seconds
    */
   async seekTo(position: number): Promise<void> {
-    await TrackPlayer.seekTo(position);
+    // Check if we're playing with native decoder (DSD/WAV)
+    const currentTrack = usePlayerStore.getState().currentTrack;
+    if (currentTrack && requiresNativeDecoder(currentTrack.format)) {
+      // Use native decoder seek
+      await nativeDecoderService.seekTo(position);
+      // Update store progress immediately for UI feedback
+      const progress = usePlayerStore.getState().progress;
+      usePlayerStore.getState().setProgress({
+        ...progress,
+        position: position,
+      });
+    } else {
+      // Use TrackPlayer seek
+      await TrackPlayer.seekTo(position);
+    }
   }
 
   /**

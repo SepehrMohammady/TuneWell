@@ -6,3 +6,4 @@
 export { usePlayer } from './usePlayer';
 export { useDatabase } from './useDatabase';
 export { useEQ } from './useEQ';
+export { useCombinedProgress } from './useCombinedProgress';

@@ -62,8 +62,22 @@ export async function PlaybackService(): Promise<void> {
     console.log('[TrackPlayer] State changed:', event.state);
   });
 
-  TrackPlayer.addEventListener(Event.PlaybackError, (event) => {
-    console.error('[TrackPlayer] Playback error:', event);
+  TrackPlayer.addEventListener(Event.PlaybackError, async (event) => {
+    console.error('[TrackPlayer] Playback error:', JSON.stringify(event, null, 2));
+    // Get current track info for debugging
+    try {
+      const track = await TrackPlayer.getActiveTrack();
+      if (track) {
+        console.error('[TrackPlayer] Error on track:', {
+          title: track.title,
+          url: track.url,
+          contentType: (track as any).contentType,
+          format: (track as any).format,
+        });
+      }
+    } catch (e) {
+      // Ignore if we can't get track info
+    }
   });
 
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {

@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.media.AudioManager
 import android.os.Binder
 import android.os.IBinder
 import android.util.Log
@@ -21,6 +22,10 @@ class TrackPlayerSessionModule(private val reactContext: ReactApplicationContext
     companion object {
         private const val TAG = "TrackPlayerSession"
         private const val MUSIC_SERVICE_CLASS = "com.doublesymmetry.trackplayer.service.MusicService"
+        
+        // Cache the session ID once found
+        @Volatile
+        private var cachedSessionId: Int = 0
     }
 
     private var musicService: Any? = null
@@ -97,9 +102,6 @@ class TrackPlayerSessionModule(private val reactContext: ReactApplicationContext
             
             // Log all fields for debugging
             Log.d(TAG, "MusicService class: ${serviceClass.name}")
-            serviceClass.declaredFields.forEach { field ->
-                Log.d(TAG, "  Field: ${field.name} - ${field.type.name}")
-            }
             
             val playerField = serviceClass.getDeclaredField("player")
             playerField.isAccessible = true
@@ -110,16 +112,6 @@ class TrackPlayerSessionModule(private val reactContext: ReactApplicationContext
             
             Log.d(TAG, "Got player: ${player.javaClass.name}")
             
-            // Log player class hierarchy
-            var cls: Class<*>? = player.javaClass
-            while (cls != null) {
-                Log.d(TAG, "  Player class: ${cls.name}")
-                cls.declaredFields.forEach { field ->
-                    Log.d(TAG, "    Field: ${field.name} - ${field.type.name}")
-                }
-                cls = cls.superclass
-            }
-            
             // Try to get exoPlayer directly using property getter
             try {
                 val getExoPlayerMethod = player.javaClass.getMethod("getExoPlayer")
@@ -129,6 +121,9 @@ class TrackPlayerSessionModule(private val reactContext: ReactApplicationContext
                     val getAudioSessionId = exoPlayer.javaClass.getMethod("getAudioSessionId")
                     val sessionId = getAudioSessionId.invoke(exoPlayer) as Int
                     Log.d(TAG, "Got audio session ID via getter: $sessionId")
+                    if (sessionId > 0) {
+                        cachedSessionId = sessionId
+                    }
                     return sessionId
                 }
             } catch (e: Exception) {
@@ -147,6 +142,9 @@ class TrackPlayerSessionModule(private val reactContext: ReactApplicationContext
                         val getAudioSessionId = exoPlayer.javaClass.getMethod("getAudioSessionId")
                         val sessionId = getAudioSessionId.invoke(exoPlayer) as Int
                         Log.d(TAG, "Got audio session ID: $sessionId")
+                        if (sessionId > 0) {
+                            cachedSessionId = sessionId
+                        }
                         return sessionId
                     }
                 } catch (e: NoSuchFieldException) {
@@ -168,7 +166,18 @@ class TrackPlayerSessionModule(private val reactContext: ReactApplicationContext
      */
     @ReactMethod
     fun getAudioSessionId(promise: Promise) {
-        // First check if we already have the service
+        // First check if we have a cached valid session
+        if (cachedSessionId > 0) {
+            Log.d(TAG, "Returning cached session ID: $cachedSessionId")
+            val result = Arguments.createMap().apply {
+                putInt("sessionId", cachedSessionId)
+                putString("source", "cached")
+            }
+            promise.resolve(result)
+            return
+        }
+        
+        // Try to get from service if already connected
         if (musicService != null) {
             try {
                 val sessionId = getAudioSessionIdFromService()
@@ -196,11 +205,15 @@ class TrackPlayerSessionModule(private val reactContext: ReactApplicationContext
                 Log.w(TAG, "Could not bind to MusicService, using fallback")
                 pendingPromise = null
                 
-                // Fallback: return session 0 (global output)
+                // Fallback: generate a session ID instead of using 0
+                val audioManager = reactContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val generatedSession = audioManager.generateAudioSessionId()
+                Log.d(TAG, "Using generated session ID as fallback: $generatedSession")
+                
                 val result = Arguments.createMap().apply {
-                    putInt("sessionId", 0)
-                    putString("source", "global_output")
-                    putString("note", "Could not connect to player service. Using global output session.")
+                    putInt("sessionId", generatedSession)
+                    putString("source", "generated_fallback")
+                    putString("note", "Could not connect to player service. Using generated session.")
                 }
                 promise.resolve(result)
             }

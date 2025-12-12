@@ -8,6 +8,7 @@ import android.media.audiofx.BassBoost
 import android.media.audiofx.Virtualizer
 import android.media.audiofx.PresetReverb
 import android.media.audiofx.AudioEffect
+import android.media.audiofx.LoudnessEnhancer
 import android.util.Log
 import com.facebook.react.bridge.*
 
@@ -29,8 +30,10 @@ class AudioEqualizerModule(private val reactContext: ReactApplicationContext) :
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
     private var audioSessionId: Int = 0
     private var isEnabled: Boolean = false
+    private var currentPreampDb: Double = 0.0
 
     override fun getName(): String = "AudioEqualizerModule"
 
@@ -81,6 +84,17 @@ class AudioEqualizerModule(private val reactContext: ReactApplicationContext) :
             // Create virtualizer
             virtualizer = Virtualizer(PRIORITY, audioSessionId).apply {
                 enabled = false
+            }
+
+            // Create loudness enhancer for preamp
+            try {
+                loudnessEnhancer = LoudnessEnhancer(audioSessionId).apply {
+                    enabled = true
+                    setTargetGain(0) // Start at 0 dB
+                }
+                Log.d(TAG, "LoudnessEnhancer initialized for preamp")
+            } catch (e: Exception) {
+                Log.w(TAG, "LoudnessEnhancer not available: ${e.message}")
             }
 
             val eq = equalizer!!
@@ -283,6 +297,54 @@ class AudioEqualizerModule(private val reactContext: ReactApplicationContext) :
     }
 
     /**
+     * Set preamp gain using LoudnessEnhancer.
+     * @param gainDb The gain in dB (typically -12 to +12)
+     */
+    @ReactMethod
+    fun setPreamp(gainDb: Double, promise: Promise) {
+        try {
+            currentPreampDb = gainDb
+            
+            val le = loudnessEnhancer
+            if (le == null) {
+                Log.w(TAG, "LoudnessEnhancer not available, preamp not applied")
+                promise.resolve(gainDb)
+                return
+            }
+
+            // LoudnessEnhancer uses millibels (1 dB = 100 mB)
+            val gainMb = (gainDb * 100).toInt()
+            le.setTargetGain(gainMb)
+            le.enabled = true
+            
+            Log.d(TAG, "Preamp set to ${gainDb}dB (${gainMb}mB)")
+            promise.resolve(gainDb)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set preamp: ${e.message}", e)
+            promise.reject("PREAMP_ERROR", "Failed to set preamp: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Get current preamp gain
+     */
+    @ReactMethod
+    fun getPreamp(promise: Promise) {
+        try {
+            val le = loudnessEnhancer
+            if (le != null) {
+                val gainMb = le.targetGain
+                val gainDb = gainMb / 100.0
+                promise.resolve(gainDb)
+            } else {
+                promise.resolve(currentPreampDb)
+            }
+        } catch (e: Exception) {
+            promise.resolve(currentPreampDb)
+        }
+    }
+
+    /**
      * Set virtualizer strength (0-1000)
      */
     @ReactMethod
@@ -368,6 +430,11 @@ class AudioEqualizerModule(private val reactContext: ReactApplicationContext) :
             
             virtualizer?.release()
             virtualizer = null
+            
+            loudnessEnhancer?.release()
+            loudnessEnhancer = null
+            
+            currentPreampDb = 0.0
             
             Log.d(TAG, "Equalizer released")
         } catch (e: Exception) {

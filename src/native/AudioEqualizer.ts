@@ -41,6 +41,8 @@ interface AudioEqualizerModuleType {
   usePreset(presetIndex: number): Promise<string>;
   setBassBoost(strength: number): Promise<number>;
   setVirtualizer(strength: number): Promise<number>;
+  setPreamp(gainDb: number): Promise<number>;
+  getPreamp(): Promise<number>;
   getInfo(): Promise<EQInfo>;
   release(): Promise<boolean>;
 }
@@ -197,6 +199,23 @@ class EQService {
       return true;
     } catch (error) {
       console.error('[EQService] Failed to set bass boost:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Set preamp gain
+   * @param gainDb Gain in dB (-12 to +12)
+   */
+  async setPreamp(gainDb: number): Promise<boolean> {
+    if (!AudioEqualizer || !this.initialized) return false;
+    
+    try {
+      await AudioEqualizer.setPreamp(gainDb);
+      console.log('[EQService] Preamp set to', gainDb, 'dB');
+      return true;
+    } catch (error) {
+      console.error('[EQService] Failed to set preamp:', error);
       return false;
     }
   }
