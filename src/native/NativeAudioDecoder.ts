@@ -35,6 +35,7 @@ interface NativeAudioDecoderModuleType {
   canPlay(uri: string): Promise<CanPlayResult>;
   getAudioInfo(uri: string): Promise<AudioInfo>;
   play(uri: string): Promise<boolean>;
+  playWithFormat(uri: string, formatHint: string | null): Promise<boolean>;
   pause(): Promise<boolean>;
   resume(): Promise<boolean>;
   stop(): Promise<boolean>;
@@ -86,8 +87,10 @@ class NativeDecoderService {
 
   /**
    * Play audio file
+   * @param uri The content:// or file:// URI
+   * @param format Optional format hint (e.g., 'wav', 'dsf', 'dff') for content:// URIs that don't have extensions
    */
-  async play(uri: string): Promise<boolean> {
+  async play(uri: string, format?: string): Promise<boolean> {
     if (!NativeAudioDecoder) {
       console.log('[NativeDecoder] Not available on this platform');
       return false;
@@ -95,13 +98,16 @@ class NativeDecoderService {
     
     try {
       this.currentUri = uri;
-      await NativeAudioDecoder.play(uri);
-      console.log('[NativeDecoder] Playing:', uri);
+      const formatHint = format || null;
+      console.log('[NativeDecoder] Calling native playWithFormat - URI:', uri, 'Format:', formatHint);
+      const result = await NativeAudioDecoder.playWithFormat(uri, formatHint);
+      console.log('[NativeDecoder] Native play returned:', result);
       return true;
-    } catch (error) {
-      console.error('[NativeDecoder] play error:', error);
+    } catch (error: any) {
+      console.error('[NativeDecoder] play error:', error?.message || error);
       this.currentUri = null;
-      return false;
+      // Re-throw so caller can handle it properly
+      throw error;
     }
   }
 

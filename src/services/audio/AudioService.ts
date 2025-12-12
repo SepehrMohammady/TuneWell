@@ -25,13 +25,14 @@ import { PLAYBACK_STATES } from '../../config/constants';
 
 /**
  * Check if a format requires the native decoder
- * Only DSD formats (DSF/DFF) require our native decoder.
- * Other formats like WAV, FLAC, MP3 are handled by ExoPlayer via TrackPlayer.
+ * DSD formats (DSF/DFF) and WAV files use our native decoder.
+ * WAV uses native decoder for better compatibility with high-bit-depth files.
+ * Other formats like FLAC, MP3 are handled by ExoPlayer via TrackPlayer.
  */
 function requiresNativeDecoder(format: string): boolean {
   const fmt = (format || '').toLowerCase().replace('.', '');
-  // Only DSD formats use native decoder
-  return ['dsf', 'dff', 'dsd'].includes(fmt);
+  // DSD formats and WAV use native decoder
+  return ['dsf', 'dff', 'dsd', 'wav', 'wave'].includes(fmt);
 }
 
 /**
@@ -514,33 +515,46 @@ class AudioService {
 
     const startTrack = queue[startIndex]?.track;
     
-    // Check if the starting track needs native decoder (DSD)
+    // Check if the starting track needs native decoder (DSD or WAV)
     if (startTrack && requiresNativeDecoder(startTrack.format)) {
-      console.log('[AudioService] DSD format detected, using native decoder:', startTrack.format);
+      const formatName = isDSDFormat(startTrack.format) ? 'DSD' : 'WAV';
+      console.log(`[AudioService] ${formatName} format detected, using native decoder:`, startTrack.format);
+      console.log(`[AudioService] Track details:`, {
+        id: startTrack.id,
+        uri: startTrack.uri,
+        filePath: startTrack.filePath,
+        format: startTrack.format,
+      });
       
       // Stop TrackPlayer if playing
       await TrackPlayer.reset();
       
-      // Use native decoder for DSD - prefer file path over content:// URI
-      let uri = startTrack.filePath || startTrack.uri;
+      // Use native decoder - try multiple sources for the URI
+      let uri = startTrack.uri || startTrack.filePath;
       
-      // Ensure we have a proper file:// URI for the native decoder
+      // If still no URI, try to construct from file path
+      if (!uri && startTrack.fileName) {
+        console.warn(`[AudioService] No URI found, track may not be playable:`, startTrack.fileName);
+      }
+      
+      // Ensure we have a proper URI for the native decoder
       if (uri && !uri.startsWith('content://') && !uri.startsWith('file://')) {
         uri = `file://${uri}`;
       }
       
-      console.log('[AudioService] Playing DSD with native decoder:', uri);
+      console.log(`[AudioService] Playing ${formatName} with native decoder, URI:`, uri, 'Format:', startTrack.format);
       
       if (uri) {
         try {
-          const success = await nativeDecoderService.play(uri);
+          // Pass the format to native decoder since content:// URIs don't have extensions
+          const success = await nativeDecoderService.play(uri, startTrack.format);
           if (success) {
             usePlayerStore.getState().setState('playing');
-            console.log('[AudioService] DSD playback started successfully');
+            console.log(`[AudioService] ${formatName} playback started successfully`);
             
-            // Record play in playlist store for tracking (DSD files)
+            // Record play in playlist store for tracking
             usePlaylistStore.getState().recordPlay(startTrack.id);
-            console.log('[AudioService] Recorded play for DSD track:', startTrack.id);
+            console.log(`[AudioService] Recorded play for ${formatName} track:`, startTrack.id);
             
             // Reinitialize EQ with the native decoder's audio session
             setTimeout(async () => {
@@ -553,21 +567,23 @@ class AudioService {
                   await this.syncEQFromStore();
                 }
               } catch (eqError) {
-                console.warn('[AudioService] Failed to reinitialize EQ for DSD:', eqError);
+                console.warn(`[AudioService] Failed to reinitialize EQ for ${formatName}:`, eqError);
               }
             }, 200);
             
             return;
           } else {
-            console.error('[AudioService] Native decoder returned false');
+            console.error('[AudioService] Native decoder returned false for:', uri);
+            throw new Error(`Native decoder failed to start playback`);
           }
         } catch (error: any) {
           console.error('[AudioService] Native decoder failed:', error);
-          throw new Error(`Failed to play DSD file: ${error.message || 'Unknown error'}`);
+          throw new Error(`Failed to play ${formatName} file: ${error.message || 'Unknown error'}`);
         }
       }
       
-      throw new Error('Could not determine file path for DSD playback');
+      // Only reached if uri is falsy
+      throw new Error(`Could not play ${formatName} file - no valid file path available. URI: ${startTrack.uri}, FilePath: ${startTrack.filePath}`);
     }
 
     // Convert to TrackPlayer tracks (for non-DSD formats)

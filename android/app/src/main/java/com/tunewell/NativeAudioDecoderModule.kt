@@ -163,9 +163,16 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
 
     /**
      * Play audio file using native decoder
+     * @param uri Content URI or file path
+     * @param formatHint Optional format hint (e.g., "wav", "dsf", "dff") for content:// URIs
      */
     @ReactMethod
     fun play(uri: String, promise: Promise) {
+        playWithFormat(uri, null, promise)
+    }
+    
+    @ReactMethod
+    fun playWithFormat(uri: String, formatHint: String?, promise: Promise) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 stop() // Stop any current playback
@@ -174,7 +181,28 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                 isPlaying = true
                 isPaused = false
                 
-                val extension = uri.substringAfterLast('.', "").lowercase()
+                // Determine format: use hint first, then try to extract from URI
+                val extension = formatHint?.lowercase() 
+                    ?: uri.substringAfterLast('.', "").lowercase().takeIf { it.isNotEmpty() && !it.contains('/') }
+                    ?: run {
+                        // For content:// URIs, try to get the file name from MediaStore
+                        val mimeType = try {
+                            reactContext.contentResolver.getType(Uri.parse(uri))
+                        } catch (e: Exception) { null }
+                        
+                        when (mimeType) {
+                            "audio/wav", "audio/x-wav", "audio/wave" -> "wav"
+                            "audio/dsf", "audio/x-dsf" -> "dsf"
+                            "audio/dff", "audio/x-dff" -> "dff"
+                            else -> {
+                                Log.e(TAG, "Cannot determine format for URI: $uri, mimeType: $mimeType")
+                                promise.reject("UNSUPPORTED", "Cannot determine audio format for: $uri")
+                                return@launch
+                            }
+                        }
+                    }
+                
+                Log.d(TAG, "Playing format: $extension, URI: $uri")
                 
                 when (extension) {
                     "dsf" -> playDSF(uri)
@@ -814,46 +842,66 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
         val inputStream = openUri(uri) ?: return null
         
         return try {
-            val buffer = ByteArray(128)
-            inputStream.read(buffer)
+            // Read more bytes to handle WAV files with extra chunks before fmt
+            val buffer = ByteArray(1024)
+            val bytesRead = inputStream.read(buffer)
+            
+            if (bytesRead < 44) {
+                Log.e(TAG, "WAV file too small: $bytesRead bytes")
+                return null
+            }
             
             // Check RIFF header
             val riff = String(buffer, 0, 4)
             val wave = String(buffer, 8, 4)
             
             if (riff != "RIFF" || wave != "WAVE") {
-                Log.e(TAG, "Invalid WAV file")
+                Log.e(TAG, "Invalid WAV file: RIFF=$riff, WAVE=$wave")
                 return null
             }
             
-            // Find fmt chunk
+            // Find fmt chunk - search through the file
             var offset = 12
             var sampleRate = 0
             var channels = 0
             var bitsPerSample = 0
             var audioFormat = 0
+            var foundFmt = false
             
-            while (offset < buffer.size - 8) {
+            while (offset < bytesRead - 8) {
                 val chunkId = String(buffer, offset, 4)
                 val chunkSize = ByteBuffer.wrap(buffer, offset + 4, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                
+                Log.d(TAG, "WAV chunk at $offset: '$chunkId' size=$chunkSize")
                 
                 if (chunkId == "fmt ") {
                     audioFormat = ByteBuffer.wrap(buffer, offset + 8, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
                     channels = ByteBuffer.wrap(buffer, offset + 10, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
                     sampleRate = ByteBuffer.wrap(buffer, offset + 12, 4).order(ByteOrder.LITTLE_ENDIAN).int
                     bitsPerSample = ByteBuffer.wrap(buffer, offset + 22, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+                    foundFmt = true
+                    Log.d(TAG, "WAV fmt: format=$audioFormat, channels=$channels, sampleRate=$sampleRate, bits=$bitsPerSample")
                     break
                 }
                 
                 offset += 8 + chunkSize
+                // Handle odd chunk sizes (they're padded to even)
+                if (chunkSize % 2 != 0) offset++
+            }
+            
+            if (!foundFmt) {
+                Log.e(TAG, "Could not find fmt chunk in WAV")
+                return null
             }
             
             val formatName = when (audioFormat) {
                 1 -> "PCM"
                 3 -> "IEEE Float"
                 0xFFFE -> "Extensible"
-                else -> "Unknown"
+                else -> "Unknown ($audioFormat)"
             }
+            
+            Log.d(TAG, "WAV info: $formatName, $sampleRate Hz, $channels ch, $bitsPerSample bit")
             
             Arguments.createMap().apply {
                 putString("format", "WAV")
@@ -861,9 +909,10 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                 putInt("sampleRate", sampleRate)
                 putInt("channels", channels)
                 putInt("bitsPerSample", bitsPerSample)
+                putInt("audioFormat", audioFormat)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing WAV: ${e.message}")
+            Log.e(TAG, "Error parsing WAV: ${e.message}", e)
             null
         } finally {
             inputStream.close()
@@ -876,12 +925,26 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
         val info = getWAVInfo(uri)
         if (info == null) {
             Log.e(TAG, "Failed to get WAV info")
+            throw Exception("Failed to read WAV file info")
+        }
+        
+        val wavSampleRate = info.getInt("sampleRate")
+        val wavChannels = info.getInt("channels")
+        val wavBitsPerSample = info.getInt("bitsPerSample")
+        val wavAudioFormat = info.getInt("audioFormat")
+        
+        Log.d(TAG, "WAV playback: $wavSampleRate Hz, $wavChannels ch, $wavBitsPerSample bit, format=$wavAudioFormat")
+        
+        // For high sample rate or 32-bit float WAV, use raw PCM playback
+        val useRawPlayback = wavSampleRate > 192000 || wavAudioFormat == 3 || wavBitsPerSample == 32
+        
+        if (useRawPlayback) {
+            Log.d(TAG, "Using raw PCM playback for high-res/float WAV")
+            playWAVRaw(uri, wavSampleRate, wavChannels, wavBitsPerSample, wavAudioFormat)
             return
         }
         
-        // Use MediaExtractor and MediaCodec for WAV playback
-        // This handles various WAV formats including high bit-depth
-        
+        // Use MediaExtractor and MediaCodec for standard WAV playback
         try {
             val extractor = MediaExtractor()
             
@@ -905,7 +968,9 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             }
             
             if (audioTrackIndex < 0) {
-                Log.e(TAG, "No audio track found in WAV")
+                Log.e(TAG, "No audio track found in WAV, falling back to raw playback")
+                extractor.release()
+                playWAVRaw(uri, wavSampleRate, wavChannels, wavBitsPerSample, wavAudioFormat)
                 return
             }
             
@@ -916,7 +981,7 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             val channelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: "audio/raw"
             
-            Log.d(TAG, "WAV format: $sampleRate Hz, $channelCount ch, $mime")
+            Log.d(TAG, "WAV MediaExtractor format: $sampleRate Hz, $channelCount ch, $mime")
             
             // Create decoder
             val decoder = MediaCodec.createDecoderByType(mime)
@@ -1016,6 +1081,201 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             Log.e(TAG, "WAV playback error: ${e.message}", e)
             throw e
         }
+    }
+
+    /**
+     * Raw PCM playback for high sample rate and 32-bit float WAV files
+     * that MediaCodec doesn't support
+     */
+    private suspend fun playWAVRaw(uri: String, sampleRate: Int, channels: Int, bitsPerSample: Int, audioFormat: Int) {
+        Log.d(TAG, "Raw WAV playback: $sampleRate Hz, $channels ch, $bitsPerSample bit, format=$audioFormat")
+        
+        try {
+            val inputStream = openUri(uri) ?: throw Exception("Cannot open WAV file")
+            
+            // Skip WAV header (find data chunk)
+            val headerBuffer = ByteArray(1024)
+            inputStream.read(headerBuffer)
+            
+            var dataOffset = 12
+            var dataSize = 0
+            while (dataOffset < headerBuffer.size - 8) {
+                val chunkId = String(headerBuffer, dataOffset, 4)
+                val chunkSize = ByteBuffer.wrap(headerBuffer, dataOffset + 4, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                
+                if (chunkId == "data") {
+                    dataSize = chunkSize
+                    dataOffset += 8 // Skip chunk header
+                    break
+                }
+                dataOffset += 8 + chunkSize
+                if (chunkSize % 2 != 0) dataOffset++
+            }
+            
+            // Reopen and skip to data
+            inputStream.close()
+            val dataStream = openUri(uri) ?: throw Exception("Cannot reopen WAV file")
+            dataStream.skip(dataOffset.toLong())
+            
+            // Determine output format - Android supports up to 192kHz, 
+            // and we'll convert float to 16-bit PCM for playback
+            val outputSampleRate = if (sampleRate > 192000) 192000 else sampleRate
+            val outputEncoding = AudioFormat.ENCODING_PCM_16BIT
+            val channelConfig = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+            val bytesPerInputSample = bitsPerSample / 8
+            val bytesPerOutputSample = 2 // 16-bit output
+            
+            val bufferSize = AudioTrack.getMinBufferSize(outputSampleRate, channelConfig, outputEncoding) * 4
+            
+            // Generate audio session ID if not set
+            if (audioSessionId == 0) {
+                val audioManager = reactContext.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
+                audioSessionId = audioManager.generateAudioSessionId()
+                Log.d(TAG, "Generated audio session ID: $audioSessionId")
+            }
+            
+            audioTrack = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(outputSampleRate)
+                        .setChannelMask(channelConfig)
+                        .setEncoding(outputEncoding)
+                        .build()
+                )
+                .setSessionId(audioSessionId)
+                .setBufferSizeInBytes(bufferSize)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
+            
+            audioTrack?.play()
+            Log.d(TAG, "AudioTrack started for raw WAV playback")
+            
+            // Read and convert samples
+            val inputBufferSize = 4096 * bytesPerInputSample * channels
+            val inputBuffer = ByteArray(inputBufferSize)
+            
+            decoderJob = CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    var totalBytesRead = 0L
+                    
+                    while (isPlaying) {
+                        if (isPaused) {
+                            delay(100)
+                            continue
+                        }
+                        
+                        val bytesRead = dataStream.read(inputBuffer)
+                        if (bytesRead <= 0) break
+                        
+                        totalBytesRead += bytesRead
+                        
+                        // Convert to 16-bit PCM
+                        val outputBuffer = convertTo16Bit(inputBuffer, bytesRead, bitsPerSample, audioFormat)
+                        
+                        // Handle sample rate conversion if needed (simple skip for now)
+                        val finalBuffer = if (sampleRate > 192000) {
+                            // Skip samples for basic downsampling (not ideal but functional)
+                            val ratio = sampleRate / outputSampleRate
+                            downsamplePCM(outputBuffer, ratio, channels)
+                        } else {
+                            outputBuffer
+                        }
+                        
+                        audioTrack?.write(finalBuffer, 0, finalBuffer.size)
+                    }
+                    
+                    Log.d(TAG, "Raw WAV playback completed, total bytes: $totalBytesRead")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Raw WAV playback loop error: ${e.message}", e)
+                } finally {
+                    dataStream.close()
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Raw WAV playback error: ${e.message}", e)
+            throw e
+        }
+    }
+    
+    /**
+     * Convert various bit depths to 16-bit PCM
+     */
+    private fun convertTo16Bit(input: ByteArray, length: Int, bitsPerSample: Int, audioFormat: Int): ByteArray {
+        return when {
+            bitsPerSample == 16 && audioFormat == 1 -> {
+                // Already 16-bit PCM
+                input.copyOf(length)
+            }
+            bitsPerSample == 24 && audioFormat == 1 -> {
+                // 24-bit PCM to 16-bit
+                val samples = length / 3
+                val output = ByteArray(samples * 2)
+                for (i in 0 until samples) {
+                    // Take the upper 16 bits of 24-bit sample
+                    output[i * 2] = input[i * 3 + 1]
+                    output[i * 2 + 1] = input[i * 3 + 2]
+                }
+                output
+            }
+            bitsPerSample == 32 && audioFormat == 1 -> {
+                // 32-bit integer PCM to 16-bit
+                val samples = length / 4
+                val output = ByteArray(samples * 2)
+                for (i in 0 until samples) {
+                    // Take the upper 16 bits of 32-bit sample
+                    output[i * 2] = input[i * 4 + 2]
+                    output[i * 2 + 1] = input[i * 4 + 3]
+                }
+                output
+            }
+            bitsPerSample == 32 && audioFormat == 3 -> {
+                // 32-bit float PCM to 16-bit
+                val samples = length / 4
+                val output = ByteArray(samples * 2)
+                val buffer = ByteBuffer.wrap(input).order(ByteOrder.LITTLE_ENDIAN)
+                val outBuffer = ByteBuffer.wrap(output).order(ByteOrder.LITTLE_ENDIAN)
+                for (i in 0 until samples) {
+                    val floatSample = buffer.getFloat(i * 4)
+                    // Clamp and scale to 16-bit range
+                    val clampedSample = floatSample.coerceIn(-1.0f, 1.0f)
+                    val intSample = (clampedSample * 32767).toInt().toShort()
+                    outBuffer.putShort(i * 2, intSample)
+                }
+                output
+            }
+            else -> {
+                Log.w(TAG, "Unknown WAV format: $bitsPerSample bit, format $audioFormat, passing through")
+                input.copyOf(length)
+            }
+        }
+    }
+    
+    /**
+     * Basic downsampling by skipping samples
+     */
+    private fun downsamplePCM(input: ByteArray, ratio: Int, channels: Int): ByteArray {
+        val bytesPerSample = 2 // 16-bit
+        val frameSize = bytesPerSample * channels
+        val inputFrames = input.size / frameSize
+        val outputFrames = inputFrames / ratio
+        val output = ByteArray(outputFrames * frameSize)
+        
+        for (i in 0 until outputFrames) {
+            val srcOffset = i * ratio * frameSize
+            val dstOffset = i * frameSize
+            if (srcOffset + frameSize <= input.size && dstOffset + frameSize <= output.size) {
+                System.arraycopy(input, srcOffset, output, dstOffset, frameSize)
+            }
+        }
+        
+        return output
     }
 
     // =========================================================================

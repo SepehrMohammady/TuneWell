@@ -30,6 +30,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, SORT_OPTIONS } from '../config';
 import { useLibraryStore, usePlayerStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
+import { listSubfolders, getFolderName, SubfolderInfo } from '../native/FolderBrowser';
 import MiniPlayer from '../components/player/MiniPlayer';
 import type { Track } from '../types';
 import type { ScannedTrack } from '../services/libraryScanner';
@@ -81,6 +82,10 @@ export default function LibraryScreen() {
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [manualPath, setManualPath] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSubfolderModal, setShowSubfolderModal] = useState(false);
+  const [subfolders, setSubfolders] = useState<SubfolderInfo[]>([]);
+  const [parentFolderUri, setParentFolderUri] = useState<string>('');
+  const [parentFolderName, setParentFolderName] = useState<string>('');
   const { currentTrack } = usePlayerStore();
   const { colors, mode: themeMode } = useThemeStore();
   const { 
@@ -92,7 +97,8 @@ export default function LibraryScreen() {
     sortDescending, 
     stats, 
     addScanFolder, 
-    removeScanFolder, 
+    removeScanFolder,
+    clearScanFolders,
     startScan,
     setSortBy,
     toggleSortDirection,
@@ -250,15 +256,29 @@ export default function LibraryScreen() {
           return;
         }
         
-        addScanFolder(folderPath);
-        Alert.alert(
-          'Folder Added', 
-          `Added folder to library.\n\nTap "Scan" to find music files.`,
-          [
-            { text: 'Later', style: 'cancel' },
-            { text: 'Scan Now', onPress: () => startScan() }
-          ]
-        );
+        // Check for subfolders
+        const foundSubfolders = await listSubfolders(folderPath);
+        const folderName = await getFolderName(folderPath);
+        
+        if (foundSubfolders.length > 0) {
+          // Show subfolder selection option
+          setParentFolderUri(folderPath);
+          setParentFolderName(folderName);
+          setSubfolders(foundSubfolders);
+          setShowSubfolderModal(true);
+        } else {
+          // No subfolders, just add the folder
+          addScanFolder(folderPath);
+          Alert.alert(
+            'Folder Added', 
+            `Added folder to library.\n\nTap "Scan" to find music files.`,
+            [
+              { text: 'Done', style: 'cancel' },
+              { text: 'Add Another', onPress: () => handleAddFolder() },
+              { text: 'Scan Now', onPress: () => startScan() }
+            ]
+          );
+        }
       }
     } catch (err: any) {
       if (err?.code !== 'DOCUMENT_PICKER_CANCELED' && err?.message !== 'User canceled' && !err?.message?.includes('cancel')) {
@@ -287,6 +307,102 @@ export default function LibraryScreen() {
     Alert.alert('Folder Added', 'Folder added to library.');
   }, [manualPath, addScanFolder, scanFolders]);
 
+  // Handle adding parent folder (includes all subfolders when scanned)
+  const handleAddParentFolder = useCallback(() => {
+    if (parentFolderUri && !scanFolders.includes(parentFolderUri)) {
+      addScanFolder(parentFolderUri);
+    }
+    setShowSubfolderModal(false);
+    setSubfolders([]);
+    setParentFolderUri('');
+    setParentFolderName('');
+    Alert.alert(
+      'Folder Added', 
+      `Added folder to library.\n\nTap "Scan" to find music files.`,
+      [
+        { text: 'Done', style: 'cancel' },
+        { text: 'Add Another', onPress: () => handleAddFolder() },
+        { text: 'Scan Now', onPress: () => startScan() }
+      ]
+    );
+  }, [parentFolderUri, addScanFolder, scanFolders, startScan, handleAddFolder]);
+
+  // Handle toggling a subfolder (add or remove)
+  const handleToggleSubfolder = useCallback((subfolder: SubfolderInfo) => {
+    const pathToAdd = subfolder.path || subfolder.uri;
+    const isAdded = scanFolders.includes(pathToAdd) || 
+                    scanFolders.includes(subfolder.uri) ||
+                    scanFolders.some(f => f.endsWith('/' + subfolder.name));
+    
+    if (isAdded) {
+      // Remove the folder - try all possible paths
+      if (scanFolders.includes(pathToAdd)) {
+        removeScanFolder(pathToAdd);
+      } else if (scanFolders.includes(subfolder.uri)) {
+        removeScanFolder(subfolder.uri);
+      } else {
+        // Find and remove by name match
+        const match = scanFolders.find(f => f.endsWith('/' + subfolder.name));
+        if (match) removeScanFolder(match);
+      }
+    } else {
+      // Add the folder
+      addScanFolder(pathToAdd);
+    }
+  }, [addScanFolder, removeScanFolder, scanFolders]);
+
+  // Check if subfolder is already added (by path or URI)
+  const isSubfolderAdded = useCallback((subfolder: SubfolderInfo): boolean => {
+    const pathToAdd = subfolder.path || subfolder.uri;
+    return scanFolders.includes(pathToAdd) || 
+           scanFolders.includes(subfolder.uri) ||
+           scanFolders.some(f => f.endsWith('/' + subfolder.name));
+  }, [scanFolders]);
+
+  // Handle selecting all subfolders at once
+  const handleSelectAllSubfolders = useCallback(() => {
+    for (const subfolder of subfolders) {
+      if (!isSubfolderAdded(subfolder)) {
+        const pathToAdd = subfolder.path || subfolder.uri;
+        addScanFolder(pathToAdd);
+      }
+    }
+  }, [subfolders, isSubfolderAdded, addScanFolder]);
+
+  // Handle deselecting all subfolders
+  const handleDeselectAllSubfolders = useCallback(() => {
+    for (const subfolder of subfolders) {
+      if (isSubfolderAdded(subfolder)) {
+        const pathToAdd = subfolder.path || subfolder.uri;
+        if (scanFolders.includes(pathToAdd)) {
+          removeScanFolder(pathToAdd);
+        } else if (scanFolders.includes(subfolder.uri)) {
+          removeScanFolder(subfolder.uri);
+        } else {
+          const match = scanFolders.find(f => f.endsWith('/' + subfolder.name));
+          if (match) removeScanFolder(match);
+        }
+      }
+    }
+  }, [subfolders, isSubfolderAdded, removeScanFolder, scanFolders]);
+
+  // Handle done with subfolder selection
+  const handleSubfolderDone = useCallback(() => {
+    setShowSubfolderModal(false);
+    setSubfolders([]);
+    setParentFolderUri('');
+    setParentFolderName('');
+    Alert.alert(
+      'Folders Added', 
+      `Tap "Scan" to find music files.`,
+      [
+        { text: 'Done', style: 'cancel' },
+        { text: 'Add Another', onPress: () => handleAddFolder() },
+        { text: 'Scan Now', onPress: () => startScan() }
+      ]
+    );
+  }, [startScan, handleAddFolder]);
+
   const handleRemoveFolder = useCallback((folderPath: string) => {
     Alert.alert(
       'Remove Folder',
@@ -301,6 +417,23 @@ export default function LibraryScreen() {
       ]
     );
   }, [removeScanFolder]);
+
+  const handleClearAllFolders = useCallback(() => {
+    if (scanFolders.length === 0) return;
+    
+    Alert.alert(
+      'Clear All Folders',
+      `Remove all ${scanFolders.length} folder${scanFolders.length !== 1 ? 's' : ''} from your library?\n\nThis will not delete your music files.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Clear All', 
+          style: 'destructive',
+          onPress: () => clearScanFolders()
+        }
+      ]
+    );
+  }, [scanFolders.length, clearScanFolders]);
 
   const handleScan = useCallback(async () => {
     if (!hasPermission) {
@@ -433,6 +566,15 @@ export default function LibraryScreen() {
           <Text style={styles.emptyFoldersSubtext}>Tap above to add your music folders</Text>
         </View>
       ) : (
+        <>
+        {/* Clear All button */}
+        <TouchableOpacity
+          style={styles.clearAllButton}
+          onPress={handleClearAllFolders}
+        >
+          <MaterialIcons name="delete-sweep" size={18} color={THEME.colors.error || '#ff6b6b'} />
+          <Text style={styles.clearAllText}>Clear All ({scanFolders.length})</Text>
+        </TouchableOpacity>
         <FlatList
           data={scanFolders}
           keyExtractor={(item) => item}
@@ -458,6 +600,7 @@ export default function LibraryScreen() {
           contentContainerStyle={styles.listContent}
           scrollEnabled={false}
         />
+        </>
       )}
     </View>
   );
@@ -774,6 +917,117 @@ export default function LibraryScreen() {
         </View>
       </Modal>
 
+      {/* Subfolder Selection Modal */}
+      <Modal
+        visible={showSubfolderModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSubfolderModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.subfolderModalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Subfolders Found</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+              {parentFolderName} has {subfolders.length} subfolder{subfolders.length !== 1 ? 's' : ''}
+            </Text>
+            
+            {/* Add parent folder option */}
+            <TouchableOpacity
+              style={[styles.subfolderOption, { backgroundColor: colors.primary }]}
+              onPress={handleAddParentFolder}
+            >
+              <MaterialIcons name="folder" size={24} color={colors.background} />
+              <View style={styles.subfolderTextContainer}>
+                <Text style={[styles.subfolderName, { color: colors.background }]}>
+                  Add "{parentFolderName}" (includes all subfolders)
+                </Text>
+              </View>
+              <MaterialIcons name="add" size={24} color={colors.background} />
+            </TouchableOpacity>
+            
+            <Text style={[styles.subfolderDivider, { color: colors.textMuted }]}>
+              Or select individual subfolders:
+            </Text>
+            
+            {/* Select All / Deselect All buttons */}
+            <View style={styles.selectButtonsRow}>
+              <TouchableOpacity
+                style={[styles.selectAllButton, { borderColor: colors.primary, flex: 1, marginRight: 8 }]}
+                onPress={handleSelectAllSubfolders}
+              >
+                <MaterialIcons name="check-box" size={18} color={colors.primary} />
+                <Text style={[styles.selectAllText, { color: colors.primary }]}>Select All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.selectAllButton, { borderColor: colors.error || '#ff6b6b', flex: 1 }]}
+                onPress={handleDeselectAllSubfolders}
+              >
+                <MaterialIcons name="check-box-outline-blank" size={18} color={colors.error || '#ff6b6b'} />
+                <Text style={[styles.selectAllText, { color: colors.error || '#ff6b6b' }]}>Deselect All</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* Subfolder list */}
+            <ScrollView style={styles.subfolderList} showsVerticalScrollIndicator={true}>
+              {subfolders.map((subfolder) => {
+                const isAdded = isSubfolderAdded(subfolder);
+                return (
+                  <TouchableOpacity
+                    key={subfolder.uri}
+                    style={[
+                      styles.subfolderItem,
+                      { backgroundColor: isAdded ? colors.surfaceLight : colors.background, borderColor: isAdded ? colors.primary : colors.border }
+                    ]}
+                    onPress={() => handleToggleSubfolder(subfolder)}
+                  >
+                    <MaterialIcons 
+                      name={isAdded ? "check-box" : "check-box-outline-blank"}
+                      size={20} 
+                      color={isAdded ? colors.primary : colors.textMuted} 
+                    />
+                    <Text 
+                      style={[
+                        styles.subfolderItemText, 
+                        { color: colors.text }
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {subfolder.name}
+                    </Text>
+                    <MaterialIcons 
+                      name="folder" 
+                      size={20} 
+                      color={isAdded ? colors.primary : colors.textMuted} 
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            
+            {/* Action buttons */}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalCancelButton, { backgroundColor: colors.surfaceLight }]}
+                onPress={() => {
+                  setShowSubfolderModal(false);
+                  setSubfolders([]);
+                  setParentFolderUri('');
+                  setParentFolderName('');
+                }}
+              >
+                <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalAddButton, { backgroundColor: colors.primary }]}
+                onPress={handleSubfolderDone}
+              >
+                <Text style={[styles.modalAddText, { color: colors.background }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Mini Player */}
       {currentTrack && <MiniPlayer />}
     </SafeAreaView>
@@ -897,6 +1151,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: THEME.colors.textSecondary,
     marginTop: 2,
+  },
+  clearAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: THEME.spacing.sm,
+    marginBottom: THEME.spacing.sm,
+  },
+  clearAllText: {
+    color: THEME.colors.error || '#ff6b6b',
+    fontSize: 14,
+    marginLeft: THEME.spacing.xs,
   },
   sortBar: {
     flexDirection: 'row',
@@ -1226,5 +1492,70 @@ const styles = StyleSheet.create({
   artistStats: {
     fontSize: 13,
     color: THEME.colors.textSecondary,
+  },
+  // Subfolder modal styles
+  subfolderModalContent: {
+    backgroundColor: THEME.colors.surface,
+    borderRadius: THEME.borderRadius.lg,
+    padding: THEME.spacing.lg,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+  },
+  subfolderOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    marginBottom: THEME.spacing.md,
+  },
+  subfolderTextContainer: {
+    flex: 1,
+    marginHorizontal: THEME.spacing.sm,
+  },
+  subfolderName: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  subfolderDivider: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginVertical: THEME.spacing.sm,
+  },
+  subfolderList: {
+    maxHeight: 250,
+    marginBottom: THEME.spacing.md,
+  },
+  subfolderItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.sm,
+    borderWidth: 1,
+    marginBottom: THEME.spacing.xs,
+  },
+  subfolderItemText: {
+    flex: 1,
+    fontSize: 14,
+    marginHorizontal: THEME.spacing.sm,
+  },
+  selectAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: THEME.spacing.sm,
+    paddingHorizontal: THEME.spacing.md,
+    borderWidth: 1,
+    borderRadius: THEME.borderRadius.md,
+    marginBottom: THEME.spacing.sm,
+  },
+  selectAllText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: THEME.spacing.xs,
+  },
+  selectButtonsRow: {
+    flexDirection: 'row',
+    marginBottom: THEME.spacing.sm,
   },
 });
