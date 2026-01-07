@@ -23,8 +23,12 @@ import {
   PanResponder,
   Animated,
   LayoutChangeEvent,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import RNFS from 'react-native-fs';
+import { pick, types } from '@react-native-documents/picker';
 import { THEME, EQ_FREQUENCIES, EQ_PRESETS } from '../config';
 import { useEQStore, BUILT_IN_PRESETS, useThemeStore } from '../store';
 import { usePlayerStore } from '../store';
@@ -105,26 +109,99 @@ export default function EqualizerScreen() {
     }
   }, [presetName, bands, preamp]);
 
-  const handleExportPreset = useCallback(() => {
-    const presetData = JSON.stringify({
-      bands: bands.map(b => ({ frequency: b.frequency, gain: b.gain })),
-      preamp,
-    }, null, 2);
-    
-    Alert.alert(
-      'Export Preset',
-      `Preset data:\n\n${presetData}\n\n(Copy this to share your EQ settings)`,
-      [{ text: 'OK' }]
-    );
+  const handleExportPreset = useCallback(async () => {
+    try {
+      const presetData = {
+        name: 'TuneWell EQ Preset',
+        version: 1,
+        bands: bands.map(b => ({ frequency: b.frequency, gain: b.gain })),
+        preamp,
+        exportDate: new Date().toISOString(),
+      };
+      
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const fileName = `TuneWell_EQ_${timestamp}.json`;
+      
+      // Save to Downloads folder
+      const downloadPath = Platform.OS === 'android' 
+        ? `${RNFS.DownloadDirectoryPath}/${fileName}`
+        : `${RNFS.DocumentDirectoryPath}/${fileName}`;
+      
+      await RNFS.writeFile(downloadPath, JSON.stringify(presetData, null, 2), 'utf8');
+      
+      Alert.alert(
+        '✅ Exported Successfully',
+        `EQ preset saved to:\n${downloadPath}`,
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      console.error('[EQ Export] Error:', error);
+      Alert.alert('Export Error', error?.message || 'Failed to export preset');
+    }
   }, [bands, preamp]);
 
-  const handleImportPreset = useCallback(() => {
-    Alert.alert(
-      'Import Preset',
-      'Import functionality will be available in a future update.\n\nYou can manually adjust the EQ bands or select a built-in preset.',
-      [{ text: 'OK' }]
-    );
-  }, []);
+  const handleImportPreset = useCallback(async () => {
+    try {
+      // Open document picker to select a JSON file
+      const [result] = await pick({
+        type: [types.json],
+        allowMultiSelection: false,
+      });
+      
+      if (!result?.uri) {
+        return; // User cancelled
+      }
+      
+      console.log('[EQ Import] Selected file:', result.uri);
+      
+      // Read the file content
+      let fileContent: string;
+      if (result.uri.startsWith('content://')) {
+        // Android content URI - read directly
+        fileContent = await RNFS.readFile(result.uri, 'utf8');
+      } else {
+        // Regular file path
+        const filePath = result.uri.replace('file://', '');
+        fileContent = await RNFS.readFile(filePath, 'utf8');
+      }
+      
+      // Parse JSON
+      const presetData = JSON.parse(fileContent);
+      
+      // Validate preset structure
+      if (!presetData.bands || !Array.isArray(presetData.bands)) {
+        throw new Error('Invalid preset format: missing bands array');
+      }
+      
+      // Apply the preset
+      const newBands = bands.map(band => {
+        const importedBand = presetData.bands.find((b: any) => b.frequency === band.frequency);
+        return importedBand ? { ...band, gain: importedBand.gain } : band;
+      });
+      
+      // Update store
+      newBands.forEach((band, index) => {
+        setBandGain(index, band.gain);
+      });
+      
+      if (typeof presetData.preamp === 'number') {
+        setPreamp(presetData.preamp);
+      }
+      
+      Alert.alert(
+        '✅ Imported Successfully',
+        `EQ preset "${presetData.name || 'Unknown'}" has been applied.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      if (error?.message?.includes('cancel') || error?.code === 'DOCUMENT_PICKER_CANCELED') {
+        return; // User cancelled - not an error
+      }
+      console.error('[EQ Import] Error:', error);
+      Alert.alert('Import Error', error?.message || 'Failed to import preset. Make sure the file is a valid TuneWell EQ preset.');
+    }
+  }, [bands, setBandGain, setPreamp]);
 
   const renderBandSlider = (frequency: number, gain: number, index: number) => {
     // Visual representation of the slider

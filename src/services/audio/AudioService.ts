@@ -1015,8 +1015,14 @@ class AudioService {
    * Set repeat mode
    */
   async setRepeatMode(mode: string): Promise<void> {
-    console.log('[AudioService] Setting repeat mode:', mode);
-    await TrackPlayer.setRepeatMode(mapRepeatMode(mode));
+    const mappedMode = mapRepeatMode(mode);
+    console.log('[AudioService] Setting repeat mode:', mode, '-> TrackPlayer RepeatMode:', mappedMode);
+    try {
+      await TrackPlayer.setRepeatMode(mappedMode);
+      console.log('[AudioService] TrackPlayer.setRepeatMode succeeded');
+    } catch (error) {
+      console.error('[AudioService] TrackPlayer.setRepeatMode failed:', error);
+    }
     usePlayerStore.getState().setRepeatMode(mode as any);
   }
 

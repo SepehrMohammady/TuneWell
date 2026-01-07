@@ -77,17 +77,6 @@ export default function PlayerScreen() {
     try {
       // Share the actual file using react-native-share
       const filePath = currentTrack.filePath;
-      if (!filePath) {
-        // Fallback to sharing track info only
-        await Share.open({
-          message: `🎵 Now playing: ${currentTrack.title} by ${currentTrack.artist}\n\nShared from TuneWell`,
-          title: `${currentTrack.title} - ${currentTrack.artist}`,
-        });
-        return;
-      }
-      
-      // Prepare file URI (ensure it has file:// prefix)
-      const fileUri = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
       
       // Get MIME type based on format
       const mimeTypes: Record<string, string> = {
@@ -104,16 +93,33 @@ export default function PlayerScreen() {
       const format = currentTrack.format?.toLowerCase() || '';
       const mimeType = mimeTypes[format] || 'audio/*';
       
-      await Share.open({
-        url: fileUri,
-        type: mimeType,
-        title: `${currentTrack.title} - ${currentTrack.artist}`,
-        message: `🎵 ${currentTrack.title} by ${currentTrack.artist}`,
-      });
+      if (filePath) {
+        // Prepare file URI (ensure it has file:// prefix)
+        const fileUri = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
+        
+        console.log('[Share] Attempting to share file:', fileUri, 'mimeType:', mimeType);
+        
+        await Share.open({
+          url: fileUri,
+          type: mimeType,
+          title: `${currentTrack.title} - ${currentTrack.artist}`,
+          subject: `${currentTrack.title} - ${currentTrack.artist}`,
+          failOnCancel: false,
+        });
+      } else {
+        // Fallback to sharing track info only
+        console.log('[Share] No file path, sharing text only');
+        await Share.open({
+          message: `🎵 Now playing: ${currentTrack.title} by ${currentTrack.artist}\n\nShared from TuneWell`,
+          title: `${currentTrack.title} - ${currentTrack.artist}`,
+          failOnCancel: false,
+        });
+      }
     } catch (error: any) {
-      // User cancelled share is not an error
-      if (error?.message !== 'User did not share') {
-        console.error('Share error:', error);
+      console.log('[Share] Error:', error?.message || error);
+      // Show user-friendly error if not a cancellation
+      if (error?.message && !error.message.includes('cancel') && !error.message.includes('dismiss')) {
+        Alert.alert('Share Error', 'Unable to share this file. Try sharing as text instead.');
       }
     }
   }, [currentTrack]);
@@ -170,12 +176,17 @@ export default function PlayerScreen() {
             </View>
           )}
         </View>
-        <TouchableOpacity
-          onPress={() => navigation.navigate(ROUTES.QUEUE as never)}
-          style={styles.headerButton}
-        >
-          <MaterialIcons name="queue-music" size={28} color={colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={() => setShowInfoModal(true)} style={styles.headerButton}>
+            <MaterialIcons name="info-outline" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate(ROUTES.QUEUE as never)}
+            style={styles.headerButton}
+          >
+            <MaterialIcons name="queue-music" size={28} color={colors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Artwork */}
@@ -316,6 +327,11 @@ export default function PlayerScreen() {
           />
         </TouchableOpacity>
         
+        {/* Share */}
+        <TouchableOpacity style={styles.bottomAction} onPress={handleShare}>
+          <MaterialIcons name="share" size={26} color={colors.text} />
+        </TouchableOpacity>
+        
         {/* Mood */}
         <TouchableOpacity style={styles.bottomAction} onPress={() => setShowMoodModal(true)}>
           <MaterialIcons 
@@ -328,16 +344,6 @@ export default function PlayerScreen() {
         {/* Add to Playlist */}
         <TouchableOpacity style={styles.bottomAction} onPress={() => setShowPlaylistModal(true)}>
           <MaterialIcons name="playlist-add" size={26} color={colors.text} />
-        </TouchableOpacity>
-
-        {/* Share */}
-        <TouchableOpacity style={styles.bottomAction} onPress={handleShare}>
-          <MaterialIcons name="share" size={26} color={colors.text} />
-        </TouchableOpacity>
-
-        {/* Track Info */}
-        <TouchableOpacity style={styles.bottomAction} onPress={() => setShowInfoModal(true)}>
-          <MaterialIcons name="info-outline" size={26} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -515,6 +521,10 @@ const styles = StyleSheet.create({
     color: THEME.colors.text,
   },
   headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
   },
