@@ -21,6 +21,7 @@ import {
   Modal,
   ScrollView,
   Alert,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -44,8 +45,6 @@ export default function PlayerScreen() {
     state,
     repeatMode,
     isShuffled,
-    cycleRepeatMode,
-    toggleShuffle,
   } = usePlayerStore();
   
   const { isEnabled: eqEnabled } = useEQStore();
@@ -61,6 +60,7 @@ export default function PlayerScreen() {
 
   const [showMoodModal, setShowMoodModal] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   const isPlaying = state === 'playing';
   const trackIsFavorite = currentTrack ? isFavorite(currentTrack.id) : false;
@@ -71,6 +71,26 @@ export default function PlayerScreen() {
     const newState = toggleFavorite(currentTrack.id);
     // Could show a toast here
   }, [currentTrack, toggleFavorite]);
+
+  const handleShare = useCallback(async () => {
+    if (!currentTrack) return;
+    try {
+      await Share.share({
+        message: `🎵 Now playing: ${currentTrack.title} by ${currentTrack.artist}\n\nShared from TuneWell`,
+        title: `${currentTrack.title} - ${currentTrack.artist}`,
+      });
+    } catch (error) {
+      console.error('Share error:', error);
+    }
+  }, [currentTrack]);
+
+  const formatFileSize = (bytes: number | undefined): string => {
+    if (!bytes) return 'Unknown';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
 
   const handleMoodToggle = useCallback((moodId: string) => {
     if (!currentTrack) return;
@@ -198,7 +218,7 @@ export default function PlayerScreen() {
         {/* Shuffle */}
         <TouchableOpacity
           style={[styles.secondaryControl, isShuffled && styles.secondaryControlActive]}
-          onPress={toggleShuffle}
+          onPress={() => audioService.toggleShuffle()}
         >
           <MaterialIcons 
             name="shuffle" 
@@ -229,7 +249,7 @@ export default function PlayerScreen() {
         {/* Repeat */}
         <TouchableOpacity
           style={[styles.secondaryControl, repeatMode !== 'off' && styles.secondaryControlActive]}
-          onPress={cycleRepeatMode}
+          onPress={() => audioService.cycleRepeatMode()}
         >
           <MaterialIcons 
             name={repeatMode === 'track' ? 'repeat-one' : 'repeat'} 
@@ -245,7 +265,7 @@ export default function PlayerScreen() {
         <TouchableOpacity style={styles.bottomAction} onPress={handleToggleFavorite}>
           <MaterialIcons 
             name={trackIsFavorite ? 'favorite' : 'favorite-outline'} 
-            size={28} 
+            size={26} 
             color={trackIsFavorite ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
@@ -257,7 +277,7 @@ export default function PlayerScreen() {
         >
           <MaterialIcons 
             name="tune" 
-            size={28} 
+            size={26} 
             color={eqEnabled ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
@@ -266,14 +286,24 @@ export default function PlayerScreen() {
         <TouchableOpacity style={styles.bottomAction} onPress={() => setShowMoodModal(true)}>
           <MaterialIcons 
             name="mood" 
-            size={28} 
+            size={26} 
             color={trackMoods.length > 0 ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
         
         {/* Add to Playlist */}
         <TouchableOpacity style={styles.bottomAction} onPress={() => setShowPlaylistModal(true)}>
-          <MaterialIcons name="playlist-add" size={28} color={colors.text} />
+          <MaterialIcons name="playlist-add" size={26} color={colors.text} />
+        </TouchableOpacity>
+
+        {/* Share */}
+        <TouchableOpacity style={styles.bottomAction} onPress={handleShare}>
+          <MaterialIcons name="share" size={26} color={colors.text} />
+        </TouchableOpacity>
+
+        {/* Track Info */}
+        <TouchableOpacity style={styles.bottomAction} onPress={() => setShowInfoModal(true)}>
+          <MaterialIcons name="info-outline" size={26} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -333,6 +363,93 @@ export default function PlayerScreen() {
             )}
             <TouchableOpacity style={styles.modalClose} onPress={() => setShowPlaylistModal(false)}>
               <Text style={styles.modalCloseText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Track Info Modal */}
+      <Modal visible={showInfoModal} transparent animationType="slide" onRequestClose={() => setShowInfoModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, styles.infoModalContent]}>
+            <Text style={styles.modalTitle}>Track Information</Text>
+            {currentTrack && (
+              <ScrollView style={styles.infoList}>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Title</Text>
+                  <Text style={styles.infoValue}>{currentTrack.title}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Artist</Text>
+                  <Text style={styles.infoValue}>{currentTrack.artist}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Album</Text>
+                  <Text style={styles.infoValue}>{currentTrack.album || 'Unknown'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Duration</Text>
+                  <Text style={styles.infoValue}>{formatDuration(currentTrack.duration)}</Text>
+                </View>
+                <View style={styles.infoDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Format</Text>
+                  <Text style={styles.infoValue}>{currentTrack.format?.toUpperCase() || 'Unknown'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Sample Rate</Text>
+                  <Text style={styles.infoValue}>{currentTrack.sampleRate ? `${(currentTrack.sampleRate / 1000).toFixed(1)} kHz` : 'Unknown'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Bit Depth</Text>
+                  <Text style={styles.infoValue}>{currentTrack.bitDepth ? `${currentTrack.bitDepth}-bit` : 'Unknown'}</Text>
+                </View>
+                {currentTrack.bitRate && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Bit Rate</Text>
+                    <Text style={styles.infoValue}>{`${Math.round(currentTrack.bitRate / 1000)} kbps`}</Text>
+                  </View>
+                )}
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Channels</Text>
+                  <Text style={styles.infoValue}>{currentTrack.channels === 2 ? 'Stereo' : currentTrack.channels === 1 ? 'Mono' : `${currentTrack.channels || 2} channels`}</Text>
+                </View>
+                <View style={styles.infoDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>File Name</Text>
+                  <Text style={[styles.infoValue, styles.infoValueSmall]} numberOfLines={2}>{currentTrack.fileName}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Location</Text>
+                  <Text style={[styles.infoValue, styles.infoValueSmall]} numberOfLines={3}>{currentTrack.folderPath}</Text>
+                </View>
+                {currentTrack.genre && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Genre</Text>
+                    <Text style={styles.infoValue}>{currentTrack.genre}</Text>
+                  </View>
+                )}
+                {currentTrack.year && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Year</Text>
+                    <Text style={styles.infoValue}>{currentTrack.year}</Text>
+                  </View>
+                )}
+                <View style={styles.infoDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Quality</Text>
+                  <Text style={styles.infoValue}>
+                    {currentTrack.isDSD ? 'DSD' : currentTrack.isHighRes ? 'Hi-Res' : currentTrack.isLossless ? 'Lossless' : 'Lossy'}
+                  </Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Play Count</Text>
+                  <Text style={styles.infoValue}>{currentTrack.playCount || 0}</Text>
+                </View>
+              </ScrollView>
+            )}
+            <TouchableOpacity style={styles.modalClose} onPress={() => setShowInfoModal(false)}>
+              <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -661,5 +778,41 @@ const styles = StyleSheet.create({
   playlistItemCount: {
     fontSize: 14,
     color: THEME.colors.textSecondary,
+  },
+  // Info Modal styles
+  infoModalContent: {
+    maxHeight: '80%',
+  },
+  infoList: {
+    paddingHorizontal: THEME.spacing.lg,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: THEME.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.colors.border,
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: THEME.colors.textSecondary,
+    flex: 1,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: THEME.colors.text,
+    flex: 2,
+    textAlign: 'right',
+    fontWeight: '500',
+  },
+  infoValueSmall: {
+    fontSize: 12,
+  },
+  infoDivider: {
+    height: 1,
+    backgroundColor: THEME.colors.primary,
+    marginVertical: THEME.spacing.md,
+    opacity: 0.3,
   },
 });

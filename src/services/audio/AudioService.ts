@@ -990,8 +990,21 @@ class AudioService {
    * Set repeat mode
    */
   async setRepeatMode(mode: string): Promise<void> {
+    console.log('[AudioService] Setting repeat mode:', mode);
     await TrackPlayer.setRepeatMode(mapRepeatMode(mode));
     usePlayerStore.getState().setRepeatMode(mode as any);
+  }
+
+  /**
+   * Cycle through repeat modes: off -> queue -> track -> off
+   */
+  async cycleRepeatMode(): Promise<void> {
+    const { repeatMode } = usePlayerStore.getState();
+    const modes = ['off', 'queue', 'track'];
+    const currentIndex = modes.indexOf(repeatMode);
+    const nextMode = modes[(currentIndex + 1) % modes.length];
+    console.log('[AudioService] Cycling repeat mode:', repeatMode, '->', nextMode);
+    await this.setRepeatMode(nextMode);
   }
 
   /**
@@ -999,6 +1012,7 @@ class AudioService {
    */
   async toggleShuffle(): Promise<void> {
     const { isShuffled, queue, queueIndex } = usePlayerStore.getState();
+    console.log('[AudioService] Toggling shuffle:', isShuffled, '->', !isShuffled);
     
     usePlayerStore.getState().toggleShuffle();
     
