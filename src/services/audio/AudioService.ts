@@ -158,6 +158,7 @@ class AudioService {
   private eqInitialized = false;
   private eventSubscriptions: (() => void)[] = [];
   private eqUnsubscribe: (() => void) | null = null;
+  private playerStoreUnsubscribe: (() => void) | null = null;
   private isFading = false;
   private crossfadeInProgress = false;
   private savedVolume = 1.0;
@@ -217,6 +218,12 @@ class AudioService {
     await setupTrackPlayer();
     this.setupEventListeners();
     await this.initializeEQ();
+    
+    // Sync repeat mode from store to TrackPlayer on startup
+    const { repeatMode } = usePlayerStore.getState();
+    console.log('[AudioService] Syncing repeat mode on init:', repeatMode);
+    await TrackPlayer.setRepeatMode(mapRepeatMode(repeatMode));
+    
     this.initialized = true;
   }
 
@@ -525,6 +532,17 @@ class AudioService {
       const state = stateMap[event.state] || PLAYBACK_STATES.IDLE;
       usePlayerStore.getState().setState(state);
     });
+
+    // Subscribe to player store changes for repeat mode sync
+    this.playerStoreUnsubscribe = usePlayerStore.subscribe(
+      async (state, prevState) => {
+        // Sync repeat mode changes to TrackPlayer
+        if (state.repeatMode !== prevState.repeatMode) {
+          console.log('[AudioService] RepeatMode changed in store:', prevState.repeatMode, '->', state.repeatMode);
+          await TrackPlayer.setRepeatMode(mapRepeatMode(state.repeatMode));
+        }
+      }
+    );
   }
 
   /**
@@ -543,6 +561,13 @@ class AudioService {
       this.eqUnsubscribe();
       this.eqUnsubscribe = null;
     }
+    
+    // Cleanup player store subscription
+    if (this.playerStoreUnsubscribe) {
+      this.playerStoreUnsubscribe();
+      this.playerStoreUnsubscribe = null;
+    }
+    
     eqService.release();
     this.eqInitialized = false;
     

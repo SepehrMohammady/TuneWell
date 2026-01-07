@@ -21,11 +21,11 @@ import {
   Modal,
   ScrollView,
   Alert,
-  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import Share from 'react-native-share';
 import { useCombinedProgress } from '../hooks';
 import { THEME, ROUTES, MOOD_CATEGORIES } from '../config';
 import { usePlayerStore, useEQStore, usePlaylistStore, useThemeStore } from '../store';
@@ -75,12 +75,46 @@ export default function PlayerScreen() {
   const handleShare = useCallback(async () => {
     if (!currentTrack) return;
     try {
-      await Share.share({
-        message: `🎵 Now playing: ${currentTrack.title} by ${currentTrack.artist}\n\nShared from TuneWell`,
+      // Share the actual file using react-native-share
+      const filePath = currentTrack.filePath;
+      if (!filePath) {
+        // Fallback to sharing track info only
+        await Share.open({
+          message: `🎵 Now playing: ${currentTrack.title} by ${currentTrack.artist}\n\nShared from TuneWell`,
+          title: `${currentTrack.title} - ${currentTrack.artist}`,
+        });
+        return;
+      }
+      
+      // Prepare file URI (ensure it has file:// prefix)
+      const fileUri = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
+      
+      // Get MIME type based on format
+      const mimeTypes: Record<string, string> = {
+        'flac': 'audio/flac',
+        'mp3': 'audio/mpeg',
+        'm4a': 'audio/mp4',
+        'aac': 'audio/aac',
+        'wav': 'audio/wav',
+        'ogg': 'audio/ogg',
+        'opus': 'audio/opus',
+        'dsf': 'audio/x-dsf',
+        'dff': 'audio/x-dff',
+      };
+      const format = currentTrack.format?.toLowerCase() || '';
+      const mimeType = mimeTypes[format] || 'audio/*';
+      
+      await Share.open({
+        url: fileUri,
+        type: mimeType,
         title: `${currentTrack.title} - ${currentTrack.artist}`,
+        message: `🎵 ${currentTrack.title} by ${currentTrack.artist}`,
       });
-    } catch (error) {
-      console.error('Share error:', error);
+    } catch (error: any) {
+      // User cancelled share is not an error
+      if (error?.message !== 'User did not share') {
+        console.error('Share error:', error);
+      }
     }
   }, [currentTrack]);
 
