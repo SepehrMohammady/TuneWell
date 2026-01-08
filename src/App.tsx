@@ -77,8 +77,9 @@ export default function App() {
             console.log('[TuneWell] Stored queue length:', queue.length, 'index:', queueIndex, 'lastPosition:', lastPosition);
             
             if (queue.length > 0) {
-              console.log('[TuneWell] Restoring queue...');
-              await audioModule.audioService.playQueue(queue, queueIndex);
+              console.log('[TuneWell] Restoring queue in paused state...');
+              // Load queue but start paused (third parameter = startPaused)
+              await audioModule.audioService.playQueue(queue, queueIndex, true);
               
               // Seek to last position if available
               if (lastPosition && lastPosition > 0) {
@@ -86,9 +87,7 @@ export default function App() {
                 await audioModule.audioService.seekTo(lastPosition);
               }
               
-              // Pause immediately (user will press play when ready)
-              await audioModule.audioService.pause();
-              console.log('[TuneWell] Queue restored and paused');
+              console.log('[TuneWell] Queue restored (paused, ready to play)');
             }
           }
         } catch (playerError) {

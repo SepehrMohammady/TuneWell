@@ -613,8 +613,11 @@ class AudioService {
 
   /**
    * Play a queue of tracks
+   * @param queue The queue of tracks to play
+   * @param startIndex The index to start playing from
+   * @param startPaused If true, load the queue but don't start playback
    */
-  async playQueue(queue: QueueItem[], startIndex = 0): Promise<void> {
+  async playQueue(queue: QueueItem[], startIndex = 0, startPaused = false): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -659,8 +662,15 @@ class AudioService {
           // Pass the format to native decoder since content:// URIs don't have extensions
           const success = await nativeDecoderService.play(uri, startTrack.format);
           if (success) {
-            usePlayerStore.getState().setState('playing');
-            console.log(`[AudioService] ${formatName} playback started successfully`);
+            // If startPaused, pause immediately after starting
+            if (startPaused) {
+              await nativeDecoderService.pause();
+              usePlayerStore.getState().setState('paused');
+              console.log(`[AudioService] ${formatName} loaded and paused (startPaused=true)`);
+            } else {
+              usePlayerStore.getState().setState('playing');
+              console.log(`[AudioService] ${formatName} playback started successfully`);
+            }
             
             // Record play in playlist store for tracking
             usePlaylistStore.getState().recordPlay(startTrack.id);
@@ -718,7 +728,11 @@ class AudioService {
       await TrackPlayer.reset();
       await TrackPlayer.add(tpTracks);
       await TrackPlayer.skip(startIndex);
-      await TrackPlayer.play();
+      
+      // Only start playback if not startPaused
+      if (!startPaused) {
+        await TrackPlayer.play();
+      }
       
       // Re-initialize EQ with the correct audio session after playback starts
       // (ExoPlayer session may not be available until playback begins)

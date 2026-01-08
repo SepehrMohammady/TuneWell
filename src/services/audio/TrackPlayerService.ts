@@ -136,8 +136,9 @@ export async function setupTrackPlayer(): Promise<boolean> {
         Capability.SkipToPrevious,
       ],
       
-      // Progress update interval - required for crossfade
-      progressUpdateEventInterval: 1,
+      // Progress update interval - lower value for more frequent updates
+      // Required for crossfade AND repeat one (must catch end of track before auto-advance)
+      progressUpdateEventInterval: 0.25,
       
       // Android specific
       android: {
