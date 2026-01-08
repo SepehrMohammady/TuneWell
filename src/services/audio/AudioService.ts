@@ -221,8 +221,14 @@ class AudioService {
     
     // Sync repeat mode from store to TrackPlayer on startup
     const { repeatMode } = usePlayerStore.getState();
-    console.log('[AudioService] Syncing repeat mode on init:', repeatMode);
-    await TrackPlayer.setRepeatMode(mapRepeatMode(repeatMode));
+    const mappedRepeatMode = mapRepeatMode(repeatMode);
+    console.log('[AudioService] Syncing repeat mode on init:', repeatMode, '-> mapped:', mappedRepeatMode);
+    try {
+      await TrackPlayer.setRepeatMode(mappedRepeatMode);
+      console.log('[AudioService] RepeatMode set successfully on init');
+    } catch (error) {
+      console.error('[AudioService] Failed to set repeat mode on init:', error);
+    }
     
     this.initialized = true;
   }
@@ -884,10 +890,36 @@ class AudioService {
    */
   async skipToNext(): Promise<boolean> {
     try {
-      await TrackPlayer.skipToNext();
-      usePlayerStore.getState().skipToNext();
-      return true;
-    } catch {
+      // Check if TrackPlayer has a queue
+      const queue = await TrackPlayer.getQueue();
+      const currentIndex = await TrackPlayer.getActiveTrackIndex();
+      console.log('[AudioService] skipToNext - queue length:', queue.length, 'currentIndex:', currentIndex);
+      
+      // If queue is empty, try to reload from store
+      if (queue.length === 0) {
+        const storeQueue = usePlayerStore.getState().queue;
+        const queueIndex = usePlayerStore.getState().queueIndex;
+        if (storeQueue.length > 0) {
+          console.log('[AudioService] Reloading queue from store for next button');
+          await this.playQueue(storeQueue, queueIndex);
+          return true;
+        }
+        console.log('[AudioService] No queue in store either');
+        return false;
+      }
+      
+      // Check if we can skip to next
+      if (currentIndex !== undefined && currentIndex < queue.length - 1) {
+        await TrackPlayer.skipToNext();
+        usePlayerStore.getState().skipToNext();
+        console.log('[AudioService] skipToNext succeeded');
+        return true;
+      } else {
+        console.log('[AudioService] At end of queue, cannot skip to next');
+        return false;
+      }
+    } catch (error) {
+      console.error('[AudioService] skipToNext error:', error);
       return false;
     }
   }

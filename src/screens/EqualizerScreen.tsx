@@ -61,12 +61,18 @@ export default function EqualizerScreen() {
     setBandGain,
     setPreamp,
     resetToFlat,
+    customPresets,
+    saveCustomPreset,
+    loadCustomPreset,
+    deleteCustomPreset,
   } = useEQStore();
 
-  const [savedPresets, setSavedPresets] = useState<{name: string, bands: typeof bands, preamp: number}[]>([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [presetName, setPresetName] = useState('');
   const sliderHeights = useRef<number[]>(new Array(10).fill(120)).current;
+
+  // Convert customPresets object to array for rendering
+  const savedPresets = Object.values(customPresets);
 
   const formatFrequency = (freq: number): string => {
     if (freq >= 1000) {
@@ -99,29 +105,37 @@ export default function EqualizerScreen() {
 
   const confirmSavePreset = useCallback(() => {
     if (presetName.trim()) {
-      setSavedPresets(prev => [...prev, {
-        name: presetName.trim(),
-        bands: [...bands],
-        preamp,
-      }]);
+      // Use store's saveCustomPreset which persists the preset
+      saveCustomPreset(presetName.trim());
       setShowSaveModal(false);
       Alert.alert('Saved', `Preset "${presetName.trim()}" saved successfully!`);
     }
-  }, [presetName, bands, preamp]);
+  }, [presetName, saveCustomPreset]);
 
   const handleExportPreset = useCallback(async () => {
     try {
+      // Get preset name - use the current preset name or generate a custom name
+      let presetDisplayName: string;
+      if (currentPreset === 'custom') {
+        // For custom presets, use a numbered name
+        const timestamp = Date.now();
+        presetDisplayName = `Custom_${timestamp % 10000}`;
+      } else {
+        // Use the preset name from PRESET_NAMES
+        presetDisplayName = PRESET_NAMES[currentPreset] || currentPreset;
+      }
+      
       const presetData = {
-        name: 'TuneWell EQ Preset',
+        name: presetDisplayName,
         version: 1,
         bands: bands.map(b => ({ frequency: b.frequency, gain: b.gain })),
         preamp,
         exportDate: new Date().toISOString(),
       };
       
-      // Generate filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const fileName = `TuneWell_EQ_${timestamp}.json`;
+      // Generate filename with preset name
+      const safeName = presetDisplayName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const fileName = `TuneWell_${safeName}.json`;
       
       // Save to Downloads folder
       const downloadPath = Platform.OS === 'android' 
@@ -132,14 +146,14 @@ export default function EqualizerScreen() {
       
       Alert.alert(
         '✅ Exported Successfully',
-        `EQ preset saved to:\n${downloadPath}`,
+        `EQ preset "${presetDisplayName}" saved to:\n${downloadPath}`,
         [{ text: 'OK' }]
       );
     } catch (error: any) {
       console.error('[EQ Export] Error:', error);
       Alert.alert('Export Error', error?.message || 'Failed to export preset');
     }
-  }, [bands, preamp]);
+  }, [bands, preamp, currentPreset]);
 
   const handleImportPreset = useCallback(async () => {
     try {
@@ -367,18 +381,33 @@ export default function EqualizerScreen() {
           {savedPresets.length > 0 && (
             <View style={[styles.savedPresetsContainer, { backgroundColor: colors.surface }]}>
               <Text style={[styles.savedPresetsTitle, { color: colors.textSecondary }]}>Saved Presets:</Text>
-              {savedPresets.map((preset, idx) => (
-                <TouchableOpacity 
-                  key={idx} 
-                  style={[styles.savedPresetItem, { backgroundColor: colors.surfaceLight }]}
-                  onPress={() => {
-                    preset.bands.forEach((band) => setBandGain(band.frequency, band.gain));
-                    setPreamp(preset.preamp);
-                    Alert.alert('Applied', `Preset "${preset.name}" applied`);
-                  }}
-                >
-                  <Text style={[styles.savedPresetName, { color: colors.text }]}>{preset.name}</Text>
-                </TouchableOpacity>
+              {savedPresets.map((preset) => (
+                <View key={preset.id} style={[styles.savedPresetItem, { backgroundColor: colors.surfaceLight }]}>
+                  <TouchableOpacity 
+                    style={styles.savedPresetContent}
+                    onPress={() => {
+                      loadCustomPreset(preset.id);
+                      Alert.alert('Applied', `Preset "${preset.name}" applied`);
+                    }}
+                  >
+                    <Text style={[styles.savedPresetName, { color: colors.text }]}>{preset.name}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.savedPresetDelete}
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete Preset',
+                        `Are you sure you want to delete "${preset.name}"?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => deleteCustomPreset(preset.id) }
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={{ color: colors.primary, fontSize: 18 }}>×</Text>
+                  </TouchableOpacity>
+                </View>
               ))}
             </View>
           )}
@@ -669,11 +698,21 @@ const styles = StyleSheet.create({
     marginBottom: THEME.spacing.sm,
   },
   savedPresetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: THEME.spacing.sm,
     paddingHorizontal: THEME.spacing.md,
     backgroundColor: THEME.colors.surfaceLight,
     borderRadius: THEME.borderRadius.sm,
     marginBottom: THEME.spacing.xs,
+  },
+  savedPresetContent: {
+    flex: 1,
+  },
+  savedPresetDelete: {
+    paddingHorizontal: THEME.spacing.sm,
+    paddingVertical: THEME.spacing.xs,
   },
   savedPresetName: {
     color: THEME.colors.text,

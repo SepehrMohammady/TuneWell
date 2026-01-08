@@ -74,52 +74,29 @@ export default function PlayerScreen() {
 
   const handleShare = useCallback(async () => {
     if (!currentTrack) return;
+    
+    // Always share track info as text (more reliable across devices)
     try {
-      // Share the actual file using react-native-share
-      const filePath = currentTrack.filePath;
+      const shareMessage = [
+        `🎵 ${currentTrack.title}`,
+        `👤 Artist: ${currentTrack.artist}`,
+        currentTrack.album ? `💿 Album: ${currentTrack.album}` : null,
+        currentTrack.format ? `📀 Format: ${currentTrack.format.toUpperCase()}` : null,
+        currentTrack.isHighRes ? '✨ Hi-Res Audio' : null,
+        currentTrack.isDSD ? '🎶 DSD Quality' : null,
+        '',
+        'Shared from TuneWell',
+      ].filter(Boolean).join('\n');
       
-      // Get MIME type based on format
-      const mimeTypes: Record<string, string> = {
-        'flac': 'audio/flac',
-        'mp3': 'audio/mpeg',
-        'm4a': 'audio/mp4',
-        'aac': 'audio/aac',
-        'wav': 'audio/wav',
-        'ogg': 'audio/ogg',
-        'opus': 'audio/opus',
-        'dsf': 'audio/x-dsf',
-        'dff': 'audio/x-dff',
-      };
-      const format = currentTrack.format?.toLowerCase() || '';
-      const mimeType = mimeTypes[format] || 'audio/*';
-      
-      if (filePath) {
-        // Prepare file URI (ensure it has file:// prefix)
-        const fileUri = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
-        
-        console.log('[Share] Attempting to share file:', fileUri, 'mimeType:', mimeType);
-        
-        await Share.open({
-          url: fileUri,
-          type: mimeType,
-          title: `${currentTrack.title} - ${currentTrack.artist}`,
-          subject: `${currentTrack.title} - ${currentTrack.artist}`,
-          failOnCancel: false,
-        });
-      } else {
-        // Fallback to sharing track info only
-        console.log('[Share] No file path, sharing text only');
-        await Share.open({
-          message: `🎵 Now playing: ${currentTrack.title} by ${currentTrack.artist}\n\nShared from TuneWell`,
-          title: `${currentTrack.title} - ${currentTrack.artist}`,
-          failOnCancel: false,
-        });
-      }
+      await Share.open({
+        message: shareMessage,
+        title: `${currentTrack.title} - ${currentTrack.artist}`,
+        failOnCancel: false,
+      });
     } catch (error: any) {
-      console.log('[Share] Error:', error?.message || error);
-      // Show user-friendly error if not a cancellation
+      // User cancelled is not an error
       if (error?.message && !error.message.includes('cancel') && !error.message.includes('dismiss')) {
-        Alert.alert('Share Error', 'Unable to share this file. Try sharing as text instead.');
+        console.log('[Share] Error:', error?.message || error);
       }
     }
   }, [currentTrack]);

@@ -19,6 +19,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME } from '../config';
 import { usePlayerStore } from '../store';
 import { formatDuration } from '../services/metadata';
+import { audioService } from '../services/audio';
 import type { QueueItem } from '../types';
 
 export default function QueueScreen() {
@@ -27,10 +28,14 @@ export default function QueueScreen() {
     queue,
     queueIndex,
     currentTrack,
-    skipToIndex,
     removeFromQueue,
     clearQueue,
   } = usePlayerStore();
+
+  const handleSkipToIndex = async (index: number) => {
+    // Use audioService to properly skip to the track (updates both TrackPlayer and store)
+    await audioService.skipToIndex(index);
+  };
 
   const renderQueueItem = ({ item, index }: { item: QueueItem; index: number }) => {
     const isCurrentTrack = index === queueIndex;
@@ -38,7 +43,7 @@ export default function QueueScreen() {
     return (
       <TouchableOpacity
         style={[styles.queueItem, isCurrentTrack && styles.queueItemActive]}
-        onPress={() => skipToIndex(index)}
+        onPress={() => handleSkipToIndex(index)}
       >
         <View style={styles.queueItemIndex}>
           {isCurrentTrack ? (
