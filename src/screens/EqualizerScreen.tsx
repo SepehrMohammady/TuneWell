@@ -54,6 +54,7 @@ export default function EqualizerScreen() {
   const {
     isEnabled,
     currentPreset,
+    currentCustomPresetId,
     bands,
     preamp,
     toggleEnabled,
@@ -114,12 +115,17 @@ export default function EqualizerScreen() {
 
   const handleExportPreset = useCallback(async () => {
     try {
-      // Get preset name - use the current preset name or generate a custom name
+      // Get preset name - use the current preset name or custom preset's name
       let presetDisplayName: string;
       if (currentPreset === 'custom') {
-        // For custom presets, use a numbered name
-        const timestamp = Date.now();
-        presetDisplayName = `Custom_${timestamp % 10000}`;
+        // For custom presets, look up the saved preset name
+        if (currentCustomPresetId && customPresets[currentCustomPresetId]) {
+          presetDisplayName = customPresets[currentCustomPresetId].name;
+        } else {
+          // Fallback if no saved preset (user modified bands manually)
+          const timestamp = Date.now();
+          presetDisplayName = `Custom_${timestamp % 10000}`;
+        }
       } else {
         // Use the preset name from PRESET_NAMES
         presetDisplayName = PRESET_NAMES[currentPreset] || currentPreset;
@@ -153,7 +159,7 @@ export default function EqualizerScreen() {
       console.error('[EQ Export] Error:', error);
       Alert.alert('Export Error', error?.message || 'Failed to export preset');
     }
-  }, [bands, preamp, currentPreset]);
+  }, [bands, preamp, currentPreset, currentCustomPresetId, customPresets]);
 
   const handleImportPreset = useCallback(async () => {
     try {
@@ -354,7 +360,7 @@ export default function EqualizerScreen() {
                   style={[
                     styles.presetChipText,
                     { color: colors.textSecondary },
-                    currentPreset === preset && { color: colors.text },
+                    currentPreset === preset && { color: colors.background },
                   ]}
                 >
                   {PRESET_NAMES[preset]}

@@ -37,6 +37,7 @@ interface EQState {
   // Current EQ settings
   isEnabled: boolean;
   currentPreset: EQPreset;
+  currentCustomPresetId: string | null; // Track which custom preset is loaded
   bands: EQBand[];
   preamp: number;
   
@@ -76,6 +77,7 @@ interface EQState {
 const initialState = {
   isEnabled: true,
   currentPreset: EQ_PRESETS.FLAT as EQPreset,
+  currentCustomPresetId: null as string | null,
   bands: createFlatBands(),
   preamp: 0,
   customPresets: {},
@@ -99,7 +101,7 @@ export const useEQStore = create<EQState>()(
             gain: presetGains[index] || 0,
             q: 1,
           }));
-          set({ currentPreset: preset, bands });
+          set({ currentPreset: preset, bands, currentCustomPresetId: null });
         }
       },
       
@@ -121,6 +123,7 @@ export const useEQStore = create<EQState>()(
       
       resetToFlat: () => set({
         currentPreset: EQ_PRESETS.FLAT,
+        currentCustomPresetId: null,
         bands: createFlatBands(),
         preamp: 0,
       }),
@@ -173,6 +176,7 @@ export const useEQStore = create<EQState>()(
             bands: [...preset.bands],
             preamp: preset.preamp,
             currentPreset: EQ_PRESETS.CUSTOM,
+            currentCustomPresetId: presetId,
           });
         }
       },

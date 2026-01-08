@@ -528,6 +528,52 @@ export default function LibraryScreen() {
     }
   }, [filteredTracks]);
 
+  // Play all tracks from a specific folder
+  const handlePlayFolder = useCallback(async (folderUri: string) => {
+    try {
+      // Get the folder path from the URI for matching
+      const decodedUri = decodeURIComponent(folderUri);
+      
+      // Filter tracks that belong to this folder
+      // Match against the track's folder path
+      const folderTracks = tracks.filter(track => {
+        const trackFolder = decodeURIComponent(track.folder || '');
+        // Check if track's folder contains the folder URI or matches the folder name
+        return trackFolder.includes(decodedUri) || 
+               decodedUri.includes(trackFolder) ||
+               track.folder === folderUri;
+      });
+      
+      if (folderTracks.length === 0) {
+        Alert.alert('No Tracks', 'No audio files found in this folder.');
+        return;
+      }
+      
+      // Initialize audio service if needed
+      await audioService.initialize();
+      
+      // Convert to Track format
+      const allTracks: Track[] = folderTracks.map(convertToTrack);
+      
+      // Create queue items
+      const queueItems = allTracks.map((track, idx) => ({
+        id: `queue_${track.id}_${Date.now()}_${idx}`,
+        track,
+        addedAt: Date.now(),
+        source: 'library' as const,
+      }));
+      
+      // Play the queue starting from the first track
+      await audioService.playQueue(queueItems, 0);
+      
+      // Show brief confirmation
+      Alert.alert('Now Playing', `Playing ${folderTracks.length} tracks from folder`);
+    } catch (error: any) {
+      console.error('Folder playback error:', error);
+      Alert.alert('Playback Error', error.message || 'Failed to play folder');
+    }
+  }, [tracks]);
+
   const renderViewModeTab = (mode: ViewMode, label: string) => (
     <TouchableOpacity
       style={[styles.tab, viewMode === mode && styles.tabActive]}
@@ -580,7 +626,12 @@ export default function LibraryScreen() {
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
             <View style={styles.folderItem}>
-              <MaterialIcons name="folder" size={32} color={THEME.colors.primary} style={styles.folderIcon} />
+              <TouchableOpacity 
+                style={styles.playFolderButton}
+                onPress={() => handlePlayFolder(item)}
+              >
+                <MaterialIcons name="play-circle-filled" size={36} color={THEME.colors.primary} />
+              </TouchableOpacity>
               <View style={styles.folderInfo}>
                 <Text style={styles.folderName} numberOfLines={1}>
                   {decodeURIComponent(item.split('/').pop() || item.split('%2F').pop() || 'Folder')}
@@ -1134,6 +1185,10 @@ const styles = StyleSheet.create({
     padding: THEME.spacing.md,
     borderRadius: THEME.borderRadius.md,
     marginBottom: THEME.spacing.sm,
+  },
+  playFolderButton: {
+    marginRight: THEME.spacing.md,
+    padding: 4,
   },
   folderIcon: {
     fontSize: 32,

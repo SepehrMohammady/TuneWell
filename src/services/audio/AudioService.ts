@@ -361,6 +361,20 @@ class AudioService {
         const state = mapPlayerState(event.state);
         usePlayerStore.getState().setState(state as any);
         
+        // Handle repeat one mode when track ends
+        // State.Ended = 6 in react-native-track-player
+        if (event.state === State.Ended) {
+          const { repeatMode } = usePlayerStore.getState();
+          console.log('[AudioService] Track ended, repeat mode:', repeatMode);
+          if (repeatMode === 'track') {
+            console.log('[AudioService] Repeat one: restarting current track');
+            // Seek to beginning and play again
+            await TrackPlayer.seekTo(0);
+            await TrackPlayer.play();
+            return; // Don't update state to stopped
+          }
+        }
+        
         // When playback starts for the first time, try to reinitialize EQ with actual session
         if (state === 'playing' && !eqReinitAttempted) {
           eqReinitAttempted = true;
@@ -1077,12 +1091,21 @@ class AudioService {
     const { isShuffled, queue, queueIndex } = usePlayerStore.getState();
     console.log('[AudioService] Toggling shuffle:', isShuffled, '->', !isShuffled);
     
+    // Get current playback state and position BEFORE any changes
+    const playbackState = await TrackPlayer.getPlaybackState();
+    const progress = await TrackPlayer.getProgress();
+    const wasPlaying = playbackState.state === State.Playing;
+    const currentPosition = progress.position;
+    const currentTrackId = queue[queueIndex]?.track.id;
+    
+    console.log('[AudioService] Shuffle - wasPlaying:', wasPlaying, 'position:', currentPosition);
+    
+    // Toggle shuffle in store (this reshuffles the queue)
     usePlayerStore.getState().toggleShuffle();
     
     // Rebuild TrackPlayer queue in new order
     const newState = usePlayerStore.getState();
     const tpTracks = newState.queue.map((item) => convertToTPTrack(item.track));
-    const currentTrackId = queue[queueIndex]?.track.id;
     
     await TrackPlayer.reset();
     await TrackPlayer.add(tpTracks);
@@ -1091,7 +1114,18 @@ class AudioService {
     const newIndex = newState.queue.findIndex((item) => item.track.id === currentTrackId);
     if (newIndex !== -1) {
       await TrackPlayer.skip(newIndex);
+      // Restore position
+      if (currentPosition > 0) {
+        await TrackPlayer.seekTo(currentPosition);
+      }
     }
+    
+    // Resume playback if it was playing before
+    if (wasPlaying) {
+      await TrackPlayer.play();
+    }
+    
+    console.log('[AudioService] Shuffle toggle complete, resumed:', wasPlaying);
   }
 
   /**
