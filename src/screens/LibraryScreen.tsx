@@ -531,21 +531,42 @@ export default function LibraryScreen() {
   // Play all tracks from a specific folder
   const handlePlayFolder = useCallback(async (folderUri: string) => {
     try {
-      // Get the folder path from the URI for matching
+      // Extract folder name from URI for matching
+      // SAF URIs look like: content://com.android.externalstorage.documents/tree/primary%3AMusic%2FSubfolder
+      // We need to extract the path part after 'primary:' or 'primary%3A'
       const decodedUri = decodeURIComponent(folderUri);
       
+      // Extract the folder path from URI (e.g., "Music" or "Music/Subfolder")
+      let folderPath = '';
+      if (decodedUri.includes('primary:')) {
+        folderPath = decodedUri.split('primary:')[1] || '';
+      } else if (decodedUri.includes('/tree/')) {
+        // Try to get the last part
+        const treePart = decodedUri.split('/tree/')[1] || '';
+        folderPath = treePart.replace(/.*:/, ''); // Remove "primary:" prefix
+      }
+      
+      console.log('[handlePlayFolder] Matching folder path:', folderPath);
+      
       // Filter tracks that belong to this folder
-      // Match against the track's folder path
+      // Track folder is a file path like "/storage/emulated/0/Music/Subfolder"
       const folderTracks = tracks.filter(track => {
-        const trackFolder = decodeURIComponent(track.folder || '');
-        // Check if track's folder contains the folder URI or matches the folder name
-        return trackFolder.includes(decodedUri) || 
-               decodedUri.includes(trackFolder) ||
-               track.folder === folderUri;
+        const trackFolder = track.folder || '';
+        // Check if track folder ends with our folder path or contains it
+        // e.g., "/storage/emulated/0/Music" should match "Music"
+        // e.g., "/storage/emulated/0/Music/Rock" should match "Music" or "Music/Rock"
+        if (folderPath) {
+          return trackFolder.includes(folderPath) || 
+                 trackFolder.endsWith('/' + folderPath) ||
+                 trackFolder.endsWith('/' + folderPath.split('/').pop());
+        }
+        return false;
       });
       
+      console.log('[handlePlayFolder] Found', folderTracks.length, 'tracks for folder:', folderPath);
+      
       if (folderTracks.length === 0) {
-        Alert.alert('No Tracks', 'No audio files found in this folder.');
+        Alert.alert('No Tracks', `No audio files found in this folder.\n\nFolder path: ${folderPath || 'unknown'}`);
         return;
       }
       

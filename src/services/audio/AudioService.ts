@@ -417,20 +417,42 @@ class AudioService {
       }
     );
 
-    // Listen for progress updates to implement crossfade
+    // Listen for progress updates to implement crossfade and repeat one
     const progressListener = TrackPlayer.addEventListener(
       Event.PlaybackProgressUpdated,
       async (event) => {
         try {
           const { position, duration, buffered } = event;
           const { crossfade, crossfadeDuration } = useSettingsStore.getState();
+          const { repeatMode } = usePlayerStore.getState();
+          
+          // Get duration from TrackPlayer if event doesn't have it
+          let trackDuration = duration;
+          if (!trackDuration || trackDuration <= 0) {
+            const progress = await TrackPlayer.getProgress();
+            trackDuration = progress.duration;
+          }
+          
+          if (!trackDuration || trackDuration <= 0) {
+            return;
+          }
+          
+          const remainingTime = trackDuration - position;
+          
+          // REPEAT ONE: When very close to end of track, seek back to start
+          // This must happen BEFORE TrackPlayer auto-advances to next track
+          if (repeatMode === 'track' && remainingTime > 0 && remainingTime <= 0.5) {
+            console.log('[AudioService] Repeat one triggered - seeking to start');
+            await TrackPlayer.seekTo(0);
+            return; // Don't process crossfade
+          }
           
           // DEBUG: Log all progress events when crossfade is enabled
           if (crossfade) {
             // Log every second to debug crossfade
             if (Math.floor(position) !== Math.floor(position - 1)) {
               console.log('[CROSSFADE DEBUG] pos:', position.toFixed(1), 
-                'dur:', duration?.toFixed(1) || 'N/A', 
+                'dur:', trackDuration?.toFixed(1) || 'N/A', 
                 'xfadeDur:', crossfadeDuration,
                 'inProgress:', this.crossfadeInProgress);
             }
@@ -439,23 +461,7 @@ class AudioService {
           if (!crossfade || crossfadeDuration <= 0) return;
           if (this.crossfadeInProgress) return;
           
-          // Get duration from TrackPlayer if event doesn't have it
-          let trackDuration = duration;
-          if (!trackDuration || trackDuration <= 0) {
-            const progress = await TrackPlayer.getProgress();
-            trackDuration = progress.duration;
-            if (crossfade && trackDuration > 0) {
-              console.log('[CROSSFADE DEBUG] Got duration from TrackPlayer:', trackDuration);
-            }
-          }
-          
-          if (!trackDuration || trackDuration <= 0) {
-            // Still no duration, can't do crossfade
-            return;
-          }
-          
           const crossfadeSeconds = crossfadeDuration / 1000;
-          const remainingTime = trackDuration - position;
           
           // Log when we're getting close to crossfade time (within 30 seconds for debugging)
           if (remainingTime <= 30 && remainingTime > 0) {

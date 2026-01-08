@@ -286,27 +286,65 @@ export default function SettingsScreen() {
 
         {/* About Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
-          <View style={[styles.sectionContent, styles.aboutContent, { backgroundColor: colors.surface }]}>
-            <Image 
-              source={themeMode === 'light' ? logoLight : logoDark} 
-              style={styles.aboutLogo} 
-              resizeMode="contain" 
-            />
-            <View style={styles.aboutInfo}>
-              {renderSettingRow('Version', VERSION.fullVersion)}
-              {renderSettingRow('Release Date', VERSION.releaseDate)}
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ABOUT</Text>
+          <View style={[styles.sectionContent, styles.aboutCard, { backgroundColor: colors.surface }]}>
+            {/* App Name */}
+            <View style={styles.aboutRow}>
+              <Text style={[styles.aboutLabel, { color: colors.text }]}>TuneWell</Text>
+              <Text style={[styles.aboutValue, { color: colors.textSecondary }]}>
+                Hi-Res music player for audiophiles
+              </Text>
             </View>
-            <TouchableOpacity
-              style={styles.linkRow}
-              onPress={() => {
-                Linking.openURL('https://github.com/SepehrMohammady/TuneWell');
-              }}
+            
+            {/* Version */}
+            <View style={styles.aboutRow}>
+              <Text style={[styles.aboutLabel, { color: colors.text }]}>Version</Text>
+              <Text style={[styles.aboutValue, { color: colors.textSecondary }]}>
+                {VERSION.fullVersion}
+              </Text>
+            </View>
+            
+            {/* Developer */}
+            <TouchableOpacity 
+              style={styles.aboutRow}
+              onPress={() => Linking.openURL('https://github.com/SepehrMohammady')}
             >
-              <Text style={[styles.linkText, { color: colors.primary }]}>View on GitHub</Text>
-              <Text style={[styles.linkArrow, { color: colors.primary }]}>→</Text>
+              <Text style={[styles.aboutLabel, { color: colors.text }]}>Developer</Text>
+              <View style={styles.aboutRowRight}>
+                <Text style={[styles.aboutValue, { color: colors.textSecondary }]}>
+                  Sepehr Mohammady
+                </Text>
+                <Text style={[styles.aboutLinkIcon, { color: colors.primary }]}>↗</Text>
+              </View>
             </TouchableOpacity>
+            
+            {/* Source Code */}
+            <TouchableOpacity 
+              style={styles.aboutRow}
+              onPress={() => Linking.openURL('https://github.com/SepehrMohammady/TuneWell')}
+            >
+              <Text style={[styles.aboutLabel, { color: colors.text }]}>Source Code</Text>
+              <View style={styles.aboutRowRight}>
+                <Text style={[styles.aboutValue, { color: colors.textSecondary }]}>
+                  github.com/SepehrMohammady/TuneWell
+                </Text>
+                <Text style={[styles.aboutLinkIcon, { color: colors.primary }]}>↗</Text>
+              </View>
+            </TouchableOpacity>
+            
+            {/* Privacy */}
+            <View style={[styles.aboutRow, { borderBottomWidth: 0 }]}>
+              <Text style={[styles.aboutLabel, { color: colors.text }]}>Privacy</Text>
+              <Text style={[styles.aboutValue, { color: colors.textSecondary }]}>
+                No data is collected or shared
+              </Text>
+            </View>
           </View>
+          
+          {/* Footer */}
+          <Text style={[styles.aboutFooter, { color: colors.textMuted }]}>
+            © 2026 Sepehr Mohammady. Open source under MIT License.
+          </Text>
         </View>
 
         {/* Supported Formats */}
@@ -465,13 +503,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: THEME.spacing.lg,
   },
-  aboutLogo: {
-    height: 80,
-    width: 260,
-    marginBottom: THEME.spacing.lg,
+  aboutCard: {
+    borderRadius: THEME.borderRadius.lg,
+    overflow: 'hidden',
   },
-  aboutInfo: {
-    width: '100%',
+  aboutRow: {
+    flexDirection: 'column',
+    paddingHorizontal: THEME.spacing.md,
+    paddingVertical: THEME.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  aboutRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  aboutLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  aboutValue: {
+    fontSize: 14,
+  },
+  aboutLinkIcon: {
+    fontSize: 16,
+    marginLeft: 6,
+  },
+  aboutFooter: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: THEME.spacing.md,
+    paddingHorizontal: THEME.spacing.lg,
   },
   linkRow: {
     flexDirection: 'row',

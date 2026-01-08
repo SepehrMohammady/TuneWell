@@ -24,11 +24,11 @@ export interface VersionInfo {
 // Version components - UPDATE THESE VALUES FOR VERSION CHANGES
 const VERSION_MAJOR = 0;
 const VERSION_MINOR = 2;
-const VERSION_PATCH = 21;
-const BUILD_NUMBER = 45;
+const VERSION_PATCH = 22;
+const BUILD_NUMBER = 46;
 
 // Version metadata
-const RELEASE_DATE = '2025-06-19';
+const RELEASE_DATE = '2026-01-08';
 const CODENAME = 'Overture';
 
 // Computed version strings
