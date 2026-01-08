@@ -268,6 +268,7 @@ export const usePlayerStore = create<PlayerState>()(
         volume: state.volume,
         repeatMode: state.repeatMode,
         isShuffled: state.isShuffled,
+        lastPosition: state.lastPosition,
       }),
     }
   )

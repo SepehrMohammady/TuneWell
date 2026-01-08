@@ -79,15 +79,9 @@ function convertToTPTrack(track: Track): TPTrack {
   // file:// paths don't work reliably on modern Android due to storage restrictions
   let url = track.uri;
   
-  // For M4A/ALAC files, try using file:// path if available
-  // Some content providers don't stream ALAC properly
-  if ((formatLower === 'm4a' || formatLower === 'alac') && track.filePath) {
-    const filePath = track.filePath.startsWith('file://') 
-      ? track.filePath 
-      : `file://${track.filePath}`;
-    console.log('[AudioService] Using file:// path for M4A/ALAC:', filePath);
-    url = filePath;
-  }
+  // NOTE: We used to try file:// for M4A/ALAC but that doesn't work with scoped storage
+  // Content providers should handle all formats including ALAC in M4A container
+  // Using content:// URI is the correct approach for Android 10+
   
   // If we have a content:// URI, use it (preferred for Android scoped storage)
   // Otherwise fall back to file path if available
@@ -96,6 +90,7 @@ function convertToTPTrack(track: Track): TPTrack {
     url = track.filePath.startsWith('file://') 
       ? track.filePath 
       : `file://${track.filePath}`;
+    console.log('[AudioService] No content:// URI, falling back to file://:', url);
   }
   
   // For DSD formats, log a warning that they won't play
@@ -440,10 +435,12 @@ class AudioService {
           const remainingTime = trackDuration - position;
           
           // REPEAT ONE: When very close to end of track, seek back to start
-          // This must happen BEFORE TrackPlayer auto-advances to next track
-          if (repeatMode === 'track' && remainingTime > 0 && remainingTime <= 0.5) {
-            console.log('[AudioService] Repeat one triggered - seeking to start');
+          // Using 1.5 second window to catch before TrackPlayer auto-advances
+          // TrackPlayer's native RepeatMode.Track is buggy in v5 alpha
+          if (repeatMode === 'track' && remainingTime > 0 && remainingTime <= 1.5) {
+            console.log('[AudioService] Repeat one triggered at', remainingTime.toFixed(2), 's remaining');
             await TrackPlayer.seekTo(0);
+            await TrackPlayer.play(); // Ensure playback continues
             return; // Don't process crossfade
           }
           
@@ -910,34 +907,53 @@ class AudioService {
    */
   async skipToNext(): Promise<boolean> {
     try {
-      // Check if TrackPlayer has a queue
-      const queue = await TrackPlayer.getQueue();
-      const currentIndex = await TrackPlayer.getActiveTrackIndex();
-      console.log('[AudioService] skipToNext - queue length:', queue.length, 'currentIndex:', currentIndex);
+      // Get current state from store (authoritative source)
+      const storeQueue = usePlayerStore.getState().queue;
+      const storeQueueIndex = usePlayerStore.getState().queueIndex;
       
-      // If queue is empty, try to reload from store
-      if (queue.length === 0) {
-        const storeQueue = usePlayerStore.getState().queue;
-        const queueIndex = usePlayerStore.getState().queueIndex;
-        if (storeQueue.length > 0) {
-          console.log('[AudioService] Reloading queue from store for next button');
-          await this.playQueue(storeQueue, queueIndex);
-          return true;
-        }
-        console.log('[AudioService] No queue in store either');
+      console.log('[AudioService] skipToNext - store queue length:', storeQueue.length, 'currentIndex:', storeQueueIndex);
+      
+      if (storeQueue.length === 0) {
+        console.log('[AudioService] No queue in store');
         return false;
       }
       
       // Check if we can skip to next
-      if (currentIndex !== undefined && currentIndex < queue.length - 1) {
-        await TrackPlayer.skipToNext();
-        usePlayerStore.getState().skipToNext();
-        console.log('[AudioService] skipToNext succeeded');
-        return true;
-      } else {
+      const nextIndex = storeQueueIndex + 1;
+      if (nextIndex >= storeQueue.length) {
         console.log('[AudioService] At end of queue, cannot skip to next');
         return false;
       }
+      
+      const nextTrack = storeQueue[nextIndex]?.track;
+      const currentTrack = storeQueue[storeQueueIndex]?.track;
+      
+      // Check if current track uses native decoder (need to stop it)
+      if (currentTrack && requiresNativeDecoder(currentTrack.format)) {
+        console.log('[AudioService] Stopping native decoder for current track');
+        await nativeDecoderService.stop();
+      }
+      
+      // Check if next track requires native decoder (DSD/WAV)
+      if (nextTrack && requiresNativeDecoder(nextTrack.format)) {
+        console.log('[AudioService] Next track requires native decoder:', nextTrack.format);
+        // Use playQueue which handles native decoder initialization
+        await this.playQueue(storeQueue, nextIndex);
+        return true;
+      }
+      
+      // For standard audio formats, use TrackPlayer
+      const tpQueue = await TrackPlayer.getQueue();
+      if (tpQueue.length === 0) {
+        console.log('[AudioService] TrackPlayer queue empty, reloading from store');
+        await this.playQueue(storeQueue, nextIndex);
+        return true;
+      }
+      
+      await TrackPlayer.skipToNext();
+      usePlayerStore.getState().skipToNext();
+      console.log('[AudioService] skipToNext succeeded (TrackPlayer)');
+      return true;
     } catch (error) {
       console.error('[AudioService] skipToNext error:', error);
       return false;
@@ -958,33 +974,33 @@ class AudioService {
       
       console.log('[AudioService] skipToPrevious called, lastPress:', this.lastPreviousPressTime, 'timeSince:', timeSinceLastPress, 'ms');
       
-      // First ensure we have a queue loaded
-      let queue = await TrackPlayer.getQueue();
-      let currentIndex = await TrackPlayer.getActiveTrackIndex();
+      // Get current state from store (authoritative source)
+      const storeQueue = usePlayerStore.getState().queue;
+      const storeQueueIndex = usePlayerStore.getState().queueIndex;
+      const currentTrack = storeQueue[storeQueueIndex]?.track;
       
-      console.log('[AudioService] skipToPrevious queue length:', queue.length, 'currentIndex:', currentIndex);
+      console.log('[AudioService] skipToPrevious - store queue length:', storeQueue.length, 'currentIndex:', storeQueueIndex);
       
-      // If queue is empty, try to reload from store
-      if (queue.length === 0) {
-        const storeQueue = usePlayerStore.getState().queue;
-        if (storeQueue.length > 0) {
-          console.log('[AudioService] Reloading queue from store for previous button');
-          const queueIndex = usePlayerStore.getState().queueIndex;
-          await this.playQueue(storeQueue, queueIndex);
-          return true;
-        }
+      if (storeQueue.length === 0) {
         console.warn('[AudioService] No queue available for previous');
         return false;
       }
       
-      const progress = await TrackPlayer.getProgress();
-      const position = progress.position;
+      // Get current position based on decoder type
+      let position = 0;
+      if (currentTrack && requiresNativeDecoder(currentTrack.format)) {
+        const nativeProgress = usePlayerStore.getState().getProgress();
+        position = nativeProgress?.position || 0;
+      } else {
+        const progress = await TrackPlayer.getProgress();
+        position = progress.position;
+      }
       console.log('[AudioService] Current position:', position, 'seconds');
       
-      // If at the first track or no valid index, just seek to start
-      if (currentIndex === undefined || currentIndex === null || currentIndex === 0) {
+      // If at the first track, just seek to start
+      if (storeQueueIndex === 0) {
         console.log('[AudioService] At first track, seeking to start');
-        await TrackPlayer.seekTo(0);
+        await this.seekTo(0);
         return true;
       }
       
@@ -994,8 +1010,27 @@ class AudioService {
       
       if (isDoublePressAfterRestart) {
         console.log('[AudioService] Double press after restart detected, skipping to previous track');
-        await TrackPlayer.skipToPrevious();
-        usePlayerStore.getState().skipToPrevious();
+        const prevIndex = storeQueueIndex - 1;
+        const prevTrack = storeQueue[prevIndex]?.track;
+        
+        // Check if current track uses native decoder (need to stop it)
+        if (currentTrack && requiresNativeDecoder(currentTrack.format)) {
+          await nativeDecoderService.stop();
+        }
+        
+        // Check if previous track requires native decoder (DSD/WAV)
+        if (prevTrack && requiresNativeDecoder(prevTrack.format)) {
+          await this.playQueue(storeQueue, prevIndex);
+        } else {
+          const tpQueue = await TrackPlayer.getQueue();
+          if (tpQueue.length === 0) {
+            await this.playQueue(storeQueue, prevIndex);
+          } else {
+            await TrackPlayer.skipToPrevious();
+            usePlayerStore.getState().skipToPrevious();
+          }
+        }
+        
         this.lastPreviousPressTime = 0; // Reset so next press starts fresh
         return true;
       }
@@ -1003,15 +1038,34 @@ class AudioService {
       // Single press: if more than 3 seconds in, restart current track
       if (position > 3) {
         console.log('[AudioService] Restarting current track (position > 3s)');
-        await TrackPlayer.seekTo(0);
+        await this.seekTo(0);
         this.lastPreviousPressTime = now; // Record this restart for double-press detection
         return true;
       }
       
       // Single press within first 3 seconds: go to previous track
       console.log('[AudioService] Skipping to previous track (position <= 3s)');
-      await TrackPlayer.skipToPrevious();
-      usePlayerStore.getState().skipToPrevious();
+      const prevIndex = storeQueueIndex - 1;
+      const prevTrack = storeQueue[prevIndex]?.track;
+      
+      // Check if current track uses native decoder (need to stop it)
+      if (currentTrack && requiresNativeDecoder(currentTrack.format)) {
+        await nativeDecoderService.stop();
+      }
+      
+      // Check if previous track requires native decoder (DSD/WAV)
+      if (prevTrack && requiresNativeDecoder(prevTrack.format)) {
+        await this.playQueue(storeQueue, prevIndex);
+      } else {
+        const tpQueue = await TrackPlayer.getQueue();
+        if (tpQueue.length === 0) {
+          await this.playQueue(storeQueue, prevIndex);
+        } else {
+          await TrackPlayer.skipToPrevious();
+          usePlayerStore.getState().skipToPrevious();
+        }
+      }
+      
       this.lastPreviousPressTime = 0; // Reset
       return true;
     } catch (error) {
@@ -1030,8 +1084,32 @@ class AudioService {
    * Skip to specific index in queue
    */
   async skipToIndex(index: number): Promise<void> {
-    await TrackPlayer.skip(index);
-    usePlayerStore.getState().skipToIndex(index);
+    const storeQueue = usePlayerStore.getState().queue;
+    const storeQueueIndex = usePlayerStore.getState().queueIndex;
+    const currentTrack = storeQueue[storeQueueIndex]?.track;
+    const targetTrack = storeQueue[index]?.track;
+    
+    console.log('[AudioService] skipToIndex from', storeQueueIndex, 'to', index);
+    
+    // Check if current track uses native decoder (need to stop it)
+    if (currentTrack && requiresNativeDecoder(currentTrack.format)) {
+      await nativeDecoderService.stop();
+    }
+    
+    // Check if target track requires native decoder (DSD/WAV)
+    if (targetTrack && requiresNativeDecoder(targetTrack.format)) {
+      console.log('[AudioService] Target track requires native decoder:', targetTrack.format);
+      await this.playQueue(storeQueue, index);
+    } else {
+      // For standard formats, use TrackPlayer
+      const tpQueue = await TrackPlayer.getQueue();
+      if (tpQueue.length === 0) {
+        await this.playQueue(storeQueue, index);
+      } else {
+        await TrackPlayer.skip(index);
+        usePlayerStore.getState().skipToIndex(index);
+      }
+    }
   }
 
   /**

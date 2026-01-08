@@ -70,13 +70,19 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
         }
         
         // IIR low-pass filter coefficients for DSD to PCM conversion
-        // Higher alpha = less filtering = more high-frequency content preserved
-        // Lower alpha = more filtering = smoother but can sound muffled
-        // DSD already has inherent high-frequency noise shaping, so moderate filtering is needed
-        // Alpha = 0.5 is a good balance for DSD - preserves musical detail while removing ultrasonic noise
-        private const val LPF_ALPHA = 0.5   // First stage: gentle filtering
-        // Second stage filter - minimal filtering to preserve detail
-        private const val LPF_ALPHA2 = 0.7
+        // DSD modulation pushes quantization noise to ultrasonic frequencies (above ~20kHz)
+        // A proper DSD decoder MUST use aggressive low-pass filtering to remove this noise
+        // Without adequate filtering, you get harsh static/noise in the output
+        // 
+        // Using a 6-stage cascaded IIR filter with progressively lower alpha values
+        // This provides steep roll-off above 20kHz while preserving audio band detail
+        // Lower alpha = more filtering (alpha=0.1 is aggressive, alpha=0.5 is gentle)
+        private const val LPF_ALPHA1 = 0.15  // Stage 1: aggressive filtering for ultrasonic noise
+        private const val LPF_ALPHA2 = 0.20  // Stage 2: additional noise reduction
+        private const val LPF_ALPHA3 = 0.25  // Stage 3: smooth transition
+        private const val LPF_ALPHA4 = 0.30  // Stage 4: detail preservation
+        private const val LPF_ALPHA5 = 0.40  // Stage 5: final smoothing
+        private const val LPF_ALPHA6 = 0.50  // Stage 6: minimal filtering for final output
         
         // Progress event interval
         private const val PROGRESS_UPDATE_INTERVAL_MS = 1000L
@@ -614,11 +620,14 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                 var rightSum = 0
                 var byteCount = 0
                 
-                // Two-stage IIR low-pass filter state for noise reduction
-                var leftFiltered1 = 0.0
-                var rightFiltered1 = 0.0
-                var leftFiltered2 = 0.0
-                var rightFiltered2 = 0.0
+                // 6-stage IIR low-pass filter state for proper DSD noise removal
+                // DSD has significant ultrasonic noise that MUST be filtered out
+                var leftF1 = 0.0; var rightF1 = 0.0
+                var leftF2 = 0.0; var rightF2 = 0.0
+                var leftF3 = 0.0; var rightF3 = 0.0
+                var leftF4 = 0.0; var rightF4 = 0.0
+                var leftF5 = 0.0; var rightF5 = 0.0
+                var leftF6 = 0.0; var rightF6 = 0.0
                 
                 while (isPlaying && dataStream.read(dsdBuffer).also { bytesRead = it } > 0) {
                     if (isPaused) {
@@ -657,17 +666,29 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                             val leftRaw = leftSum * scale
                             val rightRaw = rightSum * scale
                             
-                            // First stage IIR low-pass filter
-                            leftFiltered1 = LPF_ALPHA * leftRaw + (1.0 - LPF_ALPHA) * leftFiltered1
-                            rightFiltered1 = LPF_ALPHA * rightRaw + (1.0 - LPF_ALPHA) * rightFiltered1
+                            // 6-stage cascaded IIR low-pass filter for DSD noise removal
+                            // Each stage progressively removes more ultrasonic noise
+                            leftF1 = LPF_ALPHA1 * leftRaw + (1.0 - LPF_ALPHA1) * leftF1
+                            rightF1 = LPF_ALPHA1 * rightRaw + (1.0 - LPF_ALPHA1) * rightF1
                             
-                            // Second stage IIR low-pass filter for additional smoothing
-                            leftFiltered2 = LPF_ALPHA2 * leftFiltered1 + (1.0 - LPF_ALPHA2) * leftFiltered2
-                            rightFiltered2 = LPF_ALPHA2 * rightFiltered1 + (1.0 - LPF_ALPHA2) * rightFiltered2
+                            leftF2 = LPF_ALPHA2 * leftF1 + (1.0 - LPF_ALPHA2) * leftF2
+                            rightF2 = LPF_ALPHA2 * rightF1 + (1.0 - LPF_ALPHA2) * rightF2
+                            
+                            leftF3 = LPF_ALPHA3 * leftF2 + (1.0 - LPF_ALPHA3) * leftF3
+                            rightF3 = LPF_ALPHA3 * rightF2 + (1.0 - LPF_ALPHA3) * rightF3
+                            
+                            leftF4 = LPF_ALPHA4 * leftF3 + (1.0 - LPF_ALPHA4) * leftF4
+                            rightF4 = LPF_ALPHA4 * rightF3 + (1.0 - LPF_ALPHA4) * rightF4
+                            
+                            leftF5 = LPF_ALPHA5 * leftF4 + (1.0 - LPF_ALPHA5) * leftF5
+                            rightF5 = LPF_ALPHA5 * rightF4 + (1.0 - LPF_ALPHA5) * rightF5
+                            
+                            leftF6 = LPF_ALPHA6 * leftF5 + (1.0 - LPF_ALPHA6) * leftF6
+                            rightF6 = LPF_ALPHA6 * rightF5 + (1.0 - LPF_ALPHA6) * rightF6
                             
                             // Scale to 16-bit PCM with some headroom
-                            val leftPcm = (leftFiltered2 * 30000).toInt().coerceIn(-32768, 32767)
-                            val rightPcm = (rightFiltered2 * 30000).toInt().coerceIn(-32768, 32767)
+                            val leftPcm = (leftF6 * 30000).toInt().coerceIn(-32768, 32767)
+                            val rightPcm = (rightF6 * 30000).toInt().coerceIn(-32768, 32767)
                             
                             if (channelCount == 2) {
                                 pcmBuffer[pcmIndex++] = leftPcm.toShort()
@@ -882,7 +903,7 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             
             Log.d(TAG, "DFF output: ${outputSampleRate}Hz, bytesPerPcmSample=$bytesPerPcmSample")
             
-            // DSD to PCM conversion using lookup table with two-stage IIR low-pass filter
+            // DSD to PCM conversion using lookup table with 6-stage IIR low-pass filter
             decoderJob = CoroutineScope(Dispatchers.IO).launch {
                 val blockSize = 4096
                 val dsdBuffer = ByteArray(blockSize * channelCount)
@@ -893,11 +914,13 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                 var rightSum = 0
                 var byteCount = 0
                 
-                // Two-stage IIR low-pass filter state for noise reduction
-                var leftFiltered1 = 0.0
-                var rightFiltered1 = 0.0
-                var leftFiltered2 = 0.0
-                var rightFiltered2 = 0.0
+                // 6-stage IIR low-pass filter state for proper DSD noise removal
+                var leftF1 = 0.0; var rightF1 = 0.0
+                var leftF2 = 0.0; var rightF2 = 0.0
+                var leftF3 = 0.0; var rightF3 = 0.0
+                var leftF4 = 0.0; var rightF4 = 0.0
+                var leftF5 = 0.0; var rightF5 = 0.0
+                var leftF6 = 0.0; var rightF6 = 0.0
                 
                 var bytesRead = 0
                 var totalRead = 0L
@@ -932,17 +955,28 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                             val leftRaw = leftSum * scale
                             val rightRaw = rightSum * scale
                             
-                            // First stage IIR low-pass filter
-                            leftFiltered1 = LPF_ALPHA * leftRaw + (1.0 - LPF_ALPHA) * leftFiltered1
-                            rightFiltered1 = LPF_ALPHA * rightRaw + (1.0 - LPF_ALPHA) * rightFiltered1
+                            // 6-stage cascaded IIR low-pass filter for DSD noise removal
+                            leftF1 = LPF_ALPHA1 * leftRaw + (1.0 - LPF_ALPHA1) * leftF1
+                            rightF1 = LPF_ALPHA1 * rightRaw + (1.0 - LPF_ALPHA1) * rightF1
                             
-                            // Second stage IIR low-pass filter for additional smoothing
-                            leftFiltered2 = LPF_ALPHA2 * leftFiltered1 + (1.0 - LPF_ALPHA2) * leftFiltered2
-                            rightFiltered2 = LPF_ALPHA2 * rightFiltered1 + (1.0 - LPF_ALPHA2) * rightFiltered2
+                            leftF2 = LPF_ALPHA2 * leftF1 + (1.0 - LPF_ALPHA2) * leftF2
+                            rightF2 = LPF_ALPHA2 * rightF1 + (1.0 - LPF_ALPHA2) * rightF2
+                            
+                            leftF3 = LPF_ALPHA3 * leftF2 + (1.0 - LPF_ALPHA3) * leftF3
+                            rightF3 = LPF_ALPHA3 * rightF2 + (1.0 - LPF_ALPHA3) * rightF3
+                            
+                            leftF4 = LPF_ALPHA4 * leftF3 + (1.0 - LPF_ALPHA4) * leftF4
+                            rightF4 = LPF_ALPHA4 * rightF3 + (1.0 - LPF_ALPHA4) * rightF4
+                            
+                            leftF5 = LPF_ALPHA5 * leftF4 + (1.0 - LPF_ALPHA5) * leftF5
+                            rightF5 = LPF_ALPHA5 * rightF4 + (1.0 - LPF_ALPHA5) * rightF5
+                            
+                            leftF6 = LPF_ALPHA6 * leftF5 + (1.0 - LPF_ALPHA6) * leftF6
+                            rightF6 = LPF_ALPHA6 * rightF5 + (1.0 - LPF_ALPHA6) * rightF6
                             
                             // Scale to 16-bit PCM with some headroom
-                            val leftPcm = (leftFiltered2 * 30000).toInt().coerceIn(-32768, 32767)
-                            val rightPcm = (rightFiltered2 * 30000).toInt().coerceIn(-32768, 32767)
+                            val leftPcm = (leftF6 * 30000).toInt().coerceIn(-32768, 32767)
+                            val rightPcm = (rightF6 * 30000).toInt().coerceIn(-32768, 32767)
                             
                             if (channelCount == 2) {
                                 pcmBuffer[pcmIndex++] = leftPcm.toShort()
