@@ -9,7 +9,7 @@
  * - Queue access
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
   ScrollView,
   Alert,
   PanResponder,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -58,46 +59,62 @@ export default function PlayerScreen() {
     customPlaylists,
     addToPlaylist,
     getPlayCount,
+    createPlaylist,
   } = usePlaylistStore();
 
   const [showMoodModal, setShowMoodModal] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState(0);
 
   // Progress bar width for seek calculations
   const progressBarWidth = SCREEN_WIDTH - (THEME.spacing.xl * 2);
 
+  // Use ref to store current duration for PanResponder
+  const durationRef = useRef(progress.duration);
+  durationRef.current = progress.duration;
+
   // PanResponder for draggable progress bar
-  const panResponder = useRef(
+  const panResponder = useMemo(() => 
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (e) => {
         setIsDragging(true);
         const locationX = e.nativeEvent.locationX;
-        const seekPosition = Math.max(0, Math.min(1, locationX / progressBarWidth)) * progress.duration;
-        setDragPosition(seekPosition);
+        const duration = durationRef.current;
+        if (duration > 0) {
+          const seekPosition = Math.max(0, Math.min(1, locationX / progressBarWidth)) * duration;
+          setDragPosition(seekPosition);
+        }
       },
       onPanResponderMove: (e, gestureState) => {
         const locationX = e.nativeEvent.locationX;
-        const seekPosition = Math.max(0, Math.min(1, locationX / progressBarWidth)) * progress.duration;
-        setDragPosition(seekPosition);
+        const duration = durationRef.current;
+        if (duration > 0) {
+          const seekPosition = Math.max(0, Math.min(1, locationX / progressBarWidth)) * duration;
+          setDragPosition(seekPosition);
+        }
       },
       onPanResponderRelease: (e) => {
         const locationX = e.nativeEvent.locationX;
-        const seekPosition = Math.max(0, Math.min(1, locationX / progressBarWidth)) * progress.duration;
-        if (seekPosition >= 0 && seekPosition <= progress.duration) {
-          audioService.seekTo(seekPosition);
+        const duration = durationRef.current;
+        if (duration > 0) {
+          const seekPosition = Math.max(0, Math.min(1, locationX / progressBarWidth)) * duration;
+          if (seekPosition >= 0 && seekPosition <= duration) {
+            audioService.seekTo(seekPosition);
+          }
         }
         setIsDragging(false);
       },
       onPanResponderTerminate: () => {
         setIsDragging(false);
       },
-    })
-  ).current;
+    }),
+  [progressBarWidth]);
 
   const isPlaying = state === 'playing';
   const trackIsFavorite = currentTrack ? isFavorite(currentTrack.id) : false;
@@ -113,11 +130,12 @@ export default function PlayerScreen() {
     if (!currentTrack) return;
     
     try {
-      // Try to share the actual audio file
-      const fileUri = currentTrack.uri || currentTrack.filePath;
+      // Use filePath with file:// prefix for sharing
+      const filePath = currentTrack.filePath;
       
-      if (fileUri) {
-        // Share the actual audio file
+      if (filePath && filePath.startsWith('/')) {
+        // Share the actual audio file using file:// URI
+        const fileUri = `file://${filePath}`;
         await Share.open({
           url: fileUri,
           type: `audio/${currentTrack.format || 'mpeg'}`,
@@ -126,7 +144,7 @@ export default function PlayerScreen() {
           failOnCancel: false,
         });
       } else {
-        // Fallback to text sharing if no file URI
+        // Fallback to text sharing if no valid file path
         const shareMessage = [
           `🎵 ${currentTrack.title}`,
           `👤 Artist: ${currentTrack.artist}`,
@@ -432,10 +450,23 @@ export default function PlayerScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Add to Playlist</Text>
+            
+            {/* Create New Playlist Button */}
+            <TouchableOpacity
+              style={[styles.createPlaylistRow, { backgroundColor: colors.surfaceLight }]}
+              onPress={() => {
+                setShowPlaylistModal(false);
+                setShowCreatePlaylistModal(true);
+              }}
+            >
+              <MaterialIcons name="add" size={24} color={colors.primary} />
+              <Text style={[styles.createPlaylistRowText, { color: colors.primary }]}>Create New Playlist</Text>
+            </TouchableOpacity>
+            
             {customPlaylists.length === 0 ? (
               <View style={styles.emptyPlaylists}>
                 <Text style={styles.emptyPlaylistsText}>No playlists yet</Text>
-                <Text style={styles.emptyPlaylistsSubtext}>Create a playlist in the Playlists tab first</Text>
+                <Text style={styles.emptyPlaylistsSubtext}>Create a new playlist to add this track</Text>
               </View>
             ) : (
               <ScrollView style={styles.playlistList}>
@@ -454,6 +485,50 @@ export default function PlayerScreen() {
             <TouchableOpacity style={styles.modalClose} onPress={() => setShowPlaylistModal(false)}>
               <Text style={styles.modalCloseText}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create Playlist Modal */}
+      <Modal visible={showCreatePlaylistModal} transparent animationType="fade" onRequestClose={() => setShowCreatePlaylistModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Create Playlist</Text>
+            <TextInput
+              style={[styles.createPlaylistInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+              placeholder="Playlist name"
+              placeholderTextColor={colors.textMuted}
+              value={newPlaylistName}
+              onChangeText={setNewPlaylistName}
+              autoFocus
+            />
+            <View style={styles.createPlaylistButtons}>
+              <TouchableOpacity
+                style={[styles.createPlaylistCancelBtn, { backgroundColor: colors.surfaceLight }]}
+                onPress={() => {
+                  setShowCreatePlaylistModal(false);
+                  setNewPlaylistName('');
+                }}
+              >
+                <Text style={[styles.createPlaylistCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createPlaylistConfirmBtn, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  if (newPlaylistName.trim()) {
+                    const playlistId = createPlaylist(newPlaylistName.trim());
+                    if (currentTrack) {
+                      addToPlaylist(playlistId, currentTrack.id);
+                      Alert.alert('Success', `Added "${currentTrack.title}" to "${newPlaylistName.trim()}"`);
+                    }
+                    setShowCreatePlaylistModal(false);
+                    setNewPlaylistName('');
+                  }
+                }}
+              >
+                <Text style={[styles.createPlaylistConfirmText, { color: colors.background }]}>Create & Add</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -884,6 +959,49 @@ const styles = StyleSheet.create({
   playlistItemCount: {
     fontSize: 14,
     color: THEME.colors.textSecondary,
+  },
+  createPlaylistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    marginHorizontal: THEME.spacing.md,
+    marginBottom: THEME.spacing.md,
+    gap: THEME.spacing.sm,
+  },
+  createPlaylistRowText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  createPlaylistInput: {
+    fontSize: 16,
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    marginBottom: THEME.spacing.lg,
+    borderWidth: 1,
+  },
+  createPlaylistButtons: {
+    flexDirection: 'row',
+    gap: THEME.spacing.sm,
+  },
+  createPlaylistCancelBtn: {
+    flex: 1,
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    alignItems: 'center',
+  },
+  createPlaylistCancelText: {
+    fontSize: 16,
+  },
+  createPlaylistConfirmBtn: {
+    flex: 1,
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    alignItems: 'center',
+  },
+  createPlaylistConfirmText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   // Info Modal styles
   infoModalContent: {

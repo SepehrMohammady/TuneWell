@@ -55,52 +55,14 @@ export default function SettingsScreen() {
   const { scanFolders, lastScanAt, stats } = useLibraryStore();
   const { mode: themeMode, setTheme, colors } = useThemeStore();
 
-  const [selectedSampleRate, setSelectedSampleRate] = useState(settings.audioOutput.sampleRate);
-  const [selectedBitDepth, setSelectedBitDepth] = useState(settings.audioOutput.bitDepth);
-  const [selectedDsdOutput, setSelectedDsdOutput] = useState('pcm');
-  const [selectedReplayGain, setSelectedReplayGain] = useState('off');
   const [selectedArtworkQuality, setSelectedArtworkQuality] = useState('high');
 
   // Picker visibility states
   const [showThemePicker, setShowThemePicker] = useState(false);
-  const [showSampleRatePicker, setShowSampleRatePicker] = useState(false);
-  const [showBitDepthPicker, setShowBitDepthPicker] = useState(false);
-  const [showDsdOutputPicker, setShowDsdOutputPicker] = useState(false);
-  const [showReplayGainPicker, setShowReplayGainPicker] = useState(false);
   const [showArtworkQualityPicker, setShowArtworkQualityPicker] = useState(false);
   const [showCrossfadePicker, setShowCrossfadePicker] = useState(false);
 
   // Picker options
-  const sampleRateOptions = [
-    { label: '44.1 kHz', value: '44100' },
-    { label: '48 kHz', value: '48000' },
-    { label: '88.2 kHz', value: '88200' },
-    { label: '96 kHz', value: '96000' },
-    { label: '176.4 kHz', value: '176400' },
-    { label: '192 kHz', value: '192000' },
-    { label: '352.8 kHz', value: '352800' },
-    { label: '384 kHz', value: '384000' },
-  ];
-
-  const bitDepthOptions = [
-    { label: '16-bit', value: '16' },
-    { label: '24-bit', value: '24' },
-    { label: '32-bit', value: '32' },
-  ];
-
-  const dsdOutputOptions = [
-    { label: 'PCM Conversion', value: 'pcm' },
-    { label: 'DoP (DSD over PCM)', value: 'dop' },
-    { label: 'Native DSD', value: 'native' },
-  ];
-
-  const replayGainOptions = [
-    { label: 'Off', value: 'off' },
-    { label: 'Track Gain', value: 'track' },
-    { label: 'Album Gain', value: 'album' },
-    { label: 'Auto', value: 'auto' },
-  ];
-
   const artworkQualityOptions = [
     { label: 'Low', value: 'low' },
     { label: 'Medium', value: 'medium' },
@@ -118,21 +80,13 @@ export default function SettingsScreen() {
     { label: '10 seconds', value: '10000' },
   ];
 
-  const getDsdOutputLabel = (value: string) => {
-    return dsdOutputOptions.find(o => o.value === value)?.label || 'PCM Conversion';
-  };
-
-  const getReplayGainLabel = (value: string) => {
-    return replayGainOptions.find(o => o.value === value)?.label || 'Off';
-  };
-
   const getArtworkQualityLabel = (value: string) => {
     return artworkQualityOptions.find(o => o.value === value)?.label || 'High';
   };
 
   const handleMusicFolders = () => {
-    // Navigate to Library screen (Folders tab)
-    navigation.navigate(ROUTES.LIBRARY);
+    // Navigate to Library screen Folders tab
+    navigation.navigate(ROUTES.LIBRARY, { tab: 'folders' });
   };
 
   const handleOutputDevice = () => {
@@ -220,24 +174,11 @@ export default function SettingsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Audio Output</Text>
           <View style={[styles.sectionContent, { backgroundColor: colors.surface }]}>
             {renderSettingRow('Output Device', 'System Default', handleOutputDevice)}
-            {renderSettingRow(
-              'Sample Rate',
-              `${selectedSampleRate / 1000} kHz`,
-              () => setShowSampleRatePicker(true)
-            )}
-            {renderSettingRow('Bit Depth', `${selectedBitDepth}-bit`, () => setShowBitDepthPicker(true))}
-            {renderToggleRow(
-              'Exclusive Mode',
-              settings.audioOutput.exclusiveMode,
-              (value) => settings.setAudioOutput({ exclusiveMode: value })
-            )}
             {renderToggleRow(
               'Gapless Playback',
               settings.audioOutput.gaplessPlayback,
               (value) => settings.setAudioOutput({ gaplessPlayback: value })
             )}
-            {renderSettingRow('DSD Output', getDsdOutputLabel(selectedDsdOutput), () => setShowDsdOutputPicker(true))}
-            {renderSettingRow('ReplayGain', getReplayGainLabel(selectedReplayGain), () => setShowReplayGainPicker(true))}
           </View>
         </View>
 
@@ -376,50 +317,6 @@ export default function SettingsScreen() {
         onSelect={(value) => setTheme(value as ThemeMode)}
         visible={showThemePicker}
         onClose={() => setShowThemePicker(false)}
-      />
-
-      <OptionPicker
-        title="Sample Rate"
-        options={sampleRateOptions}
-        selectedValue={selectedSampleRate.toString()}
-        onSelect={(value) => {
-          const rate = parseInt(value);
-          setSelectedSampleRate(rate);
-          settings.setAudioOutput({ sampleRate: rate });
-        }}
-        visible={showSampleRatePicker}
-        onClose={() => setShowSampleRatePicker(false)}
-      />
-
-      <OptionPicker
-        title="Bit Depth"
-        options={bitDepthOptions}
-        selectedValue={selectedBitDepth.toString()}
-        onSelect={(value) => {
-          const depth = parseInt(value);
-          setSelectedBitDepth(depth);
-          settings.setAudioOutput({ bitDepth: depth });
-        }}
-        visible={showBitDepthPicker}
-        onClose={() => setShowBitDepthPicker(false)}
-      />
-
-      <OptionPicker
-        title="DSD Output"
-        options={dsdOutputOptions}
-        selectedValue={selectedDsdOutput}
-        onSelect={setSelectedDsdOutput}
-        visible={showDsdOutputPicker}
-        onClose={() => setShowDsdOutputPicker(false)}
-      />
-
-      <OptionPicker
-        title="ReplayGain"
-        options={replayGainOptions}
-        selectedValue={selectedReplayGain}
-        onSelect={setSelectedReplayGain}
-        visible={showReplayGainPicker}
-        onClose={() => setShowReplayGainPicker(false)}
       />
 
       <OptionPicker

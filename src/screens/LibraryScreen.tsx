@@ -25,6 +25,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { pickDirectory } from '@react-native-documents/picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME, SORT_OPTIONS } from '../config';
@@ -77,6 +78,7 @@ const requestStoragePermission = async (): Promise<boolean> => {
 };
 
 export default function LibraryScreen() {
+  const route = useRoute<any>();
   const [viewMode, setViewMode] = useState<ViewMode>('folders');
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [showFolderModal, setShowFolderModal] = useState(false);
@@ -89,6 +91,19 @@ export default function LibraryScreen() {
   const [parentFolderName, setParentFolderName] = useState<string>('');
   const { currentTrack } = usePlayerStore();
   const { colors, mode: themeMode } = useThemeStore();
+
+  // Handle navigation with tab parameter
+  useFocusEffect(
+    useCallback(() => {
+      if (route.params?.tab) {
+        const tab = route.params.tab as ViewMode;
+        if (['folders', 'tracks', 'albums', 'artists'].includes(tab)) {
+          setViewMode(tab);
+        }
+      }
+    }, [route.params?.tab])
+  );
+
   const { 
     scanFolders, 
     tracks,
@@ -536,19 +551,32 @@ export default function LibraryScreen() {
         folderPath = treePart.replace(/.*:/, ''); // Remove "primary:" prefix
       }
       
-      console.log('[handlePlayFolder] Matching folder path:', folderPath);
+      // Get the folder name (last segment of path)
+      const folderName = folderPath.split('/').pop() || folderPath;
+      
+      console.log('[handlePlayFolder] Decoded URI:', decodedUri);
+      console.log('[handlePlayFolder] Folder path:', folderPath);
+      console.log('[handlePlayFolder] Folder name:', folderName);
       
       // Filter tracks that belong to this folder
-      // Track folder is a file path like "/storage/emulated/0/Music/Subfolder"
+      // Track path is like "/storage/emulated/0/Music/Artist/song.mp3"
+      // Track folder is like "/storage/emulated/0/Music/Artist"
       const folderTracks = tracks.filter(track => {
         const trackFolder = track.folder || '';
-        // Check if track folder ends with our folder path or contains it
-        // e.g., "/storage/emulated/0/Music" should match "Music"
-        // e.g., "/storage/emulated/0/Music/Rock" should match "Music" or "Music/Rock"
+        const trackPath = track.path || '';
+        
+        // Multiple matching strategies
         if (folderPath) {
-          return trackFolder.includes(folderPath) || 
-                 trackFolder.endsWith('/' + folderPath) ||
-                 trackFolder.endsWith('/' + folderPath.split('/').pop());
+          // Check if folder path is contained in track folder or path
+          const normalizedFolderPath = folderPath.replace(/\\/g, '/');
+          const normalizedTrackFolder = trackFolder.replace(/\\/g, '/');
+          const normalizedTrackPath = trackPath.replace(/\\/g, '/');
+          
+          return normalizedTrackFolder.includes(normalizedFolderPath) || 
+                 normalizedTrackPath.includes('/' + normalizedFolderPath + '/') ||
+                 normalizedTrackFolder.endsWith('/' + folderName) ||
+                 normalizedTrackFolder.includes('/' + folderName + '/') ||
+                 normalizedTrackPath.includes('/' + folderName + '/');
         }
         return false;
       });
@@ -556,7 +584,7 @@ export default function LibraryScreen() {
       console.log('[handlePlayFolder] Found', folderTracks.length, 'tracks for folder:', folderPath);
       
       if (folderTracks.length === 0) {
-        Alert.alert('No Tracks', `No audio files found in this folder.\n\nFolder path: ${folderPath || 'unknown'}`);
+        Alert.alert('No Tracks', `No audio files found in this folder.\n\nFolder path: ${folderPath || 'unknown'}\nFolder name: ${folderName}\n\nMake sure you have scanned the library after adding this folder.`);
         return;
       }
       
