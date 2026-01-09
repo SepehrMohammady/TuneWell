@@ -27,7 +27,7 @@ import { PLAYBACK_STATES } from '../../config/constants';
  * Check if a format requires the native decoder
  * DSD formats (DSF/DFF) and WAV files use our native decoder.
  * WAV uses native decoder for better compatibility with high-bit-depth files.
- * Other formats like FLAC, MP3 are handled by ExoPlayer via TrackPlayer.
+ * Other formats like FLAC, MP3, M4A/AAC/ALAC are handled by ExoPlayer via TrackPlayer.
  */
 function requiresNativeDecoder(format: string): boolean {
   const fmt = (format || '').toLowerCase().replace('.', '');
@@ -442,6 +442,13 @@ class AudioService {
             await TrackPlayer.seekTo(0);
             await TrackPlayer.play(); // Ensure playback continues
             return; // Don't process crossfade
+          }
+          
+          // IMPORTANT: Skip crossfade entirely when repeat mode is 'track'
+          // Otherwise crossfade triggers at e.g. 5.5s remaining, skipping to next track
+          // before we can catch the 1.5s window for repeat one
+          if (repeatMode === 'track') {
+            return; // Don't process crossfade in repeat one mode
           }
           
           // DEBUG: Log all progress events when crossfade is enabled
