@@ -12,6 +12,7 @@ import TrackPlayer, {
   RepeatMode,
   AppKilledPlaybackBehavior,
 } from 'react-native-track-player';
+import { Alert } from 'react-native';
 
 /**
  * Register playback service for background operation
@@ -65,6 +66,7 @@ export async function PlaybackService(): Promise<void> {
   TrackPlayer.addEventListener(Event.PlaybackError, async (event) => {
     console.error('[TrackPlayer] Playback error:', JSON.stringify(event, null, 2));
     // Get current track info for debugging
+    let errorDetails = `Code: ${(event as any).code || 'unknown'}\nMessage: ${(event as any).message || 'unknown'}`;
     try {
       const track = await TrackPlayer.getActiveTrack();
       if (track) {
@@ -74,10 +76,17 @@ export async function PlaybackService(): Promise<void> {
           contentType: (track as any).contentType,
           format: (track as any).format,
         });
+        errorDetails += `\n\nTrack: ${track.title}\nURL: ${String(track.url).substring(0, 100)}...`;
       }
     } catch (e) {
       // Ignore if we can't get track info
     }
+    // Show error alert for debugging
+    Alert.alert(
+      'Playback Error (Debug)',
+      errorDetails,
+      [{ text: 'OK' }]
+    );
   });
 
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {

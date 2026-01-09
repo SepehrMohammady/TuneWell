@@ -9,7 +9,7 @@
  * - Queue access
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import {
   Modal,
   ScrollView,
   Alert,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -56,11 +57,47 @@ export default function PlayerScreen() {
     removeMoodFromTrack,
     customPlaylists,
     addToPlaylist,
+    getPlayCount,
   } = usePlaylistStore();
 
   const [showMoodModal, setShowMoodModal] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragPosition, setDragPosition] = useState(0);
+
+  // Progress bar width for seek calculations
+  const progressBarWidth = SCREEN_WIDTH - (THEME.spacing.xl * 2);
+
+  // PanResponder for draggable progress bar
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e) => {
+        setIsDragging(true);
+        const locationX = e.nativeEvent.locationX;
+        const seekPosition = Math.max(0, Math.min(1, locationX / progressBarWidth)) * progress.duration;
+        setDragPosition(seekPosition);
+      },
+      onPanResponderMove: (e, gestureState) => {
+        const locationX = e.nativeEvent.locationX;
+        const seekPosition = Math.max(0, Math.min(1, locationX / progressBarWidth)) * progress.duration;
+        setDragPosition(seekPosition);
+      },
+      onPanResponderRelease: (e) => {
+        const locationX = e.nativeEvent.locationX;
+        const seekPosition = Math.max(0, Math.min(1, locationX / progressBarWidth)) * progress.duration;
+        if (seekPosition >= 0 && seekPosition <= progress.duration) {
+          audioService.seekTo(seekPosition);
+        }
+        setIsDragging(false);
+      },
+      onPanResponderTerminate: () => {
+        setIsDragging(false);
+      },
+    })
+  ).current;
 
   const isPlaying = state === 'playing';
   const trackIsFavorite = currentTrack ? isFavorite(currentTrack.id) : false;
@@ -75,28 +112,59 @@ export default function PlayerScreen() {
   const handleShare = useCallback(async () => {
     if (!currentTrack) return;
     
-    // Always share track info as text (more reliable across devices)
     try {
-      const shareMessage = [
-        `🎵 ${currentTrack.title}`,
-        `👤 Artist: ${currentTrack.artist}`,
-        currentTrack.album ? `💿 Album: ${currentTrack.album}` : null,
-        currentTrack.format ? `📀 Format: ${currentTrack.format.toUpperCase()}` : null,
-        currentTrack.isHighRes ? '✨ Hi-Res Audio' : null,
-        currentTrack.isDSD ? '🎶 DSD Quality' : null,
-        '',
-        'Shared from TuneWell',
-      ].filter(Boolean).join('\n');
+      // Try to share the actual audio file
+      const fileUri = currentTrack.uri || currentTrack.filePath;
       
-      await Share.open({
-        message: shareMessage,
-        title: `${currentTrack.title} - ${currentTrack.artist}`,
-        failOnCancel: false,
-      });
+      if (fileUri) {
+        // Share the actual audio file
+        await Share.open({
+          url: fileUri,
+          type: `audio/${currentTrack.format || 'mpeg'}`,
+          title: `${currentTrack.title} - ${currentTrack.artist}`,
+          subject: `${currentTrack.title} - ${currentTrack.artist}`,
+          failOnCancel: false,
+        });
+      } else {
+        // Fallback to text sharing if no file URI
+        const shareMessage = [
+          `🎵 ${currentTrack.title}`,
+          `👤 Artist: ${currentTrack.artist}`,
+          currentTrack.album ? `💿 Album: ${currentTrack.album}` : null,
+          '',
+          'Shared from TuneWell',
+        ].filter(Boolean).join('\n');
+        
+        await Share.open({
+          message: shareMessage,
+          title: `${currentTrack.title} - ${currentTrack.artist}`,
+          failOnCancel: false,
+        });
+      }
     } catch (error: any) {
       // User cancelled is not an error
       if (error?.message && !error.message.includes('cancel') && !error.message.includes('dismiss')) {
         console.log('[Share] Error:', error?.message || error);
+        // If file sharing fails, try text fallback
+        try {
+          const shareMessage = [
+            `🎵 ${currentTrack.title}`,
+            `👤 Artist: ${currentTrack.artist}`,
+            currentTrack.album ? `💿 Album: ${currentTrack.album}` : null,
+            '',
+            'Shared from TuneWell',
+          ].filter(Boolean).join('\n');
+          
+          await Share.open({
+            message: shareMessage,
+            title: `${currentTrack.title} - ${currentTrack.artist}`,
+            failOnCancel: false,
+          });
+        } catch (fallbackError: any) {
+          if (fallbackError?.message && !fallbackError.message.includes('cancel')) {
+            Alert.alert('Share Error', 'Could not share this track');
+          }
+        }
       }
     }
   }, [currentTrack]);
@@ -205,17 +273,9 @@ export default function PlayerScreen() {
 
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
-        <TouchableOpacity
+        <View
           style={[styles.progressBar, { backgroundColor: colors.surface }]}
-          activeOpacity={0.8}
-          onPress={(e) => {
-            const { locationX } = e.nativeEvent;
-            const barWidth = SCREEN_WIDTH - (THEME.spacing.xl * 2);
-            const seekPosition = (locationX / barWidth) * progress.duration;
-            if (seekPosition >= 0 && seekPosition <= progress.duration) {
-              audioService.seekTo(seekPosition);
-            }
-          }}
+          {...panResponder.panHandlers}
         >
           <View
             style={[
@@ -223,14 +283,27 @@ export default function PlayerScreen() {
               { backgroundColor: colors.primary },
               {
                 width: progress.duration > 0
-                  ? `${(progress.position / progress.duration) * 100}%`
+                  ? `${((isDragging ? dragPosition : progress.position) / progress.duration) * 100}%`
                   : '0%',
               },
             ]}
           />
-        </TouchableOpacity>
+          {/* Progress Thumb */}
+          <View
+            style={[
+              styles.progressThumb,
+              { 
+                backgroundColor: colors.primary,
+                left: progress.duration > 0
+                  ? `${((isDragging ? dragPosition : progress.position) / progress.duration) * 100}%`
+                  : '0%',
+                transform: [{ translateX: -8 }],
+              },
+            ]}
+          />
+        </View>
         <View style={styles.progressTime}>
-          <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(progress.position)}</Text>
+          <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(isDragging ? dragPosition : progress.position)}</Text>
           <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatDuration(progress.duration)}</Text>
         </View>
       </View>
@@ -461,7 +534,7 @@ export default function PlayerScreen() {
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Play Count</Text>
-                  <Text style={styles.infoValue}>{currentTrack.playCount || 0}</Text>
+                  <Text style={styles.infoValue}>{getPlayCount(currentTrack.id)}</Text>
                 </View>
               </ScrollView>
             )}
@@ -593,13 +666,25 @@ const styles = StyleSheet.create({
     height: 8,
     backgroundColor: THEME.colors.surface,
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: 'visible',
     justifyContent: 'center',
   },
   progressFill: {
     height: '100%',
     backgroundColor: THEME.colors.text,
     borderRadius: 4,
+  },
+  progressThumb: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    top: -4,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
   },
   progressTime: {
     flexDirection: 'row',

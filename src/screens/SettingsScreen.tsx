@@ -21,7 +21,8 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { THEME, VERSION, APP_INFO } from '../config';
+import { useNavigation } from '@react-navigation/native';
+import { THEME, VERSION, APP_INFO, ROUTES } from '../config';
 import { useSettingsStore, useLibraryStore, usePlayerStore, useThemeStore } from '../store';
 import type { ThemeMode } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
@@ -48,6 +49,7 @@ const THEME_LABELS: Record<ThemeMode, string> = {
 };
 
 export default function SettingsScreen() {
+  const navigation = useNavigation<any>();
   const { currentTrack } = usePlayerStore();
   const settings = useSettingsStore();
   const { scanFolders, lastScanAt, stats } = useLibraryStore();
@@ -129,7 +131,8 @@ export default function SettingsScreen() {
   };
 
   const handleMusicFolders = () => {
-    // Navigate to folder selection or show info
+    // Navigate to Library screen (Folders tab)
+    navigation.navigate(ROUTES.LIBRARY);
   };
 
   const handleOutputDevice = () => {

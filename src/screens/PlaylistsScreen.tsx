@@ -353,8 +353,17 @@ export default function PlaylistsScreen() {
                 <MaterialIcons name="queue-music" size={48} color={colors.textMuted} />
                 <Text style={[styles.emptyStateText, { color: colors.text }]}>No custom playlists yet</Text>
                 <Text style={[styles.emptyStateSubtext, { color: colors.textSecondary }]}>
-                  Tap "+ New" to create your first playlist
+                  Create your first playlist to organize your music
                 </Text>
+                <TouchableOpacity
+                  style={[styles.createPlaylistButton, { backgroundColor: colors.primary }]}
+                  onPress={() => setShowCreateModal(true)}
+                >
+                  <MaterialIcons name="add" size={20} color={colors.background} />
+                  <Text style={[styles.createPlaylistButtonText, { color: colors.background }]}>
+                    Create Playlist
+                  </Text>
+                </TouchableOpacity>
               </View>
             ) : (
               customPlaylists.map((playlist) => (
@@ -502,6 +511,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: THEME.colors.textSecondary,
     marginTop: 4,
+  },
+  createPlaylistButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: THEME.spacing.lg,
+    paddingVertical: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    marginTop: THEME.spacing.lg,
+    gap: THEME.spacing.xs,
+  },
+  createPlaylistButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,

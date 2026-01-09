@@ -83,6 +83,7 @@ export default function LibraryScreen() {
   const [manualPath, setManualPath] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSubfolderModal, setShowSubfolderModal] = useState(false);
+  const [showSortModal, setShowSortModal] = useState(false);
   const [subfolders, setSubfolders] = useState<SubfolderInfo[]>([]);
   const [parentFolderUri, setParentFolderUri] = useState<string>('');
   const [parentFolderName, setParentFolderName] = useState<string>('');
@@ -149,19 +150,8 @@ export default function LibraryScreen() {
 
   // Handle sort option selection
   const handleSortSelect = useCallback(() => {
-    Alert.alert(
-      'Sort By',
-      'Select sort option:',
-      [
-        { text: 'Title', onPress: () => setSortBy('title') },
-        { text: 'Artist', onPress: () => setSortBy('artist') },
-        { text: 'Album', onPress: () => setSortBy('album') },
-        { text: 'Date Added', onPress: () => setSortBy('dateAdded') },
-        { text: 'Duration', onPress: () => setSortBy('duration') },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  }, [setSortBy]);
+    setShowSortModal(true);
+  }, []);
 
   // Group tracks by album
   const albumGroups = useMemo(() => {
@@ -669,8 +659,8 @@ export default function LibraryScreen() {
               </TouchableOpacity>
             </View>
           )}
-          contentContainerStyle={styles.listContent}
-          scrollEnabled={false}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
+          showsVerticalScrollIndicator={true}
         />
         </>
       )}
@@ -779,8 +769,17 @@ export default function LibraryScreen() {
               </View>
             </TouchableOpacity>
           )}
-          contentContainerStyle={styles.listContent}
-          scrollEnabled={false}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          removeClippedSubviews={true}
+          getItemLayout={(data, index) => ({
+            length: 72,
+            offset: 72 * index,
+            index,
+          })}
+          showsVerticalScrollIndicator={true}
         />
       )}
     </View>
@@ -848,8 +847,12 @@ export default function LibraryScreen() {
               <Text style={styles.albumTrackCount}>{item.tracks.length} tracks</Text>
             </TouchableOpacity>
           )}
-          contentContainerStyle={styles.albumGrid}
-          scrollEnabled={false}
+          contentContainerStyle={[styles.albumGrid, { paddingBottom: 100 }]}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={10}
+          removeClippedSubviews={true}
+          showsVerticalScrollIndicator={true}
         />
       )}
     </View>
@@ -906,8 +909,17 @@ export default function LibraryScreen() {
               </View>
             </TouchableOpacity>
           )}
-          contentContainerStyle={styles.listContent}
-          scrollEnabled={false}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          removeClippedSubviews={true}
+          getItemLayout={(data, index) => ({
+            length: 72,
+            offset: 72 * index,
+            index,
+          })}
+          showsVerticalScrollIndicator={true}
         />
       )}
     </View>
@@ -936,15 +948,12 @@ export default function LibraryScreen() {
       </View>
 
       {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.content}>
         {viewMode === 'folders' && renderFolderView()}
         {viewMode === 'tracks' && renderTracksView()}
         {viewMode === 'albums' && renderAlbumsView()}
         {viewMode === 'artists' && renderArtistsView()}
-        
-        {/* Spacer for mini player */}
-        <View style={{ height: 100 }} />
-      </ScrollView>
+      </View>
 
       {/* Manual Folder Entry Modal */}
       <Modal
@@ -1100,6 +1109,55 @@ export default function LibraryScreen() {
         </View>
       </Modal>
 
+      {/* Sort Modal */}
+      <Modal
+        visible={showSortModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSortModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.sortModalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sortModalTitle, { color: colors.text }]}>Sort By</Text>
+            {[
+              { key: 'title', label: 'Title' },
+              { key: 'artist', label: 'Artist' },
+              { key: 'album', label: 'Album' },
+              { key: 'dateAdded', label: 'Date Added' },
+              { key: 'duration', label: 'Duration' },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.sortOption,
+                  sortBy === option.key && { backgroundColor: colors.surfaceLight },
+                ]}
+                onPress={() => {
+                  setSortBy(option.key as typeof sortBy);
+                  setShowSortModal(false);
+                }}
+              >
+                <Text style={[
+                  styles.sortOptionText,
+                  { color: sortBy === option.key ? colors.primary : colors.text }
+                ]}>
+                  {option.label}
+                </Text>
+                {sortBy === option.key && (
+                  <MaterialIcons name="check" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.sortCancelButton, { backgroundColor: colors.surfaceLight }]}
+              onPress={() => setShowSortModal(false)}
+            >
+              <Text style={[styles.sortCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Mini Player */}
       {currentTrack && <MiniPlayer />}
     </SafeAreaView>
@@ -1162,6 +1220,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   viewContent: {
+    flex: 1,
     paddingHorizontal: THEME.spacing.lg,
   },
   emptyState: {
@@ -1395,6 +1454,41 @@ const styles = StyleSheet.create({
     color: THEME.colors.text,
     fontSize: 16,
     fontWeight: '500',
+  },
+  sortModalContent: {
+    backgroundColor: THEME.colors.surface,
+    borderRadius: THEME.borderRadius.lg,
+    padding: THEME.spacing.lg,
+    width: '100%',
+    maxWidth: 320,
+  },
+  sortModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: THEME.colors.text,
+    marginBottom: THEME.spacing.md,
+    textAlign: 'center',
+  },
+  sortOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: THEME.spacing.md,
+    paddingHorizontal: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    marginBottom: THEME.spacing.xs,
+  },
+  sortOptionText: {
+    fontSize: 16,
+  },
+  sortCancelButton: {
+    marginTop: THEME.spacing.md,
+    paddingVertical: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    alignItems: 'center',
+  },
+  sortCancelText: {
+    fontSize: 16,
   },
   scanStatus: {
     backgroundColor: THEME.colors.primary + '20',
