@@ -130,21 +130,49 @@ export default function PlayerScreen() {
     if (!currentTrack) return;
     
     try {
-      // Use filePath with file:// prefix for sharing
+      // On Android 10+, file:// URIs don't work for sharing
+      // We need to use content:// URIs from MediaStore
+      const contentUri = currentTrack.uri; // This is the content:// URI
       const filePath = currentTrack.filePath;
       
-      if (filePath && filePath.startsWith('/')) {
-        // Share the actual audio file using file:// URI
-        const fileUri = `file://${filePath}`;
-        await Share.open({
-          url: fileUri,
-          type: `audio/${currentTrack.format || 'mpeg'}`,
-          title: `${currentTrack.title} - ${currentTrack.artist}`,
-          subject: `${currentTrack.title} - ${currentTrack.artist}`,
-          failOnCancel: false,
-        });
-      } else {
-        // Fallback to text sharing if no valid file path
+      // Try sharing the actual audio file
+      let shareSuccess = false;
+      
+      // Try content:// URI first (works on Android 10+)
+      if (contentUri && contentUri.startsWith('content://')) {
+        try {
+          await Share.open({
+            url: contentUri,
+            type: `audio/${currentTrack.format || 'mpeg'}`,
+            title: `${currentTrack.title} - ${currentTrack.artist}`,
+            subject: `${currentTrack.title} - ${currentTrack.artist}`,
+            failOnCancel: false,
+          });
+          shareSuccess = true;
+        } catch (contentErr: any) {
+          console.log('[Share] Content URI failed:', contentErr?.message);
+        }
+      }
+      
+      // Try file:// URI as fallback (works on older Android)
+      if (!shareSuccess && filePath && filePath.startsWith('/')) {
+        try {
+          const fileUri = `file://${filePath}`;
+          await Share.open({
+            url: fileUri,
+            type: `audio/${currentTrack.format || 'mpeg'}`,
+            title: `${currentTrack.title} - ${currentTrack.artist}`,
+            subject: `${currentTrack.title} - ${currentTrack.artist}`,
+            failOnCancel: false,
+          });
+          shareSuccess = true;
+        } catch (fileErr: any) {
+          console.log('[Share] File URI failed:', fileErr?.message);
+        }
+      }
+      
+      // Fallback to text sharing if file sharing failed
+      if (!shareSuccess) {
         const shareMessage = [
           `🎵 ${currentTrack.title}`,
           `👤 Artist: ${currentTrack.artist}`,
@@ -163,7 +191,7 @@ export default function PlayerScreen() {
       // User cancelled is not an error
       if (error?.message && !error.message.includes('cancel') && !error.message.includes('dismiss')) {
         console.log('[Share] Error:', error?.message || error);
-        // If file sharing fails, try text fallback
+        // If all sharing fails, try text fallback
         try {
           const shareMessage = [
             `🎵 ${currentTrack.title}`,

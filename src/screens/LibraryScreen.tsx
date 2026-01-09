@@ -13,7 +13,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   StatusBar,
   FlatList,
@@ -536,55 +535,78 @@ export default function LibraryScreen() {
   // Play all tracks from a specific folder
   const handlePlayFolder = useCallback(async (folderUri: string) => {
     try {
-      // Extract folder name from URI for matching
-      // SAF URIs look like: content://com.android.externalstorage.documents/tree/primary%3AMusic%2FSubfolder
-      // We need to extract the path part after 'primary:' or 'primary%3A'
+      // folderUri can be either:
+      // 1. A file path like: /storage/emulated/0/Music/ArtistName
+      // 2. A SAF URI like: content://com.android.externalstorage.documents/tree/primary%3AMusic%2FArtistName
+      
       const decodedUri = decodeURIComponent(folderUri);
       
-      // Extract the folder path from URI (e.g., "Music" or "Music/Subfolder")
+      // Determine the folder name to match
+      let folderName = '';
       let folderPath = '';
-      if (decodedUri.includes('primary:')) {
-        folderPath = decodedUri.split('primary:')[1] || '';
-      } else if (decodedUri.includes('/tree/')) {
-        // Try to get the last part
-        const treePart = decodedUri.split('/tree/')[1] || '';
-        folderPath = treePart.replace(/.*:/, ''); // Remove "primary:" prefix
-      }
       
-      // Get the folder name (last segment of path)
-      const folderName = folderPath.split('/').pop() || folderPath;
+      // Check if it's a file path (starts with /)
+      if (decodedUri.startsWith('/')) {
+        // It's a file path like /storage/emulated/0/Music/ArtistName
+        folderPath = decodedUri;
+        folderName = decodedUri.split('/').pop() || '';
+      } else if (decodedUri.includes('primary:')) {
+        // SAF URI - extract path after primary:
+        folderPath = decodedUri.split('primary:')[1] || '';
+        folderName = folderPath.split('/').pop() || '';
+      } else if (decodedUri.includes('/tree/')) {
+        // Other SAF format
+        const treePart = decodedUri.split('/tree/')[1] || '';
+        folderPath = treePart.replace(/.*:/, '');
+        folderName = folderPath.split('/').pop() || '';
+      }
       
       console.log('[handlePlayFolder] Decoded URI:', decodedUri);
       console.log('[handlePlayFolder] Folder path:', folderPath);
       console.log('[handlePlayFolder] Folder name:', folderName);
       
+      if (!folderName) {
+        Alert.alert('Error', 'Could not determine folder name from path.');
+        return;
+      }
+      
       // Filter tracks that belong to this folder
-      // Track path is like "/storage/emulated/0/Music/Artist/song.mp3"
-      // Track folder is like "/storage/emulated/0/Music/Artist"
+      // Match by folder name since that's most reliable
       const folderTracks = tracks.filter(track => {
-        const trackFolder = track.folder || '';
-        const trackPath = track.path || '';
+        const trackFolder = (track.folder || '').replace(/\\/g, '/');
+        const trackPath = (track.path || '').replace(/\\/g, '/');
         
-        // Multiple matching strategies
-        if (folderPath) {
-          // Check if folder path is contained in track folder or path
-          const normalizedFolderPath = folderPath.replace(/\\/g, '/');
-          const normalizedTrackFolder = trackFolder.replace(/\\/g, '/');
-          const normalizedTrackPath = trackPath.replace(/\\/g, '/');
-          
-          return normalizedTrackFolder.includes(normalizedFolderPath) || 
-                 normalizedTrackPath.includes('/' + normalizedFolderPath + '/') ||
-                 normalizedTrackFolder.endsWith('/' + folderName) ||
-                 normalizedTrackFolder.includes('/' + folderName + '/') ||
-                 normalizedTrackPath.includes('/' + folderName + '/');
+        // For file paths, check direct containment or folder name match
+        if (folderPath.startsWith('/')) {
+          // Direct path matching
+          if (trackFolder.startsWith(folderPath) || trackPath.startsWith(folderPath + '/')) {
+            return true;
+          }
         }
+        
+        // Match by folder name (most reliable for SAF URIs)
+        if (folderName) {
+          // Check if track folder ends with the folder name
+          if (trackFolder.endsWith('/' + folderName)) {
+            return true;
+          }
+          // Check if track folder contains the folder name as a segment
+          if (trackFolder.includes('/' + folderName + '/')) {
+            return true;
+          }
+          // Check if track path contains the folder name as a segment  
+          if (trackPath.includes('/' + folderName + '/')) {
+            return true;
+          }
+        }
+        
         return false;
       });
       
-      console.log('[handlePlayFolder] Found', folderTracks.length, 'tracks for folder:', folderPath);
+      console.log('[handlePlayFolder] Found', folderTracks.length, 'tracks for folder:', folderName);
       
       if (folderTracks.length === 0) {
-        Alert.alert('No Tracks', `No audio files found in this folder.\n\nFolder path: ${folderPath || 'unknown'}\nFolder name: ${folderName}\n\nMake sure you have scanned the library after adding this folder.`);
+        Alert.alert('No Tracks', `No audio files found in folder "${folderName}".\n\nMake sure you have scanned the library after adding this folder.`);
         return;
       }
       
@@ -606,7 +628,7 @@ export default function LibraryScreen() {
       await audioService.playQueue(queueItems, 0);
       
       // Show brief confirmation
-      Alert.alert('Now Playing', `Playing ${folderTracks.length} tracks from folder`);
+      Alert.alert('Now Playing', `Playing ${folderTracks.length} tracks from "${folderName}"`);
     } catch (error: any) {
       console.error('Folder playback error:', error);
       Alert.alert('Playback Error', error.message || 'Failed to play folder');
@@ -1076,13 +1098,24 @@ export default function LibraryScreen() {
               </TouchableOpacity>
             </View>
             
-            {/* Subfolder list */}
-            <ScrollView style={styles.subfolderList} showsVerticalScrollIndicator={true}>
-              {subfolders.map((subfolder) => {
+            {/* Subfolder list - Using FlatList for performance with many items */}
+            <FlatList
+              style={styles.subfolderList}
+              data={subfolders}
+              keyExtractor={(item) => item.uri}
+              initialNumToRender={15}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={true}
+              getItemLayout={(_, index) => ({
+                length: 44,
+                offset: 44 * index,
+                index,
+              })}
+              renderItem={({ item: subfolder }) => {
                 const isAdded = isSubfolderAdded(subfolder);
                 return (
                   <TouchableOpacity
-                    key={subfolder.uri}
                     style={[
                       styles.subfolderItem,
                       { backgroundColor: isAdded ? colors.surfaceLight : colors.background, borderColor: isAdded ? colors.primary : colors.border }
@@ -1110,8 +1143,8 @@ export default function LibraryScreen() {
                     />
                   </TouchableOpacity>
                 );
-              })}
-            </ScrollView>
+              }}
+            />
             
             {/* Action buttons */}
             <View style={styles.modalButtons}>
