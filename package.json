@@ -1,6 +1,6 @@
 {
   "name": "tunewell",
-  "version": "0.2.31",
+  "version": "0.2.32",
   "private": true,
   "scripts": {
     "android": "react-native run-android",

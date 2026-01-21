@@ -9,7 +9,7 @@
  * - Queue access
  */
 
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -28,12 +28,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Share from 'react-native-share';
+import RNFS from 'react-native-fs';
 import { useCombinedProgress } from '../hooks';
 import { THEME, ROUTES, MOOD_CATEGORIES } from '../config';
 import { usePlayerStore, useEQStore, usePlaylistStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
 import { formatDuration } from '../services/metadata';
-import { formatFileSize } from '../utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ARTWORK_SIZE = SCREEN_WIDTH - 80;
@@ -70,6 +70,30 @@ export default function PlayerScreen() {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState(0);
+  const [dynamicFileSize, setDynamicFileSize] = useState<number | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
+
+  // Fetch file size when track changes or info modal opens
+  useEffect(() => {
+    const fetchFileSize = async () => {
+      if (currentTrack?.filePath && showInfoModal) {
+        try {
+          // If track already has fileSize, use it
+          if (currentTrack.fileSize && currentTrack.fileSize > 0) {
+            setDynamicFileSize(currentTrack.fileSize);
+            return;
+          }
+          // Otherwise, fetch it from filesystem
+          const stat = await RNFS.stat(currentTrack.filePath);
+          setDynamicFileSize(stat.size);
+        } catch (error) {
+          console.log('[FileSize] Could not get file size:', error);
+          setDynamicFileSize(null);
+        }
+      }
+    };
+    fetchFileSize();
+  }, [currentTrack?.id, currentTrack?.filePath, currentTrack?.fileSize, showInfoModal]);
 
   // Progress bar width for seek calculations
   const progressBarWidth = SCREEN_WIDTH - (THEME.spacing.xl * 2);
@@ -129,51 +153,14 @@ export default function PlayerScreen() {
 
   const handleShare = useCallback(async () => {
     if (!currentTrack) return;
+    if (isSharing) return; // Prevent double-tap
     
-    try {
-      // On Android 10+, file:// URIs don't work for sharing
-      // We need to use content:// URIs from MediaStore
-      const contentUri = currentTrack.uri; // This is the content:// URI
-      const filePath = currentTrack.filePath;
-      
-      // Try sharing the actual audio file
-      let shareSuccess = false;
-      
-      // Try content:// URI first (works on Android 10+)
-      if (contentUri && contentUri.startsWith('content://')) {
-        try {
-          await Share.open({
-            url: contentUri,
-            type: `audio/${currentTrack.format || 'mpeg'}`,
-            title: `${currentTrack.title} - ${currentTrack.artist}`,
-            subject: `${currentTrack.title} - ${currentTrack.artist}`,
-            failOnCancel: false,
-          });
-          shareSuccess = true;
-        } catch (contentErr: any) {
-          console.log('[Share] Content URI failed:', contentErr?.message);
-        }
-      }
-      
-      // Try file:// URI as fallback (works on older Android)
-      if (!shareSuccess && filePath && filePath.startsWith('/')) {
-        try {
-          const fileUri = `file://${filePath}`;
-          await Share.open({
-            url: fileUri,
-            type: `audio/${currentTrack.format || 'mpeg'}`,
-            title: `${currentTrack.title} - ${currentTrack.artist}`,
-            subject: `${currentTrack.title} - ${currentTrack.artist}`,
-            failOnCancel: false,
-          });
-          shareSuccess = true;
-        } catch (fileErr: any) {
-          console.log('[Share] File URI failed:', fileErr?.message);
-        }
-      }
-      
-      // Fallback to text sharing if file sharing failed
-      if (!shareSuccess) {
+    const filePath = currentTrack.filePath;
+    
+    // Check if we have a valid file path
+    if (!filePath || !filePath.startsWith('/')) {
+      // No valid file path, share text instead
+      try {
         const shareMessage = [
           `🎵 ${currentTrack.title}`,
           `👤 Artist: ${currentTrack.artist}`,
@@ -187,34 +174,77 @@ export default function PlayerScreen() {
           title: `${currentTrack.title} - ${currentTrack.artist}`,
           failOnCancel: false,
         });
+      } catch (err: any) {
+        if (!err?.message?.includes('cancel')) {
+          Alert.alert('Share Error', 'Could not share this track');
+        }
       }
+      return;
+    }
+    
+    setIsSharing(true);
+    
+    try {
+      // Get the file extension
+      const ext = currentTrack.format?.toLowerCase() || filePath.split('.').pop() || 'mp3';
+      
+      // Create a clean filename for sharing
+      const safeTitle = (currentTrack.title || 'audio').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim();
+      const safeArtist = (currentTrack.artist || 'Unknown').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim();
+      const shareFileName = `${safeArtist} - ${safeTitle}.${ext}`;
+      
+      // Copy file to cache directory for sharing
+      const cacheDir = RNFS.CachesDirectoryPath;
+      const cachePath = `${cacheDir}/${shareFileName}`;
+      
+      // Check if source file exists
+      const fileExists = await RNFS.exists(filePath);
+      if (!fileExists) {
+        throw new Error('Audio file not found');
+      }
+      
+      // Copy the file to cache
+      await RNFS.copyFile(filePath, cachePath);
+      
+      // Get the proper mime type
+      const mimeType = ext === 'mp3' ? 'audio/mpeg' : 
+                       ext === 'flac' ? 'audio/flac' :
+                       ext === 'wav' ? 'audio/wav' :
+                       ext === 'm4a' ? 'audio/mp4' :
+                       ext === 'aac' ? 'audio/aac' :
+                       ext === 'ogg' ? 'audio/ogg' :
+                       ext === 'opus' ? 'audio/opus' :
+                       `audio/${ext}`;
+      
+      // Share the cached file
+      await Share.open({
+        url: `file://${cachePath}`,
+        type: mimeType,
+        filename: shareFileName,
+        title: `${currentTrack.title} - ${currentTrack.artist}`,
+        subject: `${currentTrack.title} - ${currentTrack.artist}`,
+        failOnCancel: false,
+      });
+      
+      // Clean up cache file after a delay
+      setTimeout(async () => {
+        try {
+          await RNFS.unlink(cachePath);
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }, 30000); // Clean up after 30 seconds
+      
     } catch (error: any) {
       // User cancelled is not an error
       if (error?.message && !error.message.includes('cancel') && !error.message.includes('dismiss')) {
         console.log('[Share] Error:', error?.message || error);
-        // If all sharing fails, try text fallback
-        try {
-          const shareMessage = [
-            `🎵 ${currentTrack.title}`,
-            `👤 Artist: ${currentTrack.artist}`,
-            currentTrack.album ? `💿 Album: ${currentTrack.album}` : null,
-            '',
-            'Shared from TuneWell',
-          ].filter(Boolean).join('\n');
-          
-          await Share.open({
-            message: shareMessage,
-            title: `${currentTrack.title} - ${currentTrack.artist}`,
-            failOnCancel: false,
-          });
-        } catch (fallbackError: any) {
-          if (fallbackError?.message && !fallbackError.message.includes('cancel')) {
-            Alert.alert('Share Error', 'Could not share this track');
-          }
-        }
+        Alert.alert('Share Error', 'Could not share this audio file');
       }
+    } finally {
+      setIsSharing(false);
     }
-  }, [currentTrack]);
+  }, [currentTrack, isSharing]);
 
   const formatFileSize = (bytes: number | undefined): string => {
     if (!bytes) return 'Unknown';
@@ -608,12 +638,10 @@ export default function PlayerScreen() {
                   <Text style={styles.infoLabel}>Channels</Text>
                   <Text style={styles.infoValue}>{currentTrack.channels === 2 ? 'Stereo' : currentTrack.channels === 1 ? 'Mono' : `${currentTrack.channels || 2} channels`}</Text>
                 </View>
-                {currentTrack.fileSize && currentTrack.fileSize > 0 && (
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>File Size</Text>
-                    <Text style={styles.infoValue}>{formatFileSize(currentTrack.fileSize)}</Text>
-                  </View>
-                )}
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>File Size</Text>
+                  <Text style={styles.infoValue}>{dynamicFileSize ? formatFileSize(dynamicFileSize) : 'Loading...'}</Text>
+                </View>
                 <View style={styles.infoDivider} />
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>File Name</Text>
