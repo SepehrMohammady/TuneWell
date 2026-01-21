@@ -216,11 +216,21 @@ export default function PlayerScreen() {
                        ext === 'opus' ? 'audio/opus' :
                        `audio/${ext}`;
       
+      // Create a visual share message with TuneWell branding
+      const shareMessage = [
+        `🎵 ${currentTrack.title}`,
+        `🎤 ${currentTrack.artist}`,
+        currentTrack.album ? `💿 ${currentTrack.album}` : null,
+        '',
+        '🎧 Shared via TuneWell',
+      ].filter(Boolean).join('\n');
+      
       // Share the cached file
       await Share.open({
         url: `file://${cachePath}`,
         type: mimeType,
         filename: shareFileName,
+        message: shareMessage,
         title: `${currentTrack.title} - ${currentTrack.artist}`,
         subject: `${currentTrack.title} - ${currentTrack.artist}`,
         failOnCancel: false,
