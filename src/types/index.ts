@@ -37,6 +37,7 @@ export interface Track {
   channels: number;
   format: string;
   codec?: string;
+  fileSize?: number; // in bytes
   isLossless: boolean;
   isHighRes: boolean;
   isDSD: boolean;

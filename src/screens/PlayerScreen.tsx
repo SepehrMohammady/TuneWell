@@ -33,6 +33,7 @@ import { THEME, ROUTES, MOOD_CATEGORIES } from '../config';
 import { usePlayerStore, useEQStore, usePlaylistStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
 import { formatDuration } from '../services/metadata';
+import { formatFileSize } from '../utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ARTWORK_SIZE = SCREEN_WIDTH - 80;
@@ -607,6 +608,12 @@ export default function PlayerScreen() {
                   <Text style={styles.infoLabel}>Channels</Text>
                   <Text style={styles.infoValue}>{currentTrack.channels === 2 ? 'Stereo' : currentTrack.channels === 1 ? 'Mono' : `${currentTrack.channels || 2} channels`}</Text>
                 </View>
+                {currentTrack.fileSize && currentTrack.fileSize > 0 && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>File Size</Text>
+                    <Text style={styles.infoValue}>{formatFileSize(currentTrack.fileSize)}</Text>
+                  </View>
+                )}
                 <View style={styles.infoDivider} />
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>File Name</Text>

@@ -477,6 +477,7 @@ export default function LibraryScreen() {
     bitRate: scannedTrack.bitrate ? parseInt(scannedTrack.bitrate, 10) : undefined,
     channels: 2,
     format: scannedTrack.extension.replace('.', '').toUpperCase(),
+    fileSize: scannedTrack.size,
     isLossless: ['.flac', '.wav', '.aiff', '.alac', '.ape'].includes(scannedTrack.extension.toLowerCase()),
     isHighRes: scannedTrack.sampleRate ? parseInt(scannedTrack.sampleRate, 10) > 48000 : false,
     isDSD: ['.dff', '.dsf', '.dsd'].includes(scannedTrack.extension.toLowerCase()),
