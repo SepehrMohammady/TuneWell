@@ -99,7 +99,7 @@ export const MOOD_CATEGORIES = [
   {
     id: 'mood_nostalgic',
     name: 'Nostalgic / Retro',
-    icon: 'camera-retro',
+    icon: 'cassette',
     color: '#FFFFFF',
   },
 ] as const;

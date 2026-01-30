@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.2.36-blue.svg" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.2.37-blue.svg" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Android-green.svg" alt="Platform" />
   <img src="https://img.shields.io/badge/React%20Native-0.82.1-61dafb.svg" alt="React Native" />
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License" />

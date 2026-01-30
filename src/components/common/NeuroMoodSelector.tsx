@@ -132,7 +132,7 @@ export const NEURO_MOOD_DATA: MoodItem[] = [
     id: 'mood_nostalgic',
     label: 'Nostalgic / Retro',
     shortCaption: 'Memories, Oldies, Flashback',
-    icon: 'camera-retro',
+    icon: 'cassette',
     details: {
       science: 'Heavily engages the Hippocampus to retrieve autobiographical memories.',
       useCase: 'Reminiscing, connecting with the past.',
@@ -472,8 +472,8 @@ export const NeuroMoodSelector: React.FC<NeuroMoodSelectorProps> = ({
 
 const selectorStyles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: 'transparent',
+    paddingHorizontal: 16,
   },
   header: {
     paddingBottom: 16,
