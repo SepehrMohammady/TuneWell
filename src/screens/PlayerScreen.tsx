@@ -505,7 +505,7 @@ export default function PlayerScreen() {
             <NeuroMoodSelector
               selectedMoods={trackMoods as string[]}
               onMoodsChange={handleMoodsChange}
-              maxSelections={3}
+              maxSelections={9}
             />
             <TouchableOpacity style={styles.modalClose} onPress={() => setShowMoodModal(false)}>
               <Text style={styles.modalCloseText}>Done</Text>

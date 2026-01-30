@@ -439,7 +439,9 @@ export const NeuroMoodSelector: React.FC<NeuroMoodSelectorProps> = ({
       <View style={selectorStyles.header}>
         <Text style={selectorStyles.title}>Set Mood</Text>
         <Text style={selectorStyles.subtitle}>
-          Select up to {maxSelections} moods ({selectedMoods.length}/{maxSelections})
+          {selectedMoods.length === 0 
+            ? 'Tap to select moods for this track' 
+            : `${selectedMoods.length} mood${selectedMoods.length > 1 ? 's' : ''} selected`}
         </Text>
       </View>
 
@@ -489,7 +491,8 @@ const selectorStyles = StyleSheet.create({
     color: '#888888',
   },
   list: {
-    flex: 1,
+    minHeight: 400,
+    maxHeight: 500,
   },
   listContent: {
     paddingBottom: 20,

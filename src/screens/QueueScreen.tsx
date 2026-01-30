@@ -36,27 +36,26 @@ export default function QueueScreen() {
   // Auto-scroll to current playing track when screen opens
   useEffect(() => {
     if (queue.length > 0 && queueIndex >= 0 && flatListRef.current) {
-      // Small delay to ensure FlatList is rendered
+      // Use scrollToOffset for more reliable scrolling with large lists
+      const ITEM_HEIGHT = 72; // paddingVertical(16)*2 + content(~40)
       const timer = setTimeout(() => {
-        flatListRef.current?.scrollToIndex({
-          index: queueIndex,
+        const offset = Math.max(0, (queueIndex * ITEM_HEIGHT) - 150); // Position 150px from top
+        flatListRef.current?.scrollToOffset({
+          offset,
           animated: true,
-          viewPosition: 0.3, // Position the current track at 30% from top
         });
-      }, 100);
+      }, 300); // Longer delay to ensure list is fully rendered
       return () => clearTimeout(timer);
     }
   }, []); // Only run on mount
 
   // Handle scroll failures (item not rendered yet)
   const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
-    const wait = new Promise(resolve => setTimeout(resolve, 100));
-    wait.then(() => {
-      flatListRef.current?.scrollToIndex({
-        index: info.index,
-        animated: true,
-        viewPosition: 0.3,
-      });
+    const ITEM_HEIGHT = 72;
+    const offset = Math.max(0, (info.index * ITEM_HEIGHT) - 150);
+    flatListRef.current?.scrollToOffset({
+      offset,
+      animated: true,
     });
   }, []);
 
@@ -137,10 +136,13 @@ export default function QueueScreen() {
           showsVerticalScrollIndicator={false}
           onScrollToIndexFailed={onScrollToIndexFailed}
           getItemLayout={(data, index) => ({
-            length: 64, // Approximate item height
-            offset: 64 * index,
+            length: 72, // paddingVertical(16)*2 + content(~40)
+            offset: 72 * index,
             index,
           })}
+          initialNumToRender={20}
+          maxToRenderPerBatch={20}
+          windowSize={21}
         />
       ) : (
         <View style={styles.emptyState}>
