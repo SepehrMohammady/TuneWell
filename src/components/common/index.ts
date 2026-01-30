@@ -13,3 +13,5 @@ export { TrackItem } from './TrackItem';
 export { Slider } from './Slider';
 export { EQBand } from './EQBand';
 export { Artwork } from './Artwork';
+export { NeuroMoodSelector, NEURO_MOOD_DATA } from './NeuroMoodSelector';
+export type { MoodItem, MoodDetails } from './NeuroMoodSelector';

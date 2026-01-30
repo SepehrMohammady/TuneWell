@@ -4,7 +4,7 @@
  * View and manage the current playback queue.
  */
 
-import React from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import type { QueueItem } from '../types';
 
 export default function QueueScreen() {
   const navigation = useNavigation();
+  const flatListRef = useRef<FlatList>(null);
   const {
     queue,
     queueIndex,
@@ -31,6 +32,33 @@ export default function QueueScreen() {
     removeFromQueue,
     clearQueue,
   } = usePlayerStore();
+
+  // Auto-scroll to current playing track when screen opens
+  useEffect(() => {
+    if (queue.length > 0 && queueIndex >= 0 && flatListRef.current) {
+      // Small delay to ensure FlatList is rendered
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToIndex({
+          index: queueIndex,
+          animated: true,
+          viewPosition: 0.3, // Position the current track at 30% from top
+        });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, []); // Only run on mount
+
+  // Handle scroll failures (item not rendered yet)
+  const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
+    const wait = new Promise(resolve => setTimeout(resolve, 100));
+    wait.then(() => {
+      flatListRef.current?.scrollToIndex({
+        index: info.index,
+        animated: true,
+        viewPosition: 0.3,
+      });
+    });
+  }, []);
 
   const handleSkipToIndex = async (index: number) => {
     // Use audioService to properly skip to the track (updates both TrackPlayer and store)
@@ -101,11 +129,18 @@ export default function QueueScreen() {
       {/* Queue List */}
       {queue.length > 0 ? (
         <FlatList
+          ref={flatListRef}
           data={queue}
           keyExtractor={(item) => item.id}
           renderItem={renderQueueItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          onScrollToIndexFailed={onScrollToIndexFailed}
+          getItemLayout={(data, index) => ({
+            length: 64, // Approximate item height
+            offset: 64 * index,
+            index,
+          })}
         />
       ) : (
         <View style={styles.emptyState}>

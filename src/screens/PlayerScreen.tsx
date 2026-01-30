@@ -30,10 +30,11 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
 import { useCombinedProgress } from '../hooks';
-import { THEME, ROUTES, MOOD_CATEGORIES } from '../config';
+import { THEME, ROUTES } from '../config';
 import { usePlayerStore, useEQStore, usePlaylistStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
 import { formatDuration } from '../services/metadata';
+import { NeuroMoodSelector } from '../components/common/NeuroMoodSelector';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ARTWORK_SIZE = SCREEN_WIDTH - 80;
@@ -273,6 +274,19 @@ export default function PlayerScreen() {
     }
   }, [currentTrack, trackMoods, addMoodToTrack, removeMoodFromTrack]);
 
+  // Handler for the NeuroMoodSelector - syncs mood changes to store
+  const handleMoodsChange = useCallback((newMoods: string[]) => {
+    if (!currentTrack) return;
+    
+    // Find moods to add (in newMoods but not in trackMoods)
+    const moodsToAdd = newMoods.filter(m => !trackMoods.includes(m as any));
+    // Find moods to remove (in trackMoods but not in newMoods)
+    const moodsToRemove = trackMoods.filter(m => !newMoods.includes(m));
+    
+    moodsToAdd.forEach(moodId => addMoodToTrack(currentTrack.id, moodId as any));
+    moodsToRemove.forEach(moodId => removeMoodFromTrack(currentTrack.id, moodId as any));
+  }, [currentTrack, trackMoods, addMoodToTrack, removeMoodFromTrack]);
+
   const handleAddToPlaylist = useCallback((playlistId: string) => {
     if (!currentTrack) return;
     addToPlaylist(playlistId, [currentTrack.id]);
@@ -487,26 +501,12 @@ export default function PlayerScreen() {
       {/* Mood Selection Modal */}
       <Modal visible={showMoodModal} transparent animationType="slide" onRequestClose={() => setShowMoodModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Set Mood</Text>
-            <Text style={styles.modalSubtitle}>Tap to toggle moods for this track</Text>
-            <ScrollView style={styles.moodGrid} contentContainerStyle={styles.moodGridContent}>
-              {MOOD_CATEGORIES.map((mood) => {
-                const isSelected = trackMoods.includes(mood.id as any);
-                return (
-                  <TouchableOpacity
-                    key={mood.id}
-                    style={[styles.moodItem, isSelected && styles.moodItemSelected]}
-                    onPress={() => handleMoodToggle(mood.id)}
-                  >
-                    <Text style={styles.moodItemIcon}>{mood.icon}</Text>
-                    <Text style={[styles.moodItemText, isSelected && styles.moodItemTextSelected]}>
-                      {mood.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <NeuroMoodSelector
+              selectedMoods={trackMoods as string[]}
+              onMoodsChange={handleMoodsChange}
+              maxSelections={3}
+            />
             <TouchableOpacity style={styles.modalClose} onPress={() => setShowMoodModal(false)}>
               <Text style={styles.modalCloseText}>Done</Text>
             </TouchableOpacity>

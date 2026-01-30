@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { THEME, ROUTES, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
@@ -143,10 +144,10 @@ export default function HomeScreen() {
             {MOOD_CATEGORIES.map((mood) => (
               <TouchableOpacity
                 key={mood.id}
-                style={[styles.moodCard, { backgroundColor: colors.surface, borderColor: mood.color }]}
+                style={[styles.moodCard, { backgroundColor: colors.surface }]}
                 onPress={() => handleMoodPress(mood.id as MoodId, mood.name)}
               >
-                <Text style={styles.moodIcon}>{mood.icon}</Text>
+                <MaterialCommunityIcons name={mood.icon} size={24} color={colors.text} />
                 <Text style={[styles.moodName, { color: colors.text }]}>{mood.name}</Text>
                 <Text style={[styles.moodCount, { color: colors.textSecondary }]}>
                   {moodTrackCounts[mood.id] || 0}
@@ -254,18 +255,16 @@ const styles = StyleSheet.create({
     marginBottom: THEME.spacing.sm,
     alignItems: 'center',
     borderWidth: 1,
+    borderColor: 'transparent',
     width: '31%',
     aspectRatio: 1,
     justifyContent: 'center',
-  },
-  moodIcon: {
-    fontSize: 24,
-    marginBottom: 4,
   },
   moodName: {
     fontSize: 11,
     fontWeight: '500',
     textAlign: 'center',
+    marginTop: 4,
   },
   moodCount: {
     fontSize: 11,

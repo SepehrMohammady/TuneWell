@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.2.33-blue.svg" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.2.36-blue.svg" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Android-green.svg" alt="Platform" />
   <img src="https://img.shields.io/badge/React%20Native-0.82.1-61dafb.svg" alt="React Native" />
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License" />
@@ -141,18 +141,23 @@ TuneWell includes professionally tuned EQ presets:
 - **Electronic** - Deep bass and crisp highs
 - **Acoustic** - Natural instrument tones
 
-## 🎨 Mood Playlists
+## 🧠 Neuro-Mood Playlists
 
-Automatically organize your music by mood:
+Organize your music by neuropsychology-based mood categories:
 
-- 🧘 Relaxed
-- ⚡ Energetic
-- 😊 Happy
-- 😢 Melancholic
-- 🎉 Party
-- 💪 Workout
-- 🎯 Focus
-- 💤 Sleep
+| Mood | Brain System | Best For |
+|------|-------------|----------|
+| 😊 Happy/Joyful | Dopamine/Reward System | Mood boosting, driving, parties |
+| 😢 Sad/Melancholic | Amygdala/Emotional Processing | Grieving, rainy days, reflection |
+| ⚡ Energetic/Pumped | Sympathetic Nervous System | Gym, running, waking up |
+| 🧘 Calm/Relaxed | Parasympathetic System | Meditation, sleeping, anxiety relief |
+| 🎯 Focus/Flow | Prefrontal Cortex | Deep work, coding, studying |
+| 🔥 Angry/Intense | Fight Response | Heavy lifting, venting, gaming |
+| 💜 Romantic/Loving | Oxytocin/Bonding | Date night, intimate moments |
+| ☁️ Dreamy/Ethereal | Default Mode Network | Daydreaming, creative thinking |
+| 📷 Nostalgic/Retro | Hippocampus/Memory | Reminiscing, connecting with past |
+
+*Select up to 3 moods per track with detailed science info for each category.*
 
 ## 📄 License
 

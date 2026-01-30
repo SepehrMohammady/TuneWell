@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
@@ -326,8 +327,8 @@ export default function PlaylistsScreen() {
                 style={[styles.playlistItem, { borderBottomColor: colors.border }]}
                 onPress={() => navigation.navigate('MoodPlaylistDetail', { mood: mood.id as MoodId })}
               >
-                <View style={[styles.playlistIcon, { backgroundColor: mood.color }]}>
-                  <Text style={styles.playlistIconText}>{mood.icon}</Text>
+                <View style={[styles.playlistIcon, { backgroundColor: colors.surface }]}>
+                  <MaterialCommunityIcons name={mood.icon} size={20} color={colors.text} />
                 </View>
                 <View style={styles.playlistInfo}>
                   <Text style={[styles.playlistName, { color: colors.text }]}>{mood.name}</Text>

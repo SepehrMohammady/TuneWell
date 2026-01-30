@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
@@ -43,7 +44,7 @@ export default function PlaylistDetailScreen() {
   // Get mood info
   const moodInfo = MOOD_CATEGORIES.find(m => m.id === mood);
   const moodName = moodInfo?.name || mood;
-  const moodIcon = moodInfo?.icon || '🎵';
+  const moodIcon = moodInfo?.icon || 'music-note';
   
   // Get tracks for this mood - use trackMeta as dependency to update when moods change
   const playlistTracks = useMemo(() => {
@@ -160,7 +161,7 @@ export default function PlaylistDetailScreen() {
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerEmoji}>{moodIcon}</Text>
+          <MaterialCommunityIcons name={moodIcon} size={24} color={colors.text} style={styles.headerIcon} />
           <Text style={[styles.headerTitle, { color: colors.text }]}>{moodName}</Text>
         </View>
         <Text style={[styles.trackCount, { color: colors.textSecondary }]}>
@@ -189,7 +190,7 @@ export default function PlaylistDetailScreen() {
       {/* Track List */}
       {playlistTracks.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>{moodIcon}</Text>
+          <MaterialCommunityIcons name={moodIcon} size={48} color={colors.textMuted} />
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
             No tracks in this playlist yet
           </Text>
@@ -232,8 +233,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  headerEmoji: {
-    fontSize: 24,
+  headerIcon: {
     marginRight: THEME.spacing.sm,
   },
   headerTitle: {
@@ -302,13 +302,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: THEME.spacing.xl,
   },
-  emptyEmoji: {
-    fontSize: 64,
-    marginBottom: THEME.spacing.md,
-  },
   emptyText: {
     fontSize: 16,
     marginBottom: THEME.spacing.sm,
+    marginTop: THEME.spacing.md,
   },
   emptyHint: {
     fontSize: 14,
