@@ -163,12 +163,6 @@ Organize your music by neuropsychology-based mood categories:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 👤 Author
-
-**Sepehr Mohammady**
-
-- Email: SMohammady@outlook.com
-- GitHub: [@SepehrMohammady](https://github.com/SepehrMohammady)
 
 ## 🙏 Acknowledgments
 
