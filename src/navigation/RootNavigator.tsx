@@ -16,11 +16,14 @@ import HomeScreen from '../screens/HomeScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import PlaylistsScreen from '../screens/PlaylistsScreen';
 import PlaylistDetailScreen from '../screens/PlaylistDetailScreen';
+import StreamingScreen from '../screens/StreamingScreen';
+import SpotifyPlaylistDetailScreen from '../screens/SpotifyPlaylistDetailScreen';
 import EqualizerScreen from '../screens/EqualizerScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlayerScreen from '../screens/PlayerScreen';
 import QueueScreen from '../screens/QueueScreen';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabsParamList>();
@@ -51,6 +54,17 @@ function TabIcon({ name, focused, color }: { name: string; focused: boolean; col
     Equalizer: 'tune',
     Settings: 'settings',
   };
+  
+  // Streaming tab uses MaterialCommunityIcons
+  if (name === 'Streaming') {
+    return (
+      <MaterialCommunityIcons 
+        name="cloud-search-outline" 
+        size={24} 
+        color={color}
+      />
+    );
+  }
   
   return (
     <MaterialIcons 
@@ -109,6 +123,14 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
+        name={ROUTES.STREAMING as keyof MainTabsParamList}
+        component={StreamingScreen}
+        options={{
+          tabBarLabel: 'Streaming',
+          tabBarIcon: ({ focused, color }) => <TabIcon name="Streaming" focused={focused} color={color} />,
+        }}
+      />
+      <Tab.Screen
         name={ROUTES.EQUALIZER as keyof MainTabsParamList}
         component={EqualizerScreen}
         options={{
@@ -161,6 +183,13 @@ export function RootNavigator() {
         <Stack.Screen
           name="MoodPlaylistDetail"
           component={PlaylistDetailScreen}
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen
+          name={ROUTES.SPOTIFY_PLAYLIST_DETAIL as keyof RootStackParamList}
+          component={SpotifyPlaylistDetailScreen}
           options={{
             animation: 'slide_from_right',
           }}

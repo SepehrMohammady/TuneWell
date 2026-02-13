@@ -23,7 +23,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { THEME, VERSION, APP_INFO, ROUTES } from '../config';
-import { useSettingsStore, useLibraryStore, usePlayerStore, useThemeStore } from '../store';
+import { useSettingsStore, useLibraryStore, usePlayerStore, useThemeStore, useStreamingStore } from '../store';
 import type { ThemeMode } from '../store';
 import MiniPlayer from '../components/player/MiniPlayer';
 import OptionPicker from '../components/common/OptionPicker';
@@ -225,6 +225,23 @@ export default function SettingsScreen() {
               settings.setShowSampleRate
             )}
             {renderSettingRow('Artwork Quality', getArtworkQualityLabel(selectedArtworkQuality), () => setShowArtworkQualityPicker(true))}
+          </View>
+        </View>
+
+        {/* Connected Accounts Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>CONNECTED ACCOUNTS</Text>
+          <View style={[styles.sectionContent, { backgroundColor: colors.surface }]}>
+            {renderSettingRow(
+              'Spotify',
+              useStreamingStore.getState().spotifyConnected 
+                ? useStreamingStore.getState().spotifyUser?.displayName || 'Connected'
+                : 'Not connected',
+              () => {
+                const nav = navigation as any;
+                nav.navigate(ROUTES.STREAMING);
+              }
+            )}
           </View>
         </View>
 

@@ -4,7 +4,7 @@
  * Type definitions for the music player application.
  */
 
-import type { MoodId, PlaylistType, EQPreset, PlaybackState, RepeatMode, SortOption } from '../config/constants';
+import type { MoodId, PlaylistType, EQPreset, PlaybackState, RepeatMode, SortOption, StreamingSource } from '../config/constants';
 
 // ============================================================================
 // Audio Track Types
@@ -60,6 +60,12 @@ export interface Track {
   // ReplayGain
   replayGainTrack?: number;
   replayGainAlbum?: number;
+  
+  // Streaming
+  streamingSource?: StreamingSource;
+  spotifyUri?: string;
+  streamingArtworkUrl?: string;
+  previewUrl?: string;
 }
 
 export interface Album {
@@ -177,7 +183,7 @@ export interface QueueItem {
   id: string;
   track: Track;
   addedAt: number;
-  source: 'library' | 'playlist' | 'folder' | 'search';
+  source: 'library' | 'playlist' | 'folder' | 'search' | 'streaming';
   sourceId?: string;
 }
 
@@ -295,12 +301,15 @@ export type RootStackParamList = {
   TrackInfo: { trackId: string };
   SelectFolder: undefined;
   EQPresetDetail: { presetId: string };
+  SpotifyPlaylistDetail: { playlistId: string };
+  ImportPlaylist: undefined;
 };
 
 export type MainTabsParamList = {
   Home: undefined;
   Library: undefined;
   Playlists: undefined;
+  Streaming: undefined;
   Equalizer: undefined;
   Settings: undefined;
 };
@@ -329,3 +338,67 @@ export type PlaylistsStackParamList = {
   CustomPlaylists: undefined;
   PlaylistDetail: { playlistId: string };
 };
+
+// ============================================================================
+// Streaming Types
+// ============================================================================
+
+export interface SpotifyUser {
+  id: string;
+  displayName: string;
+  email?: string;
+  imageUrl?: string;
+  product?: 'free' | 'premium';
+}
+
+export interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  ownerName: string;
+  trackCount: number;
+  uri: string;
+}
+
+export interface SpotifyTrack {
+  id: string;
+  name: string;
+  artist: string;
+  album: string;
+  duration: number; // ms
+  imageUrl?: string;
+  uri: string;
+  previewUrl?: string;
+  isPlayable: boolean;
+}
+
+export interface ImportedPlaylist {
+  id: string;
+  name: string;
+  source: 'spotify' | 'youtube_music' | 'apple_music' | 'url';
+  sourceUrl?: string;
+  imageUrl?: string;
+  tracks: SpotifyTrack[];
+  trackCount: number;
+  importedAt: number;
+  lastSyncAt?: number;
+}
+
+export interface StreamingState {
+  // Spotify connection
+  spotifyConnected: boolean;
+  spotifyUser: SpotifyUser | null;
+  spotifyAccessToken: string | null;
+  spotifyRefreshToken: string | null;
+  spotifyTokenExpiry: number | null;
+  
+  // Playlists
+  spotifyPlaylists: SpotifyPlaylist[];
+  importedPlaylists: ImportedPlaylist[];
+  
+  // UI state
+  isLoading: boolean;
+  error: string | null;
+  lastSyncAt: number | null;
+}

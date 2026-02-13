@@ -177,6 +177,14 @@ export const REPEAT_MODES = {
 
 export type RepeatMode = typeof REPEAT_MODES[keyof typeof REPEAT_MODES];
 
+// Streaming Sources
+export const STREAMING_SOURCES = {
+  LOCAL: 'local',
+  SPOTIFY: 'spotify',
+} as const;
+
+export type StreamingSource = typeof STREAMING_SOURCES[keyof typeof STREAMING_SOURCES];
+
 // Storage Keys
 export const STORAGE_KEYS = {
   SETTINGS: '@tunewell/settings',
@@ -187,6 +195,7 @@ export const STORAGE_KEYS = {
   SELECTED_FOLDERS: '@tunewell/selectedFolders',
   THEME: '@tunewell/theme',
   AUDIO_OUTPUT: '@tunewell/audioOutput',
+  STREAMING: '@tunewell/streaming',
 } as const;
 
 // Navigation Routes
@@ -223,6 +232,11 @@ export const ROUTES = {
   TRACK_INFO: 'TrackInfo',
   SELECT_FOLDER: 'SelectFolder',
   EQ_PRESET_DETAIL: 'EQPresetDetail',
+  
+  // Streaming
+  STREAMING: 'Streaming',
+  SPOTIFY_PLAYLIST_DETAIL: 'SpotifyPlaylistDetail',
+  IMPORT_PLAYLIST: 'ImportPlaylist',
 } as const;
 
 export type Route = typeof ROUTES[keyof typeof ROUTES];
