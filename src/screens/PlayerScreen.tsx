@@ -27,6 +27,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
 import { useCombinedProgress } from '../hooks';
@@ -361,10 +362,17 @@ export default function PlayerScreen() {
         
         {/* Audio Quality Info */}
         <View style={styles.audioInfo}>
-          <Text style={[styles.audioInfoText, { color: colors.textMuted }]}>
-            {currentTrack.format.toUpperCase()} • {currentTrack.sampleRate / 1000}kHz • {currentTrack.bitDepth}-bit
-          </Text>
-          {eqEnabled && (
+          {currentTrack.streamingSource === 'spotify' ? (
+            <View style={[styles.streamingBadge, { backgroundColor: '#1DB95420' }]}>
+              <MaterialCommunityIcons name="spotify" size={14} color="#1DB954" />
+              <Text style={[styles.streamingBadgeText, { color: '#1DB954' }]}>Spotify</Text>
+            </View>
+          ) : (
+            <Text style={[styles.audioInfoText, { color: colors.textMuted }]}>
+              {currentTrack.format.toUpperCase()} • {currentTrack.sampleRate / 1000}kHz • {currentTrack.bitDepth}-bit
+            </Text>
+          )}
+          {eqEnabled && !currentTrack.streamingSource && (
             <View style={[styles.eqBadge, { backgroundColor: colors.primary }]}>
               <Text style={[styles.eqBadgeText, { color: colors.background }]}>EQ</Text>
             </View>
@@ -805,6 +813,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: THEME.colors.text,
+  },
+  streamingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: THEME.borderRadius.full,
+    gap: 4,
+  },
+  streamingBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   progressContainer: {
     paddingHorizontal: THEME.spacing.xl,

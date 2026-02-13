@@ -20,6 +20,7 @@ import { setupTrackPlayer, mapPlayerState, mapRepeatMode } from './TrackPlayerSe
 import { eqService } from '../../native/AudioEqualizer';
 import { nativeDecoderService } from '../../native/NativeAudioDecoder';
 import { getPlayerAudioSessionId } from '../../native/TrackPlayerSession';
+import { spotifyService } from '../streaming/SpotifyService';
 import type { Track, QueueItem } from '../../types';
 import { PLAYBACK_STATES } from '../../config/constants';
 
@@ -635,6 +636,37 @@ class AudioService {
 
     const startTrack = queue[startIndex]?.track;
     
+    // Check if this is a Spotify/streaming track
+    if (startTrack?.streamingSource === 'spotify' && startTrack.spotifyUri) {
+      console.log('[AudioService] Spotify track detected, routing to SpotifyService');
+      
+      // Stop any local playback
+      await TrackPlayer.reset();
+      await nativeDecoderService.stop();
+      
+      try {
+        if (startPaused) {
+          // Just update the store, don't start playback
+          usePlayerStore.getState().setCurrentTrack(startTrack);
+          usePlayerStore.getState().setState('paused');
+        } else {
+          const success = await spotifyService.play(startTrack.spotifyUri);
+          if (success) {
+            usePlayerStore.getState().setCurrentTrack(startTrack);
+            usePlayerStore.getState().setState('playing');
+            usePlaylistStore.getState().recordPlay(startTrack.id);
+            console.log('[AudioService] Spotify playback started');
+          } else {
+            throw new Error('Spotify playback failed - ensure Spotify app is open');
+          }
+        }
+        return;
+      } catch (error: any) {
+        console.error('[AudioService] Spotify playback error:', error);
+        throw new Error(`Spotify playback failed: ${error.message}`);
+      }
+    }
+    
     // Check if the starting track needs native decoder (DSD or WAV)
     if (startTrack && requiresNativeDecoder(startTrack.format)) {
       const formatName = isDSDFormat(startTrack.format) ? 'DSD' : 'WAV';
@@ -814,6 +846,14 @@ class AudioService {
    * Play/Resume playback
    */
   async play(): Promise<void> {
+    // Check if current track is a Spotify track
+    const currentTrack = usePlayerStore.getState().currentTrack;
+    if (currentTrack?.streamingSource === 'spotify') {
+      await spotifyService.resume();
+      usePlayerStore.getState().setState('playing');
+      return;
+    }
+    
     // Check if native decoder is active
     const nativeState = await nativeDecoderService.getState();
     if (nativeState?.isPaused) {
@@ -863,6 +903,14 @@ class AudioService {
       console.log('[AudioService] Saved position for resume:', progress.position);
     } catch (e) {
       console.warn('[AudioService] Could not save position:', e);
+    }
+    
+    // Check if current track is a Spotify track
+    const currentTrack = usePlayerStore.getState().currentTrack;
+    if (currentTrack?.streamingSource === 'spotify') {
+      await spotifyService.pause();
+      usePlayerStore.getState().setState('paused');
+      return;
     }
     
     // Check if native decoder is active
@@ -948,6 +996,19 @@ class AudioService {
       
       const nextTrack = storeQueue[nextIndex]?.track;
       const currentTrack = storeQueue[storeQueueIndex]?.track;
+      
+      // Check if next track is a Spotify track
+      if (nextTrack?.streamingSource === 'spotify') {
+        console.log('[AudioService] Next track is Spotify, routing accordingly');
+        // Stop current playback
+        if (currentTrack && requiresNativeDecoder(currentTrack.format)) {
+          await nativeDecoderService.stop();
+        } else {
+          await TrackPlayer.reset();
+        }
+        await this.playQueue(storeQueue, nextIndex);
+        return true;
+      }
       
       // Check if current track uses native decoder (need to stop it)
       if (currentTrack && requiresNativeDecoder(currentTrack.format)) {
