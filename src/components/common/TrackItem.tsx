@@ -64,7 +64,7 @@ export const TrackItem: React.FC<TrackItemProps> = ({
             <Image source={{ uri: track.artworkUri }} style={styles.artwork} />
           ) : (
             <View style={styles.artworkPlaceholder}>
-              <MaterialIcons name="music-note" size={24} color={Colors.textMuted} />
+              <MaterialIcons name="music-note" size={24} color={Colors.text.tertiary} />
             </View>
           )}
           {isPlaying && (
