@@ -109,12 +109,15 @@ class SpotifyService {
       this.codeVerifier = generateRandomString(64);
       
       let codeChallenge: string;
+      let challengeMethod = 'S256';
       try {
         const hashed = await sha256(this.codeVerifier);
         codeChallenge = base64URLEncode(hashed);
       } catch {
-        // Fallback: use plain method if SHA-256 not available
+        // Fallback: use plain method if SHA-256 not available in RN
         codeChallenge = this.codeVerifier;
+        challengeMethod = 'plain';
+        console.log('[SpotifyService] Using plain PKCE (crypto.subtle unavailable)');
       }
       
       const params = new URLSearchParams({
@@ -122,7 +125,7 @@ class SpotifyService {
         response_type: 'code',
         redirect_uri: SPOTIFY_CONFIG.redirectUri,
         scope: SPOTIFY_CONFIG.scopes,
-        code_challenge_method: 'S256',
+        code_challenge_method: challengeMethod,
         code_challenge: codeChallenge,
         show_dialog: 'true',
       });

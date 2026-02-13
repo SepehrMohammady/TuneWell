@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { StatusBar, LogBox, View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { StatusBar, LogBox, View, Text, StyleSheet, ActivityIndicator, Linking } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -103,6 +103,33 @@ export default function App() {
     }
 
     initialize();
+  }, []);
+
+  // Deep link handler for Spotify OAuth callback
+  useEffect(() => {
+    const handleDeepLink = async ({ url }: { url: string }) => {
+      if (url && url.startsWith('tunewell://spotify-callback')) {
+        console.log('[TuneWell] Spotify callback received');
+        try {
+          const { spotifyService } = await import('./services/streaming');
+          await spotifyService.handleAuthCallback(url);
+        } catch (err) {
+          console.error('[TuneWell] Spotify callback error:', err);
+        }
+      }
+    };
+
+    // Listen for deep links while app is running
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    // Also check if app was opened via deep link (cold start)
+    Linking.getInitialURL().then(url => {
+      if (url) {
+        handleDeepLink({ url });
+      }
+    });
+
+    return () => subscription.remove();
   }, []);
 
   if (error) {
