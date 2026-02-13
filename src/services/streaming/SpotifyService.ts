@@ -366,7 +366,8 @@ class SpotifyService {
           },
         });
         if (!retryResponse.ok) {
-          throw new Error(`Spotify API error: ${retryResponse.status}`);
+          const errBody = await retryResponse.text().catch(() => '');
+          throw new Error(`Spotify API error: ${retryResponse.status} ${errBody}`);
         }
         return retryResponse.json();
       }
@@ -374,7 +375,8 @@ class SpotifyService {
     }
 
     if (!response.ok) {
-      throw new Error(`Spotify API error: ${response.status}`);
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`Spotify API error: ${response.status} ${errBody}`);
     }
 
     return response.json();
@@ -415,7 +417,7 @@ class SpotifyService {
     try {
       useStreamingStore.getState().setLoading(true);
       
-      const data = await this.apiRequest<any>(`/me/playlists?limit=${limit}&offset=${offset}`);
+      const data = await this.apiRequest<any>(`/me/playlists?limit=${limit}&offset=${offset}&market=from_token`);
       
       const playlists: SpotifyPlaylist[] = data.items.map((item: any) => ({
         id: item.id,
@@ -447,7 +449,7 @@ class SpotifyService {
   async fetchPlaylistTracks(playlistId: string, limit = 100, offset = 0): Promise<SpotifyTrack[]> {
     try {
       const data = await this.apiRequest<any>(
-        `/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}&fields=items(track(id,name,artists,album,duration_ms,preview_url,uri,is_playable,album(images)))`
+        `/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}&market=from_token`
       );
 
       const tracks: SpotifyTrack[] = data.items
@@ -468,6 +470,27 @@ class SpotifyService {
     } catch (error) {
       console.error('[SpotifyService] Failed to fetch playlist tracks:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Fetch metadata for a single playlist (name, image, owner, track count)
+   */
+  async fetchPlaylistMetadata(playlistId: string): Promise<SpotifyPlaylist | null> {
+    try {
+      const data = await this.apiRequest<any>(`/playlists/${playlistId}?market=from_token`);
+      return {
+        id: data.id,
+        name: data.name,
+        description: data.description || '',
+        imageUrl: data.images?.[0]?.url,
+        ownerName: data.owner?.display_name || 'Unknown',
+        trackCount: data.tracks?.total || 0,
+        uri: data.uri,
+      };
+    } catch (error) {
+      console.error('[SpotifyService] Failed to fetch playlist metadata:', error);
+      return null;
     }
   }
 

@@ -144,24 +144,33 @@ class PlaylistImportService {
       throw new Error('Invalid Spotify playlist URL');
     }
 
+    // Fetch playlist metadata from API (works for any public/accessible playlist)
+    let playlistName = 'Spotify Playlist';
+    let playlistImage: string | undefined;
+    try {
+      const meta = await spotifyService.fetchPlaylistMetadata(playlistId);
+      if (meta) {
+        playlistName = meta.name;
+        playlistImage = meta.imageUrl;
+      }
+    } catch (e) {
+      console.warn('[PlaylistImport] Could not fetch playlist metadata:', e);
+    }
+
     const tracks = await spotifyService.fetchPlaylistTracks(playlistId);
-    
-    // Get playlist metadata
-    const store = useStreamingStore.getState();
-    const spotifyPlaylist = store.spotifyPlaylists.find(p => p.id === playlistId);
     
     const imported: ImportedPlaylist = {
       id: `import_spotify_${playlistId}_${Date.now()}`,
-      name: spotifyPlaylist?.name || `Spotify Playlist`,
+      name: playlistName,
       source: 'spotify',
       sourceUrl: url,
-      imageUrl: spotifyPlaylist?.imageUrl,
+      imageUrl: playlistImage,
       tracks,
       trackCount: tracks.length,
       importedAt: Date.now(),
     };
 
-    store.addImportedPlaylist(imported);
+    useStreamingStore.getState().addImportedPlaylist(imported);
     return imported;
   }
 
