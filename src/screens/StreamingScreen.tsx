@@ -318,7 +318,7 @@ export default function StreamingScreen() {
           <View style={[styles.importSection, { backgroundColor: colors.surface }]}>
             <Text style={[styles.importLabel, { color: colors.text }]}>Import from URL</Text>
             <Text style={[styles.importHint, { color: colors.textSecondary }]}>
-              Paste a playlist link from Spotify, YouTube Music, or Apple Music
+              Paste a playlist link from <Text style={{ fontWeight: '700', color: colors.text }}>Spotify</Text>, <Text style={{ fontWeight: '700', color: colors.text }}>YouTube Music</Text>, or <Text style={{ fontWeight: '700', color: colors.text }}>Apple Music</Text>
             </Text>
             <View style={styles.importRow}>
               <TextInput
@@ -437,7 +437,7 @@ export default function StreamingScreen() {
             <View style={styles.actionInfo}>
               <Text style={[styles.actionTitle, { color: colors.text }]}>Import from URL</Text>
               <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
-                Paste a link from Spotify, YouTube Music, or Apple Music
+                Paste a link from <Text style={{ fontWeight: '700', color: colors.text }}>Spotify</Text>, <Text style={{ fontWeight: '700', color: colors.text }}>YouTube Music</Text>, or <Text style={{ fontWeight: '700', color: colors.text }}>Apple Music</Text>
               </Text>
             </View>
           </TouchableOpacity>
