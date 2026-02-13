@@ -17,7 +17,7 @@ import type { SpotifyUser, SpotifyPlaylist, SpotifyTrack, Track } from '../../ty
 // ============================================================================
 
 const SPOTIFY_CONFIG = {
-  clientId: '/* TODO: Register app at developer.spotify.com */',
+  clientId: 'I19c09aad825e44c18131d16661f5f3d5',
   redirectUri: 'tunewell://spotify-callback',
   scopes: [
     'user-read-private',
