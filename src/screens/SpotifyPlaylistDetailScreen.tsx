@@ -23,9 +23,9 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { THEME, ROUTES } from '../config';
 import { useStreamingStore, usePlayerStore, useThemeStore } from '../store';
-import { spotifyService } from '../services/streaming';
+import { spotifyService, deezerService, qobuzService } from '../services/streaming';
 import { audioService } from '../services/audio/AudioService';
-import type { SpotifyTrack, QueueItem, RootStackParamList } from '../types';
+import type { StreamingTrack, QueueItem, RootStackParamList } from '../types';
 
 type SpotifyPlaylistDetailRoute = RouteProp<RootStackParamList, 'SpotifyPlaylistDetail'>;
 
@@ -34,13 +34,14 @@ export default function SpotifyPlaylistDetailScreen() {
   const route = useRoute<SpotifyPlaylistDetailRoute>();
   const { playlistId } = route.params;
   const { colors, mode: themeMode } = useThemeStore();
-  const { spotifyPlaylists, importedPlaylists } = useStreamingStore();
+  const { spotifyPlaylists, deezerPlaylists, qobuzPlaylists, importedPlaylists } = useStreamingStore();
   
-  const [tracks, setTracks] = useState<SpotifyTrack[]>([]);
+  const [tracks, setTracks] = useState<StreamingTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [playlistName, setPlaylistName] = useState('');
   const [playlistImage, setPlaylistImage] = useState<string | undefined>();
   const [playlistOwner, setPlaylistOwner] = useState('');
+  const [playlistSource, setPlaylistSource] = useState<'spotify' | 'deezer' | 'qobuz' | 'imported'>('spotify');
 
   useEffect(() => {
     loadPlaylistTracks();
@@ -49,12 +50,55 @@ export default function SpotifyPlaylistDetailScreen() {
   const loadPlaylistTracks = async () => {
     setLoading(true);
     
+    // Check if it's a Deezer playlist (prefixed with deezer_)
+    if (playlistId.startsWith('deezer_')) {
+      const deezerPid = playlistId.replace('deezer_', '');
+      const deezerPlaylist = deezerPlaylists.find(p => p.id === deezerPid);
+      if (deezerPlaylist) {
+        setPlaylistName(deezerPlaylist.name);
+        setPlaylistImage(deezerPlaylist.imageUrl);
+        setPlaylistOwner(deezerPlaylist.creatorName);
+        setPlaylistSource('deezer');
+        
+        try {
+          const fetchedTracks = await deezerService.fetchPlaylistTracks(deezerPid);
+          setTracks(fetchedTracks);
+        } catch (error) {
+          Alert.alert('Error', 'Failed to load Deezer playlist tracks');
+        }
+        setLoading(false);
+        return;
+      }
+    }
+    
+    // Check if it's a Qobuz playlist (prefixed with qobuz_)
+    if (playlistId.startsWith('qobuz_')) {
+      const qobuzPid = playlistId.replace('qobuz_', '');
+      const qobuzPlaylist = qobuzPlaylists.find(p => p.id === qobuzPid);
+      if (qobuzPlaylist) {
+        setPlaylistName(qobuzPlaylist.name);
+        setPlaylistImage(qobuzPlaylist.imageUrl);
+        setPlaylistOwner(qobuzPlaylist.ownerName);
+        setPlaylistSource('qobuz');
+        
+        try {
+          const fetchedTracks = await qobuzService.fetchPlaylistTracks(qobuzPid);
+          setTracks(fetchedTracks);
+        } catch (error) {
+          Alert.alert('Error', 'Failed to load Qobuz playlist tracks');
+        }
+        setLoading(false);
+        return;
+      }
+    }
+    
     // Check if it's a Spotify playlist
     const spotifyPlaylist = spotifyPlaylists.find(p => p.id === playlistId);
     if (spotifyPlaylist) {
       setPlaylistName(spotifyPlaylist.name);
       setPlaylistImage(spotifyPlaylist.imageUrl);
       setPlaylistOwner(spotifyPlaylist.ownerName);
+      setPlaylistSource('spotify');
       
       try {
         const fetchedTracks = await spotifyService.fetchPlaylistTracks(playlistId);
@@ -69,6 +113,7 @@ export default function SpotifyPlaylistDetailScreen() {
         setPlaylistName(imported.name);
         setPlaylistImage(imported.imageUrl);
         setPlaylistOwner(imported.source);
+        setPlaylistSource('imported');
         setTracks(imported.tracks);
       }
     }
@@ -76,12 +121,21 @@ export default function SpotifyPlaylistDetailScreen() {
     setLoading(false);
   };
 
-  const handlePlayTrack = useCallback(async (track: SpotifyTrack, index: number) => {
+  const handlePlayTrack = useCallback(async (track: StreamingTrack, index: number) => {
     try {
+      // Convert track using the appropriate service
+      const convertTrack = (t: StreamingTrack) => {
+        switch (playlistSource) {
+          case 'deezer': return deezerService.deezerTrackToTrack(t);
+          case 'qobuz': return qobuzService.qobuzTrackToTrack(t);
+          default: return spotifyService.spotifyTrackToTrack(t);
+        }
+      };
+
       // Convert all tracks to queue items
       const queueItems: QueueItem[] = tracks.map((t, i) => ({
         id: `streaming_${t.id}_${Date.now()}_${i}`,
-        track: spotifyService.spotifyTrackToTrack(t),
+        track: convertTrack(t),
         addedAt: Date.now(),
         source: 'streaming' as const,
         sourceId: playlistId,
@@ -92,7 +146,7 @@ export default function SpotifyPlaylistDetailScreen() {
     } catch (error: any) {
       Alert.alert('Playback Error', error.message || 'Failed to play track');
     }
-  }, [tracks, playlistId, navigation]);
+  }, [tracks, playlistId, playlistSource, navigation]);
 
   const handlePlayAll = useCallback(async () => {
     if (tracks.length === 0) return;
@@ -112,7 +166,7 @@ export default function SpotifyPlaylistDetailScreen() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const renderTrack = useCallback(({ item, index }: { item: SpotifyTrack; index: number }) => (
+  const renderTrack = useCallback(({ item, index }: { item: StreamingTrack; index: number }) => (
     <TouchableOpacity
       style={[styles.trackItem, { backgroundColor: colors.surface }]}
       onPress={() => handlePlayTrack(item, index)}

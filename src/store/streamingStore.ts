@@ -1,7 +1,8 @@
 /**
  * TuneWell Streaming Store
  * 
- * Zustand store for managing Spotify connection and imported playlists.
+ * Zustand store for managing Spotify, Deezer, and Qobuz
+ * connections and imported playlists.
  */
 
 import { create } from 'zustand';
@@ -10,7 +11,11 @@ import { zustandStorage } from '../utils/storage';
 import type { 
   SpotifyUser, 
   SpotifyPlaylist, 
-  SpotifyTrack,
+  DeezerUser,
+  DeezerPlaylist,
+  QobuzUser,
+  QobuzPlaylist,
+  StreamingTrack,
   ImportedPlaylist,
 } from '../types';
 
@@ -22,8 +27,20 @@ interface StreamingStoreState {
   spotifyRefreshToken: string | null;
   spotifyTokenExpiry: number | null;
   
+  // Deezer connection
+  deezerConnected: boolean;
+  deezerUser: DeezerUser | null;
+  deezerAccessToken: string | null;
+  
+  // Qobuz connection
+  qobuzConnected: boolean;
+  qobuzUser: QobuzUser | null;
+  qobuzUserAuthToken: string | null;
+  
   // Playlists
   spotifyPlaylists: SpotifyPlaylist[];
+  deezerPlaylists: DeezerPlaylist[];
+  qobuzPlaylists: QobuzPlaylist[];
   importedPlaylists: ImportedPlaylist[];
   
   // UI state
@@ -37,8 +54,19 @@ interface StreamingStoreState {
   setSpotifyTokens: (accessToken: string, refreshToken: string | null, expiresIn: number) => void;
   clearSpotifyAuth: () => void;
   
+  // Actions - Deezer Auth
+  setDeezerToken: (accessToken: string) => void;
+  setDeezerUser: (user: DeezerUser | null) => void;
+  clearDeezerAuth: () => void;
+  
+  // Actions - Qobuz Auth
+  setQobuzAuth: (token: string, user: QobuzUser) => void;
+  clearQobuzAuth: () => void;
+  
   // Actions - Playlists
   setSpotifyPlaylists: (playlists: SpotifyPlaylist[]) => void;
+  setDeezerPlaylists: (playlists: DeezerPlaylist[]) => void;
+  setQobuzPlaylists: (playlists: QobuzPlaylist[]) => void;
   addImportedPlaylist: (playlist: ImportedPlaylist) => void;
   updateImportedPlaylist: (id: string, updates: Partial<ImportedPlaylist>) => void;
   removeImportedPlaylist: (id: string) => void;
@@ -59,7 +87,15 @@ const initialState = {
   spotifyAccessToken: null,
   spotifyRefreshToken: null,
   spotifyTokenExpiry: null,
+  deezerConnected: false,
+  deezerUser: null,
+  deezerAccessToken: null,
+  qobuzConnected: false,
+  qobuzUser: null,
+  qobuzUserAuthToken: null,
   spotifyPlaylists: [],
+  deezerPlaylists: [],
+  qobuzPlaylists: [],
   importedPlaylists: [],
   isLoading: false,
   error: null,
@@ -92,8 +128,41 @@ export const useStreamingStore = create<StreamingStoreState>()(
         spotifyPlaylists: [],
       }),
       
+      // Deezer Auth
+      setDeezerToken: (accessToken) => set({
+        deezerAccessToken: accessToken,
+        deezerConnected: true,
+      }),
+      
+      setDeezerUser: (user) => set({ deezerUser: user }),
+      
+      clearDeezerAuth: () => set({
+        deezerConnected: false,
+        deezerUser: null,
+        deezerAccessToken: null,
+        deezerPlaylists: [],
+      }),
+      
+      // Qobuz Auth
+      setQobuzAuth: (token, user) => set({
+        qobuzUserAuthToken: token,
+        qobuzUser: user,
+        qobuzConnected: true,
+      }),
+      
+      clearQobuzAuth: () => set({
+        qobuzConnected: false,
+        qobuzUser: null,
+        qobuzUserAuthToken: null,
+        qobuzPlaylists: [],
+      }),
+      
       // Playlists
       setSpotifyPlaylists: (playlists) => set({ spotifyPlaylists: playlists }),
+      
+      setDeezerPlaylists: (playlists) => set({ deezerPlaylists: playlists }),
+      
+      setQobuzPlaylists: (playlists) => set({ qobuzPlaylists: playlists }),
       
       addImportedPlaylist: (playlist) => set((state) => ({
         importedPlaylists: [...state.importedPlaylists, playlist],
@@ -128,10 +197,16 @@ export const useStreamingStore = create<StreamingStoreState>()(
       name: 'tunewell-streaming',
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
-        // Persist connection state and playlists, NOT tokens (security)
+        // Persist connection state and tokens, NOT UI state
         spotifyConnected: state.spotifyConnected,
         spotifyUser: state.spotifyUser,
         spotifyRefreshToken: state.spotifyRefreshToken,
+        deezerConnected: state.deezerConnected,
+        deezerUser: state.deezerUser,
+        deezerAccessToken: state.deezerAccessToken, // long-lived, no expiry
+        qobuzConnected: state.qobuzConnected,
+        qobuzUser: state.qobuzUser,
+        qobuzUserAuthToken: state.qobuzUserAuthToken,
         importedPlaylists: state.importedPlaylists,
         lastSyncAt: state.lastSyncAt,
       }),

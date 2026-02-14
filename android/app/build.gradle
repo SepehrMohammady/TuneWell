@@ -82,8 +82,8 @@ android {
         applicationId "com.tunewell"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 69
-        versionName "0.3.6"
+        versionCode 70
+        versionName "0.4.0"
     }
     signingConfigs {
         debug {

@@ -343,6 +343,29 @@ export type PlaylistsStackParamList = {
 // Streaming Types
 // ============================================================================
 
+// ============================================================================
+// Base Streaming Track (used by all streaming services)
+// ============================================================================
+
+export interface StreamingTrack {
+  id: string;
+  name: string;
+  artist: string;
+  album: string;
+  duration: number; // ms
+  imageUrl?: string;
+  uri: string;
+  previewUrl?: string;
+  isPlayable: boolean;
+}
+
+/** @deprecated Use StreamingTrack instead. Kept for backward compatibility. */
+export type SpotifyTrack = StreamingTrack;
+
+// ============================================================================
+// Spotify Types
+// ============================================================================
+
 export interface SpotifyUser {
   id: string;
   displayName: string;
@@ -361,25 +384,60 @@ export interface SpotifyPlaylist {
   uri: string;
 }
 
-export interface SpotifyTrack {
+// ============================================================================
+// Deezer Types
+// ============================================================================
+
+export interface DeezerUser {
+  id: string;
+  displayName: string;
+  email?: string;
+  imageUrl?: string;
+  country?: string;
+}
+
+export interface DeezerPlaylist {
   id: string;
   name: string;
-  artist: string;
-  album: string;
-  duration: number; // ms
+  description?: string;
   imageUrl?: string;
-  uri: string;
-  previewUrl?: string;
-  isPlayable: boolean;
+  creatorName: string;
+  trackCount: number;
+  link: string;
 }
+
+// ============================================================================
+// Qobuz Types
+// ============================================================================
+
+export interface QobuzUser {
+  id: string;
+  displayName: string;
+  email?: string;
+  imageUrl?: string;
+  subscription?: string;
+}
+
+export interface QobuzPlaylist {
+  id: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  ownerName: string;
+  trackCount: number;
+}
+
+// ============================================================================
+// Imported / Shared Playlist Types
+// ============================================================================
 
 export interface ImportedPlaylist {
   id: string;
   name: string;
-  source: 'spotify' | 'youtube_music' | 'apple_music' | 'url';
+  source: 'spotify' | 'deezer' | 'qobuz' | 'youtube_music' | 'apple_music' | 'url';
   sourceUrl?: string;
   imageUrl?: string;
-  tracks: SpotifyTrack[];
+  tracks: StreamingTrack[];
   trackCount: number;
   importedAt: number;
   lastSyncAt?: number;
@@ -393,8 +451,20 @@ export interface StreamingState {
   spotifyRefreshToken: string | null;
   spotifyTokenExpiry: number | null;
   
+  // Deezer connection
+  deezerConnected: boolean;
+  deezerUser: DeezerUser | null;
+  deezerAccessToken: string | null;
+  
+  // Qobuz connection
+  qobuzConnected: boolean;
+  qobuzUser: QobuzUser | null;
+  qobuzUserAuthToken: string | null;
+  
   // Playlists
   spotifyPlaylists: SpotifyPlaylist[];
+  deezerPlaylists: DeezerPlaylist[];
+  qobuzPlaylists: QobuzPlaylist[];
   importedPlaylists: ImportedPlaylist[];
   
   // UI state

@@ -181,6 +181,8 @@ export type RepeatMode = typeof REPEAT_MODES[keyof typeof REPEAT_MODES];
 export const STREAMING_SOURCES = {
   LOCAL: 'local',
   SPOTIFY: 'spotify',
+  DEEZER: 'deezer',
+  QOBUZ: 'qobuz',
 } as const;
 
 export type StreamingSource = typeof STREAMING_SOURCES[keyof typeof STREAMING_SOURCES];

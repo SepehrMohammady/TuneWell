@@ -4,12 +4,14 @@
  * Handles importing playlists from external streaming platforms:
  * - URL-based import (paste a playlist URL from any platform)
  * - Uses Odesli/song.link API for cross-platform track matching
- * - Resolves tracks to Spotify URIs for playback
+ * - Resolves tracks to Spotify/Deezer/Qobuz for playback
  */
 
 import { spotifyService } from './SpotifyService';
+import { deezerService } from './DeezerService';
+import { qobuzService } from './QobuzService';
 import { useStreamingStore } from '../../store/streamingStore';
-import type { SpotifyTrack, ImportedPlaylist } from '../../types';
+import type { StreamingTrack, ImportedPlaylist } from '../../types';
 
 // ============================================================================
 // Odesli / song.link API
@@ -42,13 +44,19 @@ interface OdesliResponse {
 // Platform Detection
 // ============================================================================
 
-type PlatformType = 'spotify' | 'youtube_music' | 'apple_music' | 'unknown';
+type PlatformType = 'spotify' | 'deezer' | 'qobuz' | 'youtube_music' | 'apple_music' | 'unknown';
 
 function detectPlatform(url: string): PlatformType {
   const lower = url.toLowerCase();
   
   if (lower.includes('open.spotify.com') || lower.includes('spotify:')) {
     return 'spotify';
+  }
+  if (lower.includes('deezer.com') || lower.includes('deezer.page.link')) {
+    return 'deezer';
+  }
+  if (lower.includes('qobuz.com') || lower.includes('play.qobuz.com') || lower.includes('open.qobuz.com')) {
+    return 'qobuz';
   }
   if (lower.includes('music.youtube.com') || lower.includes('youtube.com/playlist')) {
     return 'youtube_music';
@@ -68,6 +76,18 @@ function extractPlaylistId(url: string, platform: PlatformType): string | null {
       case 'spotify': {
         // https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M
         const match = urlObj.pathname.match(/\/playlist\/([a-zA-Z0-9]+)/);
+        return match ? match[1] : null;
+      }
+      case 'deezer': {
+        // https://www.deezer.com/playlist/1234567
+        // https://www.deezer.com/us/playlist/1234567
+        const match = urlObj.pathname.match(/\/playlist\/(\d+)/);
+        return match ? match[1] : null;
+      }
+      case 'qobuz': {
+        // https://play.qobuz.com/playlist/1234567
+        // https://open.qobuz.com/playlist/1234567
+        const match = urlObj.pathname.match(/\/playlist\/(\d+)/);
         return match ? match[1] : null;
       }
       case 'youtube_music': {
@@ -118,6 +138,10 @@ class PlaylistImportService {
       switch (platform) {
         case 'spotify':
           return await this.importSpotifyPlaylist(url);
+        case 'deezer':
+          return await this.importDeezerPlaylist(url);
+        case 'qobuz':
+          return await this.importQobuzPlaylist(url);
         case 'youtube_music':
         case 'apple_music':
           return await this.importViaOdesli(url, platform);
@@ -163,6 +187,84 @@ class PlaylistImportService {
       id: `import_spotify_${playlistId}_${Date.now()}`,
       name: playlistName,
       source: 'spotify',
+      sourceUrl: url,
+      imageUrl: playlistImage,
+      tracks,
+      trackCount: tracks.length,
+      importedAt: Date.now(),
+    };
+
+    useStreamingStore.getState().addImportedPlaylist(imported);
+    return imported;
+  }
+
+  /**
+   * Import a Deezer playlist directly via Deezer API
+   */
+  private async importDeezerPlaylist(url: string): Promise<ImportedPlaylist | null> {
+    const playlistId = extractPlaylistId(url, 'deezer');
+    
+    if (!playlistId) {
+      throw new Error('Invalid Deezer playlist URL');
+    }
+
+    let playlistName = 'Deezer Playlist';
+    let playlistImage: string | undefined;
+    try {
+      const meta = await deezerService.fetchPlaylistMetadata(playlistId);
+      if (meta) {
+        playlistName = meta.name;
+        playlistImage = meta.imageUrl;
+      }
+    } catch (e) {
+      console.warn('[PlaylistImport] Could not fetch Deezer playlist metadata:', e);
+    }
+
+    const tracks = await deezerService.fetchPlaylistTracks(playlistId);
+    
+    const imported: ImportedPlaylist = {
+      id: `import_deezer_${playlistId}_${Date.now()}`,
+      name: playlistName,
+      source: 'deezer',
+      sourceUrl: url,
+      imageUrl: playlistImage,
+      tracks,
+      trackCount: tracks.length,
+      importedAt: Date.now(),
+    };
+
+    useStreamingStore.getState().addImportedPlaylist(imported);
+    return imported;
+  }
+
+  /**
+   * Import a Qobuz playlist directly via Qobuz API
+   */
+  private async importQobuzPlaylist(url: string): Promise<ImportedPlaylist | null> {
+    const playlistId = extractPlaylistId(url, 'qobuz');
+    
+    if (!playlistId) {
+      throw new Error('Invalid Qobuz playlist URL');
+    }
+
+    let playlistName = 'Qobuz Playlist';
+    let playlistImage: string | undefined;
+    try {
+      const meta = await qobuzService.fetchPlaylistMetadata(playlistId);
+      if (meta) {
+        playlistName = meta.name;
+        playlistImage = meta.imageUrl;
+      }
+    } catch (e) {
+      console.warn('[PlaylistImport] Could not fetch Qobuz playlist metadata:', e);
+    }
+
+    const tracks = await qobuzService.fetchPlaylistTracks(playlistId);
+    
+    const imported: ImportedPlaylist = {
+      id: `import_qobuz_${playlistId}_${Date.now()}`,
+      name: playlistName,
+      source: 'qobuz',
       sourceUrl: url,
       imageUrl: playlistImage,
       tracks,
@@ -241,7 +343,7 @@ class PlaylistImportService {
   /**
    * Search and import by query text (artist + track name)
    */
-  async searchAndImport(query: string): Promise<SpotifyTrack[]> {
+  async searchAndImport(query: string): Promise<StreamingTrack[]> {
     try {
       useStreamingStore.getState().setLoading(true);
       const results = await spotifyService.searchTracks(query, 20);
@@ -261,6 +363,11 @@ class PlaylistImportService {
   isStreamingUrl(text: string): boolean {
     return (
       text.includes('open.spotify.com') ||
+      text.includes('deezer.com') ||
+      text.includes('deezer.page.link') ||
+      text.includes('qobuz.com') ||
+      text.includes('play.qobuz.com') ||
+      text.includes('open.qobuz.com') ||
       text.includes('music.youtube.com') ||
       text.includes('music.apple.com') ||
       text.includes('youtube.com/playlist') ||
@@ -276,6 +383,8 @@ class PlaylistImportService {
     const platform = detectPlatform(url);
     switch (platform) {
       case 'spotify': return 'Spotify';
+      case 'deezer': return 'Deezer';
+      case 'qobuz': return 'Qobuz';
       case 'youtube_music': return 'YouTube Music';
       case 'apple_music': return 'Apple Music';
       default: return 'URL';

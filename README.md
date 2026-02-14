@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.6-blue.svg" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.4.0-blue.svg" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Android-green.svg" alt="Platform" />
   <img src="https://img.shields.io/badge/React%20Native-0.82.1-61dafb.svg" alt="React Native" />
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License" />
@@ -35,6 +35,8 @@
 - **🎨 Minimal Design** - Clean, distraction-free interface focused on the listening experience
 - **⏭️ Gapless Playback** - Seamless transitions between tracks for uninterrupted listening
 - **🔄 Background Playback** - Keep the music playing with full lock screen and notification controls
+- **🎶 Streaming Integration** - Connect Spotify, Deezer, and Qobuz accounts to browse and play playlists
+- **📥 Cross-Platform Import** - Import playlists from any streaming service via URL (Spotify, Deezer, Qobuz, YouTube Music, Apple Music)
 
 ## 🎧 Supported Audio Formats
 
