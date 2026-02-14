@@ -105,7 +105,7 @@ export default function App() {
     initialize();
   }, []);
 
-  // Deep link handler for Spotify OAuth callback
+  // Deep link handler for Spotify and Deezer OAuth callbacks
   useEffect(() => {
     const handleDeepLink = async ({ url }: { url: string }) => {
       if (url && url.startsWith('tunewell://spotify-callback')) {
@@ -115,6 +115,14 @@ export default function App() {
           await spotifyService.handleAuthCallback(url);
         } catch (err) {
           console.error('[TuneWell] Spotify callback error:', err);
+        }
+      } else if (url && url.startsWith('tunewell://deezer-callback')) {
+        console.log('[TuneWell] Deezer callback received');
+        try {
+          const { deezerService } = await import('./services/streaming');
+          await deezerService.handleAuthCallback(url);
+        } catch (err) {
+          console.error('[TuneWell] Deezer callback error:', err);
         }
       }
     };

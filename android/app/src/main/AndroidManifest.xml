@@ -40,6 +40,13 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="tunewell" android:host="spotify-callback" />
         </intent-filter>
+        <!-- Deezer OAuth callback deep link -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="tunewell" android:host="deezer-callback" />
+        </intent-filter>
       </activity>
     </application>
 </manifest>
