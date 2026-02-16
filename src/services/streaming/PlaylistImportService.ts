@@ -159,23 +159,75 @@ class PlaylistImportService {
     }
   }
 
-  /**
-   * Resolve a shortened URL (e.g. spotify.link) to its final destination
-   */
-  private async resolveShortUrl(url: string): Promise<string> {
-    try {
-      // Follow redirects to get the real URL
-      const response = await fetch(url, {
-        method: 'GET',
-        redirect: 'follow',
-        headers: { 'User-Agent': 'TuneWell/1.0' },
-      });
-      // response.url contains the final URL after redirects
-      return response.url || url;
-    } catch (error) {
-      console.warn('[PlaylistImport] Could not resolve short URL:', error);
-      return url;
+  /**\n   * Resolve a shortened URL (e.g. spotify.link) to its final destination\n   * Uses manual redirect following since response.url is unreliable in React Native\n   */
+  private async resolveShortUrl(url: string, maxRedirects = 5): Promise<string> {
+    let currentUrl = url;
+    
+    for (let i = 0; i < maxRedirects; i++) {
+      try {
+        const response = await fetch(currentUrl, {
+          method: 'HEAD',
+          redirect: 'manual',
+          headers: { 'User-Agent': 'TuneWell/1.0' },
+        });
+
+        // Check for redirect (3xx status)
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('Location') || response.headers.get('location');
+          if (location) {
+            console.log(`[PlaylistImport] Redirect ${i + 1}: ${currentUrl} -> ${location}`);
+            // Handle relative URLs
+            if (location.startsWith('/')) {
+              const urlObj = new URL(currentUrl);
+              currentUrl = `${urlObj.protocol}//${urlObj.host}${location}`;
+            } else {
+              currentUrl = location;
+            }
+            // If we've reached open.spotify.com, we're done
+            if (currentUrl.includes('open.spotify.com')) {
+              return currentUrl;
+            }
+            continue;
+          }
+        }
+
+        // If we got a 200 OK or no Location header, try response.url
+        if (response.url && response.url !== currentUrl) {
+          return response.url;
+        }
+
+        // No more redirects
+        return currentUrl;
+      } catch (error) {
+        console.warn(`[PlaylistImport] Redirect ${i + 1} failed:`, error);
+        // Try GET as fallback
+        try {
+          const getResponse = await fetch(currentUrl, {
+            method: 'GET',
+            redirect: 'follow',
+          });
+          if (getResponse.url && getResponse.url !== currentUrl) {
+            return getResponse.url;
+          }
+          // Parse the HTML for a meta refresh or og:url
+          const html = await getResponse.text();
+          const ogUrlMatch = html.match(/property="og:url"\s+content="([^"]+)"/);
+          if (ogUrlMatch && ogUrlMatch[1].includes('open.spotify.com')) {
+            return ogUrlMatch[1];
+          }
+          // Look for canonical URL in the response
+          const canonicalMatch = html.match(/rel="canonical"\s+href="([^"]+)"/);
+          if (canonicalMatch && canonicalMatch[1].includes('open.spotify.com')) {
+            return canonicalMatch[1];
+          }
+        } catch {
+          // Give up, return what we have
+        }
+        return currentUrl;
+      }
     }
+
+    return currentUrl;
   }
 
   /**
@@ -184,13 +236,41 @@ class PlaylistImportService {
   private async importSpotifyPlaylist(url: string): Promise<ImportedPlaylist | null> {
     // Resolve shortened URLs (spotify.link, etc.)
     let resolvedUrl = url;
-    if (url.includes('spotify.link')) {
+    const isShortUrl = url.includes('spotify.link');
+    
+    if (isShortUrl) {
       console.log('[PlaylistImport] Resolving shortened Spotify URL...');
       resolvedUrl = await this.resolveShortUrl(url);
       console.log('[PlaylistImport] Resolved to:', resolvedUrl);
     }
 
-    const playlistId = extractPlaylistId(resolvedUrl, 'spotify');
+    let playlistId = extractPlaylistId(resolvedUrl, 'spotify');
+    
+    // If short URL didn't resolve properly, try extracting ID from the short URL path
+    if (!playlistId && isShortUrl) {
+      console.warn('[PlaylistImport] Could not extract playlist ID from resolved URL, trying original path');
+      // spotify.link URLs don't have /playlist/ in path - can't extract ID directly
+      // Try fetching via Odesli/song.link which can resolve short URLs
+      try {
+        const odesliResponse = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encodeURIComponent(url)}`);
+        if (odesliResponse.ok) {
+          const odesliData = await odesliResponse.json();
+          const spotifyLink = odesliData.linksByPlatform?.spotify?.url;
+          if (spotifyLink) {
+            console.log('[PlaylistImport] Odesli resolved to:', spotifyLink);
+            playlistId = extractPlaylistId(spotifyLink, 'spotify');
+          }
+        }
+      } catch (odesliErr) {
+        console.warn('[PlaylistImport] Odesli fallback failed:', odesliErr);
+      }
+    }
+
+    if (!playlistId) {
+      throw new Error('Could not extract playlist ID from this Spotify URL. Try copying the link from Spotify\'s Share menu → "Copy link".');
+    }
+
+    console.log('[PlaylistImport] Extracted playlist ID:', playlistId);
     
     if (!playlistId) {
       throw new Error('Invalid Spotify playlist URL');

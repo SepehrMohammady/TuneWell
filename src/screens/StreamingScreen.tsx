@@ -135,8 +135,8 @@ function SpotifyPlaylistCard({
       {playlist.imageUrl ? (
         <Image source={{ uri: playlist.imageUrl }} style={styles.playlistImage} />
       ) : (
-        <View style={[styles.playlistImagePlaceholder, { backgroundColor: colors.surfaceLight }]}>
-          <MaterialIcons name="playlist-play" size={28} color={colors.textSecondary} />
+        <View style={[styles.playlistImagePlaceholder, { backgroundColor: playlist.id === 'liked_songs' ? '#1DB954' : colors.surfaceLight }]}>
+          <MaterialIcons name={playlist.id === 'liked_songs' ? 'favorite' : 'playlist-play'} size={28} color={playlist.id === 'liked_songs' ? '#FFFFFF' : colors.textSecondary} />
         </View>
       )}
       <View style={styles.playlistInfo}>
