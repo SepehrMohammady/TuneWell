@@ -392,6 +392,10 @@ class SpotifyService {
           }
           throw new Error(`Spotify API error: ${retryResponse.status} ${errBody}`);
         }
+        // Handle 204 No Content (e.g., playback control endpoints return empty body)
+        if (retryResponse.status === 204) {
+          return undefined as T;
+        }
         return retryResponse.json();
       }
       if (response.status === 403) {
@@ -403,6 +407,11 @@ class SpotifyService {
     if (!response.ok) {
       const errBody = await response.text().catch(() => '');
       throw new Error(`Spotify API error: ${response.status} ${errBody}`);
+    }
+
+    // Handle 204 No Content (e.g., playback control endpoints return empty body)
+    if (response.status === 204) {
+      return undefined as T;
     }
 
     return response.json();
@@ -451,7 +460,8 @@ class SpotifyService {
       while (hasMore) {
         const data = await this.apiRequest<any>(`/me/playlists?limit=${limit}&offset=${currentOffset}`);
         
-        const items = data.items || [];
+        // Filter out null items (Spotify API can return nulls for deleted/unavailable playlists)
+        const items = (data.items || []).filter((item: any) => item != null);
         console.log(`[SpotifyService] Fetched ${items.length} playlists (offset=${currentOffset}, total=${data.total})`);
         
         const playlists: SpotifyPlaylist[] = items.map((item: any) => ({
