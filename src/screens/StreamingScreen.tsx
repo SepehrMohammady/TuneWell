@@ -24,7 +24,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { THEME, ROUTES } from '../config';
@@ -247,6 +247,20 @@ export default function StreamingScreen() {
       spotifyService.fetchPlaylists();
     }
   }, [spotifyConnected]);
+
+  // Auto-refresh playlists when screen regains focus (if stale > 2 minutes)
+  useFocusEffect(
+    useCallback(() => {
+      if (spotifyConnected) {
+        const lastSync = useStreamingStore.getState().lastSyncAt;
+        const staleMs = 2 * 60 * 1000; // 2 minutes
+        if (!lastSync || Date.now() - lastSync > staleMs) {
+          console.log('[StreamingScreen] Playlists stale, auto-refreshing...');
+          spotifyService.fetchPlaylists();
+        }
+      }
+    }, [spotifyConnected])
+  );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
