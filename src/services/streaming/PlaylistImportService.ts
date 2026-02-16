@@ -10,6 +10,7 @@
 import { spotifyService } from './SpotifyService';
 import { deezerService } from './DeezerService';
 import { qobuzService } from './QobuzService';
+import { isQobuzConfigured } from './QobuzService';
 import { useStreamingStore } from '../../store/streamingStore';
 import type { StreamingTrack, ImportedPlaylist } from '../../types';
 
@@ -241,6 +242,10 @@ class PlaylistImportService {
    * Import a Qobuz playlist directly via Qobuz API
    */
   private async importQobuzPlaylist(url: string): Promise<ImportedPlaylist | null> {
+    if (!isQobuzConfigured()) {
+      throw new Error('Qobuz integration is coming soon. API access is pending partner approval.');
+    }
+
     const playlistId = extractPlaylistId(url, 'qobuz');
     
     if (!playlistId) {
