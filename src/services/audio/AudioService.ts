@@ -650,20 +650,52 @@ class AudioService {
           usePlayerStore.getState().setCurrentTrack(startTrack);
           usePlayerStore.getState().setState('paused');
         } else {
-          const success = await spotifyService.play(startTrack.spotifyUri);
-          if (success) {
+          // Try Spotify Connect first (requires Spotify app with active device)
+          let connectSuccess = false;
+          try {
+            connectSuccess = await spotifyService.play(startTrack.spotifyUri);
+          } catch {
+            connectSuccess = false;
+          }
+
+          if (connectSuccess) {
             usePlayerStore.getState().setCurrentTrack(startTrack);
             usePlayerStore.getState().setState('playing');
             usePlaylistStore.getState().recordPlay(startTrack.id);
-            console.log('[AudioService] Spotify playback started');
+            console.log('[AudioService] Spotify playback started via Connect');
+          } else if (startTrack.previewUrl) {
+            // Fallback: play 30-second preview via TrackPlayer
+            console.log('[AudioService] Spotify Connect unavailable, playing preview URL');
+            const previewTPTrack: TPTrack = {
+              id: startTrack.id,
+              url: startTrack.previewUrl,
+              title: `${startTrack.title} (Preview)`,
+              artist: startTrack.artist || 'Unknown Artist',
+              album: startTrack.album || 'Unknown Album',
+              artwork: startTrack.artworkUri,
+              duration: 30,
+            };
+            await TrackPlayer.add(previewTPTrack);
+            await TrackPlayer.play();
+            usePlayerStore.getState().setCurrentTrack(startTrack);
+            usePlayerStore.getState().setState('playing');
+            usePlaylistStore.getState().recordPlay(startTrack.id);
+            console.log('[AudioService] Playing preview via TrackPlayer');
           } else {
-            throw new Error('Spotify playback failed - ensure Spotify app is open');
+            throw new Error(
+              'Spotify requires an active Spotify player for full playback.\n\n' +
+              'To play tracks:\n' +
+              '1. Install the Spotify app on your device\n' +
+              '2. Open Spotify and start playing any song\n' +
+              '3. Come back to TuneWell and try again\n\n' +
+              'TuneWell will then control Spotify playback remotely.'
+            );
           }
         }
         return;
       } catch (error: any) {
         console.error('[AudioService] Spotify playback error:', error);
-        throw new Error(`Spotify playback failed: ${error.message}`);
+        throw new Error(error.message || 'Spotify playback failed');
       }
     }
     
