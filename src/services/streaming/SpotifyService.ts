@@ -558,6 +558,8 @@ class SpotifyService {
    * Fetch user's Liked Songs from Spotify
    */
   private async fetchLikedSongs(limit = 50, offset = 0): Promise<SpotifyTrack[]> {
+    // Spotify /me/tracks endpoint maximum limit is 50
+    const safeLimit = Math.min(limit, 50);
     try {
       const allTracks: SpotifyTrack[] = [];
       let currentOffset = offset;
@@ -565,7 +567,7 @@ class SpotifyService {
 
       while (hasMore) {
         const data = await this.apiRequest<any>(
-          `/me/tracks?limit=${limit}&offset=${currentOffset}`
+          `/me/tracks?limit=${safeLimit}&offset=${currentOffset}`
         );
 
         const items = data.items || [];
@@ -584,8 +586,8 @@ class SpotifyService {
           }));
 
         allTracks.push(...tracks);
-        hasMore = data.next !== null && items.length === limit;
-        currentOffset += limit;
+        hasMore = data.next !== null && items.length === safeLimit;
+        currentOffset += safeLimit;
       }
 
       return allTracks;
