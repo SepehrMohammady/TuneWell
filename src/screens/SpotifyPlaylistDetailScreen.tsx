@@ -42,6 +42,7 @@ export default function SpotifyPlaylistDetailScreen() {
   const [playlistImage, setPlaylistImage] = useState<string | undefined>();
   const [playlistOwner, setPlaylistOwner] = useState('');
   const [playlistSource, setPlaylistSource] = useState<'spotify' | 'deezer' | 'qobuz' | 'imported'>('spotify');
+  const [expectedTrackCount, setExpectedTrackCount] = useState<number>(0);
 
   useEffect(() => {
     loadPlaylistTracks();
@@ -57,10 +58,35 @@ export default function SpotifyPlaylistDetailScreen() {
       setPlaylistImage(spotifyPlaylist.imageUrl);
       setPlaylistOwner(spotifyPlaylist.ownerName);
       setPlaylistSource('spotify');
+      setExpectedTrackCount(spotifyPlaylist.trackCount);
       
       try {
         const fetchedTracks = await spotifyService.fetchPlaylistTracks(playlistId);
         setTracks(fetchedTracks);
+        
+        // Detect empty tracks when playlist should have tracks
+        if (fetchedTracks.length === 0) {
+          // Re-fetch metadata to get accurate track count
+          try {
+            const meta = await spotifyService.fetchPlaylistMetadata(playlistId);
+            if (meta && meta.trackCount > 0) {
+              Alert.alert(
+                'Tracks Unavailable',
+                `This playlist has ${meta.trackCount} tracks but they could not be loaded.\n\n` +
+                'This usually happens when your Spotify app is in Development Mode.\n\n' +
+                'To fix this:\n' +
+                '1. Disconnect and reconnect your Spotify account\n' +
+                '2. Make sure you are added as a user in the Spotify Developer Dashboard',
+              );
+            }
+          } catch (metaErr) {
+            // Metadata also failed - show generic message
+            Alert.alert(
+              'Tracks Unavailable',
+              'Could not load tracks for this playlist. Try disconnecting and reconnecting your Spotify account.',
+            );
+          }
+        }
       } catch (error: any) {
         console.error('[PlaylistDetail] Failed to load tracks:', error);
         const msg = error?.message || 'Failed to load playlist tracks';
@@ -69,8 +95,8 @@ export default function SpotifyPlaylistDetailScreen() {
             'Spotify Access Restricted',
             'This playlist cannot be loaded. Your Spotify app may be in Development Mode which restricts access to playlists owned by other users.\n\n' +
             'To fix this:\n' +
-            '1. Try disconnecting and reconnecting your Spotify account\n' +
-            '2. Or request Extended Quota Mode in the Spotify Developer Dashboard',
+            '1. Disconnect and reconnect your Spotify account\n' +
+            '2. Make sure you are added as a user in the Spotify Developer Dashboard',
           );
         } else {
           Alert.alert('Error', msg);
@@ -85,6 +111,7 @@ export default function SpotifyPlaylistDetailScreen() {
         setPlaylistOwner(imported.source);
         setPlaylistSource(imported.source === 'deezer' ? 'deezer' : imported.source === 'qobuz' ? 'qobuz' : 'imported');
         setTracks(imported.tracks);
+        setExpectedTrackCount(imported.trackCount);
       }
     }
     
@@ -195,7 +222,7 @@ export default function SpotifyPlaylistDetailScreen() {
             {playlistName}
           </Text>
           <Text style={[styles.playlistSubtitle, { color: colors.textSecondary }]}>
-            {tracks.length} tracks · {playlistOwner}
+            {tracks.length > 0 ? tracks.length : expectedTrackCount} tracks · {playlistOwner}
           </Text>
           <View style={styles.playlistActions}>
             <TouchableOpacity

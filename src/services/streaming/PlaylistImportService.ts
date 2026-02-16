@@ -50,7 +50,7 @@ type PlatformType = 'spotify' | 'deezer' | 'qobuz' | 'youtube_music' | 'apple_mu
 function detectPlatform(url: string): PlatformType {
   const lower = url.toLowerCase();
   
-  if (lower.includes('open.spotify.com') || lower.includes('spotify:')) {
+  if (lower.includes('open.spotify.com') || lower.includes('spotify:') || lower.includes('spotify.link')) {
     return 'spotify';
   }
   if (lower.includes('deezer.com') || lower.includes('deezer.page.link')) {
@@ -160,10 +160,37 @@ class PlaylistImportService {
   }
 
   /**
+   * Resolve a shortened URL (e.g. spotify.link) to its final destination
+   */
+  private async resolveShortUrl(url: string): Promise<string> {
+    try {
+      // Follow redirects to get the real URL
+      const response = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: { 'User-Agent': 'TuneWell/1.0' },
+      });
+      // response.url contains the final URL after redirects
+      return response.url || url;
+    } catch (error) {
+      console.warn('[PlaylistImport] Could not resolve short URL:', error);
+      return url;
+    }
+  }
+
+  /**
    * Import a Spotify playlist directly via Spotify API
    */
   private async importSpotifyPlaylist(url: string): Promise<ImportedPlaylist | null> {
-    const playlistId = extractPlaylistId(url, 'spotify');
+    // Resolve shortened URLs (spotify.link, etc.)
+    let resolvedUrl = url;
+    if (url.includes('spotify.link')) {
+      console.log('[PlaylistImport] Resolving shortened Spotify URL...');
+      resolvedUrl = await this.resolveShortUrl(url);
+      console.log('[PlaylistImport] Resolved to:', resolvedUrl);
+    }
+
+    const playlistId = extractPlaylistId(resolvedUrl, 'spotify');
     
     if (!playlistId) {
       throw new Error('Invalid Spotify playlist URL');
@@ -368,6 +395,7 @@ class PlaylistImportService {
   isStreamingUrl(text: string): boolean {
     return (
       text.includes('open.spotify.com') ||
+      text.includes('spotify.link') ||
       text.includes('deezer.com') ||
       text.includes('deezer.page.link') ||
       text.includes('qobuz.com') ||
