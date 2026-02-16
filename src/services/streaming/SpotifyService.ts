@@ -445,10 +445,28 @@ class SpotifyService {
   // Playlists
   // --------------------------------------------------------------------------
 
+  private fetchPlaylistsInFlight: Promise<SpotifyPlaylist[]> | null = null;
+
   /**
    * Fetch user's Spotify playlists (all pages)
+   * Deduplicates concurrent calls to prevent double-fetching.
    */
   async fetchPlaylists(limit = 50, offset = 0): Promise<SpotifyPlaylist[]> {
+    // Prevent concurrent fetches (e.g., mount + focus firing together)
+    if (this.fetchPlaylistsInFlight) {
+      console.log('[SpotifyService] fetchPlaylists already in-flight, reusing...');
+      return this.fetchPlaylistsInFlight;
+    }
+
+    this.fetchPlaylistsInFlight = this._fetchPlaylistsImpl(limit, offset);
+    try {
+      return await this.fetchPlaylistsInFlight;
+    } finally {
+      this.fetchPlaylistsInFlight = null;
+    }
+  }
+
+  private async _fetchPlaylistsImpl(limit: number, offset: number): Promise<SpotifyPlaylist[]> {
     try {
       useStreamingStore.getState().setLoading(true);
       
