@@ -390,14 +390,21 @@ export default function StreamingScreen() {
                   </Text>
                 </View>
               ) : (
-                spotifyPlaylists.map((playlist) => (
-                  <SpotifyPlaylistCard
-                    key={playlist.id}
-                    playlist={playlist}
-                    colors={colors}
-                    onPress={() => handleSpotifyPlaylistPress(playlist)}
-                  />
-                ))
+                <>
+                  {spotifyPlaylists.map((playlist) => (
+                    <SpotifyPlaylistCard
+                      key={playlist.id}
+                      playlist={playlist}
+                      colors={colors}
+                      onPress={() => handleSpotifyPlaylistPress(playlist)}
+                    />
+                  ))}
+                  {spotifyPlaylists.length <= 3 && (
+                    <Text style={[styles.playlistHint, { color: colors.textMuted }]}>
+                      Only saved/followed playlists appear here. To add more, open Spotify → long-press a playlist → "Add to Library".
+                    </Text>
+                  )}
+                </>
               )}
             </View>
           </>
@@ -631,6 +638,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: THEME.spacing.sm,
     textAlign: 'center',
+  },
+  playlistHint: {
+    fontSize: 12,
+    marginTop: THEME.spacing.sm,
+    paddingHorizontal: THEME.spacing.sm,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 
   // Import Section

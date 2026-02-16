@@ -161,22 +161,18 @@ class PlaylistImportService {
 
   /**
    * Resolve a shortened URL (e.g. spotify.link) to its final destination.
-   * Uses Spotify oEmbed API (most reliable) + GET with HTML parsing as fallback.
-   * React Native's fetch on Android does not support redirect:'manual', so we
-   * avoid that approach entirely.
+   * Uses multiple approaches since React Native's fetch behaves differently from browsers.
    */
   private async resolveShortUrl(url: string): Promise<string> {
-    // Approach 1: Spotify oEmbed API — accepts any Spotify URL including short links
+    // Approach 1: Spotify oEmbed API — accepts Spotify URLs and may resolve short links
     try {
       const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
-      console.log('[PlaylistImport] Trying oEmbed resolve:', oembedUrl);
+      console.log('[PlaylistImport] Trying oEmbed resolve...');
       const oembedRes = await fetch(oembedUrl);
       if (oembedRes.ok) {
         const oembedData = await oembedRes.json();
-        // oEmbed returns iframe_url like "https://open.spotify.com/embed/playlist/xxxxx"
         const iframeUrl: string | undefined = oembedData.iframe_url;
         if (iframeUrl && iframeUrl.includes('open.spotify.com')) {
-          // Convert embed URL to standard URL: /embed/playlist/ID -> /playlist/ID
           const resolved = iframeUrl.replace('/embed/', '/');
           console.log('[PlaylistImport] oEmbed resolved to:', resolved);
           return resolved;
@@ -186,52 +182,117 @@ class PlaylistImportService {
       console.warn('[PlaylistImport] oEmbed resolve failed:', oembedErr);
     }
 
-    // Approach 2: GET request with automatic redirect following + HTML parsing
+    // Approach 2: GET with default User-Agent (React Native / OkHttp follows redirects)
     try {
-      console.log('[PlaylistImport] Trying GET resolve for:', url);
+      console.log('[PlaylistImport] Trying GET resolve (default UA)...');
       const response = await fetch(url, {
         method: 'GET',
         redirect: 'follow',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko)',
-        },
       });
 
-      // Check response.url (works in some React Native versions)
       if (response.url && response.url.includes('open.spotify.com')) {
         console.log('[PlaylistImport] response.url resolved to:', response.url);
         return response.url;
       }
 
-      // Parse HTML for the actual Spotify URL
       const html = await response.text();
+      const urlFromHtml = this.extractSpotifyUrlFromHtml(html);
+      if (urlFromHtml) {
+        console.log('[PlaylistImport] HTML parse resolved to:', urlFromHtml);
+        return urlFromHtml;
+      }
+    } catch (err1) {
+      console.warn('[PlaylistImport] GET resolve (default) failed:', err1);
+    }
 
-      // Look for og:url meta tag
-      const ogUrlMatch = html.match(/property=["']og:url["']\s+content=["']([^"']+)["']/);
-      if (ogUrlMatch?.[1]?.includes('open.spotify.com')) {
-        console.log('[PlaylistImport] og:url resolved to:', ogUrlMatch[1]);
-        return ogUrlMatch[1];
+    // Approach 3: GET with browser User-Agent (some CDNs behave differently)
+    try {
+      console.log('[PlaylistImport] Trying GET resolve (browser UA)...');
+      const response = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+      });
+
+      if (response.url && response.url.includes('open.spotify.com')) {
+        console.log('[PlaylistImport] response.url (browser) resolved to:', response.url);
+        return response.url;
       }
 
-      // Look for canonical link
-      const canonicalMatch = html.match(/rel=["']canonical["']\s+href=["']([^"']+)["']/);
-      if (canonicalMatch?.[1]?.includes('open.spotify.com')) {
-        console.log('[PlaylistImport] canonical resolved to:', canonicalMatch[1]);
-        return canonicalMatch[1];
+      const html = await response.text();
+      const urlFromHtml = this.extractSpotifyUrlFromHtml(html);
+      if (urlFromHtml) {
+        console.log('[PlaylistImport] HTML parse (browser) resolved to:', urlFromHtml);
+        return urlFromHtml;
+      }
+    } catch (err2) {
+      console.warn('[PlaylistImport] GET resolve (browser) failed:', err2);
+    }
+
+    // Approach 4: GET with curl-like User-Agent (forces simple redirect)
+    try {
+      console.log('[PlaylistImport] Trying GET resolve (curl UA)...');
+      const response = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: { 'User-Agent': 'curl/7.88.0' },
+      });
+
+      if (response.url && response.url.includes('open.spotify.com')) {
+        console.log('[PlaylistImport] response.url (curl) resolved to:', response.url);
+        return response.url;
       }
 
-      // Look for any open.spotify.com URL in the HTML
-      const spotifyUrlMatch = html.match(/https:\/\/open\.spotify\.com\/[^\s"'<>]+/);
-      if (spotifyUrlMatch?.[0]) {
-        console.log('[PlaylistImport] HTML regex resolved to:', spotifyUrlMatch[0]);
-        return spotifyUrlMatch[0];
+      const html = await response.text();
+      const urlFromHtml = this.extractSpotifyUrlFromHtml(html);
+      if (urlFromHtml) {
+        console.log('[PlaylistImport] HTML parse (curl) resolved to:', urlFromHtml);
+        return urlFromHtml;
       }
-    } catch (getErr) {
-      console.warn('[PlaylistImport] GET resolve failed:', getErr);
+    } catch (err3) {
+      console.warn('[PlaylistImport] GET resolve (curl) failed:', err3);
     }
 
     console.warn('[PlaylistImport] Could not resolve short URL, returning original:', url);
     return url;
+  }
+
+  /**
+   * Extract an open.spotify.com URL from HTML content
+   */
+  private extractSpotifyUrlFromHtml(html: string): string | null {
+    // og:url meta tag (either attribute order)
+    const ogUrl1 = html.match(/property=["']og:url["'][^>]*content=["']([^"']+)["']/);
+    if (ogUrl1?.[1]?.includes('open.spotify.com')) return ogUrl1[1];
+    const ogUrl2 = html.match(/content=["']([^"']+open\.spotify\.com[^"']*)["'][^>]*property=["']og:url["']/);
+    if (ogUrl2?.[1]) return ogUrl2[1];
+
+    // canonical link (either attribute order)
+    const canon1 = html.match(/rel=["']canonical["'][^>]*href=["']([^"']+)["']/);
+    if (canon1?.[1]?.includes('open.spotify.com')) return canon1[1];
+    const canon2 = html.match(/href=["']([^"']+open\.spotify\.com[^"']*)["'][^>]*rel=["']canonical["']/);
+    if (canon2?.[1]) return canon2[1];
+
+    // meta http-equiv="refresh" redirect
+    const refresh = html.match(/http-equiv=["']refresh["'][^>]*url=([^"'\s>]+)/i);
+    if (refresh?.[1]?.includes('open.spotify.com')) return refresh[1];
+
+    // JavaScript redirect: window.location = "..."
+    const jsRedirect = html.match(/window\.location(?:\.href)?\s*=\s*["']([^"']+open\.spotify\.com[^"']*)["']/);
+    if (jsRedirect?.[1]) return jsRedirect[1];
+
+    // Any open.spotify.com URL in the HTML (playlist preferred)
+    const playlistUrl = html.match(/https:\/\/open\.spotify\.com\/playlist\/[a-zA-Z0-9]+/);
+    if (playlistUrl?.[0]) return playlistUrl[0];
+
+    // Any open.spotify.com URL
+    const anyUrl = html.match(/https:\/\/open\.spotify\.com\/[^\s"'<>]+/);
+    if (anyUrl?.[0]) return anyUrl[0];
+
+    return null;
   }
 
   /**
@@ -299,7 +360,7 @@ class PlaylistImportService {
 
     console.log('[PlaylistImport] Extracted playlist ID:', playlistId);
 
-    // Fetch playlist metadata from API (works for any public/accessible playlist)
+    // Fetch playlist metadata from API
     let playlistName = 'Spotify Playlist';
     let playlistImage: string | undefined;
     try {
@@ -308,11 +369,36 @@ class PlaylistImportService {
         playlistName = meta.name;
         playlistImage = meta.imageUrl;
       }
-    } catch (e) {
-      console.warn('[PlaylistImport] Could not fetch playlist metadata:', e);
+    } catch (metaErr: any) {
+      const metaMsg = metaErr?.message || '';
+      // If metadata fetch returns 404, the playlist doesn't exist or isn't accessible
+      if (metaMsg.includes('404') || metaMsg.includes('not found') || metaMsg.includes('Resource not found')) {
+        throw new Error(
+          'This playlist could not be found on Spotify.\n\n' +
+          'Possible reasons:\n' +
+          '• The link may point to a track or album, not a playlist\n' +
+          '• The playlist may be private or deleted\n' +
+          '• The shared link may have expired\n\n' +
+          'To import a playlist: open it in Spotify → tap the ⋮ menu → Share → "Copy link"'
+        );
+      }
+      console.warn('[PlaylistImport] Could not fetch playlist metadata:', metaErr);
     }
 
-    const tracks = await spotifyService.fetchPlaylistTracks(playlistId);
+    let tracks: StreamingTrack[] = [];
+    try {
+      tracks = await spotifyService.fetchPlaylistTracks(playlistId);
+    } catch (tracksErr: any) {
+      const tracksMsg = tracksErr?.message || '';
+      if (tracksMsg.includes('404') || tracksMsg.includes('not found') || tracksMsg.includes('Resource not found')) {
+        throw new Error(
+          'This playlist could not be found on Spotify.\n\n' +
+          'Make sure you\'re sharing a playlist link (not a track or album).\n' +
+          'Open the playlist in Spotify → tap ⋮ → Share → "Copy link"'
+        );
+      }
+      throw tracksErr;
+    }
     
     const imported: ImportedPlaylist = {
       id: `import_spotify_${playlistId}_${Date.now()}`,

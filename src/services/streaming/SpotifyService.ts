@@ -697,15 +697,8 @@ class SpotifyService {
 
       return true;
     } catch (error) {
-      console.error('[SpotifyService] Play failed:', error);
-      
-      // Try opening in Spotify app as fallback
-      try {
-        await Linking.openURL(uri);
-        return true;
-      } catch {
-        return false;
-      }
+      console.error('[SpotifyService] Spotify Connect play failed:', error);
+      return false;
     }
   }
 
