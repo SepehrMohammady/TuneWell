@@ -63,7 +63,18 @@ export default function SpotifyPlaylistDetailScreen() {
         setTracks(fetchedTracks);
       } catch (error: any) {
         console.error('[PlaylistDetail] Failed to load tracks:', error);
-        Alert.alert('Error', error?.message || 'Failed to load playlist tracks');
+        const msg = error?.message || 'Failed to load playlist tracks';
+        if (msg.includes('Access denied') || msg.includes('FORBIDDEN')) {
+          Alert.alert(
+            'Spotify Access Restricted',
+            'This playlist cannot be loaded. Your Spotify app may be in Development Mode which restricts access to playlists owned by other users.\n\n' +
+            'To fix this:\n' +
+            '1. Try disconnecting and reconnecting your Spotify account\n' +
+            '2. Or request Extended Quota Mode in the Spotify Developer Dashboard',
+          );
+        } else {
+          Alert.alert('Error', msg);
+        }
       }
     } else {
       // Check imported playlists
