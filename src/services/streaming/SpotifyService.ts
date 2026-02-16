@@ -417,29 +417,64 @@ class SpotifyService {
   // --------------------------------------------------------------------------
 
   /**
-   * Fetch user's Spotify playlists
+   * Fetch user's Spotify playlists (all pages)
    */
   async fetchPlaylists(limit = 50, offset = 0): Promise<SpotifyPlaylist[]> {
     try {
       useStreamingStore.getState().setLoading(true);
       
-      const data = await this.apiRequest<any>(`/me/playlists?limit=${limit}&offset=${offset}`);
-      
-      const playlists: SpotifyPlaylist[] = data.items.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        description: item.description || '',
-        imageUrl: item.images?.[0]?.url,
-        ownerName: item.owner?.display_name || 'Unknown',
-        trackCount: item.tracks?.total || 0,
-        uri: item.uri,
-      }));
+      const allPlaylists: SpotifyPlaylist[] = [];
+      let currentOffset = offset;
+      let hasMore = true;
 
-      useStreamingStore.getState().setSpotifyPlaylists(playlists);
+      // Fetch all pages of playlists
+      while (hasMore) {
+        const data = await this.apiRequest<any>(`/me/playlists?limit=${limit}&offset=${currentOffset}`);
+        
+        const items = data.items || [];
+        console.log(`[SpotifyService] Fetched ${items.length} playlists (offset=${currentOffset}, total=${data.total})`);
+        
+        const playlists: SpotifyPlaylist[] = items.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description || '',
+          imageUrl: item.images?.[0]?.url,
+          ownerName: item.owner?.display_name || 'Unknown',
+          trackCount: item.tracks?.total || 0,
+          uri: item.uri,
+        }));
+
+        allPlaylists.push(...playlists);
+        hasMore = data.next !== null && items.length === limit;
+        currentOffset += limit;
+      }
+
+      // Also fetch Liked Songs count and add as a virtual playlist
+      try {
+        const likedData = await this.apiRequest<any>('/me/tracks?limit=1');
+        const likedCount = likedData.total || 0;
+        if (likedCount > 0) {
+          const userProfile = useStreamingStore.getState().spotifyUser;
+          allPlaylists.unshift({
+            id: 'liked_songs',
+            name: 'Liked Songs',
+            description: 'Your liked songs on Spotify',
+            imageUrl: undefined,
+            ownerName: userProfile?.displayName || 'You',
+            trackCount: likedCount,
+            uri: 'spotify:collection:tracks',
+          });
+        }
+      } catch (likedErr) {
+        console.warn('[SpotifyService] Could not fetch Liked Songs count:', likedErr);
+      }
+
+      console.log(`[SpotifyService] Total playlists loaded: ${allPlaylists.length}`);
+      useStreamingStore.getState().setSpotifyPlaylists(allPlaylists);
       useStreamingStore.getState().setLastSyncAt(Date.now());
       useStreamingStore.getState().setError(null);
       
-      return playlists;
+      return allPlaylists;
     } catch (error: any) {
       console.error('[SpotifyService] Failed to fetch playlists:', error);
       useStreamingStore.getState().setError(error.message);
@@ -453,6 +488,11 @@ class SpotifyService {
    * Fetch tracks from a Spotify playlist
    */
   async fetchPlaylistTracks(playlistId: string, limit = 100, offset = 0): Promise<SpotifyTrack[]> {
+    // Special handling for Liked Songs
+    if (playlistId === 'liked_songs') {
+      return this.fetchLikedSongs(limit, offset);
+    }
+
     const parseTrackItem = (item: any): SpotifyTrack | null => {
       if (!item.track || !item.track.id) return null;
       return {
@@ -515,9 +555,70 @@ class SpotifyService {
   }
 
   /**
+   * Fetch user's Liked Songs from Spotify
+   */
+  private async fetchLikedSongs(limit = 50, offset = 0): Promise<SpotifyTrack[]> {
+    try {
+      const allTracks: SpotifyTrack[] = [];
+      let currentOffset = offset;
+      let hasMore = true;
+
+      while (hasMore) {
+        const data = await this.apiRequest<any>(
+          `/me/tracks?limit=${limit}&offset=${currentOffset}`
+        );
+
+        const items = data.items || [];
+        const tracks: SpotifyTrack[] = items
+          .filter((item: any) => item.track && item.track.id)
+          .map((item: any) => ({
+            id: item.track.id,
+            name: item.track.name,
+            artist: item.track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+            album: item.track.album?.name || 'Unknown',
+            duration: item.track.duration_ms,
+            imageUrl: item.track.album?.images?.[0]?.url,
+            uri: item.track.uri,
+            previewUrl: item.track.preview_url,
+            isPlayable: item.track.is_playable !== false,
+          }));
+
+        allTracks.push(...tracks);
+        hasMore = data.next !== null && items.length === limit;
+        currentOffset += limit;
+      }
+
+      return allTracks;
+    } catch (error) {
+      console.error('[SpotifyService] Failed to fetch liked songs:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Fetch metadata for a single playlist (name, image, owner, track count)
    */
   async fetchPlaylistMetadata(playlistId: string): Promise<SpotifyPlaylist | null> {
+    // Special handling for Liked Songs
+    if (playlistId === 'liked_songs') {
+      try {
+        const data = await this.apiRequest<any>('/me/tracks?limit=1');
+        const userProfile = useStreamingStore.getState().spotifyUser;
+        return {
+          id: 'liked_songs',
+          name: 'Liked Songs',
+          description: 'Your liked songs on Spotify',
+          imageUrl: undefined,
+          ownerName: userProfile?.displayName || 'You',
+          trackCount: data.total || 0,
+          uri: 'spotify:collection:tracks',
+        };
+      } catch (error) {
+        console.error('[SpotifyService] Failed to fetch liked songs metadata:', error);
+        return null;
+      }
+    }
+
     try {
       const data = await this.apiRequest<any>(`/playlists/${playlistId}`);
       return {
