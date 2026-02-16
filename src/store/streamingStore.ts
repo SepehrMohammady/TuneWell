@@ -12,6 +12,8 @@ import type {
   SpotifyUser, 
   SpotifyPlaylist, 
   ImportedPlaylist,
+  QobuzUser,
+  QobuzPlaylist,
 } from '../types';
 
 interface StreamingStoreState {
@@ -25,6 +27,11 @@ interface StreamingStoreState {
   // Playlists
   spotifyPlaylists: SpotifyPlaylist[];
   importedPlaylists: ImportedPlaylist[];
+  
+  // Qobuz (future — currently "Coming Soon")
+  qobuzUserAuthToken: string | null;
+  qobuzUser: QobuzUser | null;
+  qobuzPlaylists: QobuzPlaylist[];
   
   // UI state
   isLoading: boolean;
@@ -42,6 +49,11 @@ interface StreamingStoreState {
   addImportedPlaylist: (playlist: ImportedPlaylist) => void;
   updateImportedPlaylist: (id: string, updates: Partial<ImportedPlaylist>) => void;
   removeImportedPlaylist: (id: string) => void;
+  
+  // Actions - Qobuz
+  setQobuzAuth: (token: string, user: QobuzUser) => void;
+  clearQobuzAuth: () => void;
+  setQobuzPlaylists: (playlists: QobuzPlaylist[]) => void;
   
   // Actions - UI
   setLoading: (loading: boolean) => void;
@@ -61,6 +73,9 @@ const initialState = {
   spotifyTokenExpiry: null,
   spotifyPlaylists: [],
   importedPlaylists: [],
+  qobuzUserAuthToken: null,
+  qobuzUser: null,
+  qobuzPlaylists: [],
   isLoading: false,
   error: null,
   lastSyncAt: null,
@@ -108,6 +123,20 @@ export const useStreamingStore = create<StreamingStoreState>()(
       removeImportedPlaylist: (id) => set((state) => ({
         importedPlaylists: state.importedPlaylists.filter((p) => p.id !== id),
       })),
+      
+      // Qobuz
+      setQobuzAuth: (token, user) => set({
+        qobuzUserAuthToken: token,
+        qobuzUser: user,
+      }),
+      
+      clearQobuzAuth: () => set({
+        qobuzUserAuthToken: null,
+        qobuzUser: null,
+        qobuzPlaylists: [],
+      }),
+      
+      setQobuzPlaylists: (playlists) => set({ qobuzPlaylists: playlists }),
       
       // UI
       setLoading: (loading) => set({ isLoading: loading }),

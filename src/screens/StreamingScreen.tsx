@@ -9,7 +9,7 @@
  * - Import from URL action
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -241,19 +241,13 @@ export default function StreamingScreen() {
   const [importUrl, setImportUrl] = useState('');
   const [showImportInput, setShowImportInput] = useState(false);
 
-  // Fetch playlists on mount if connected
-  useEffect(() => {
-    if (spotifyConnected) {
-      spotifyService.fetchPlaylists();
-    }
-  }, [spotifyConnected]);
-
-  // Auto-refresh playlists when screen regains focus (if stale > 2 minutes)
+  // Auto-refresh playlists on focus (includes initial mount)
+  // Skips if data is fresh (< 5 minutes old) to prevent excessive API calls
   useFocusEffect(
     useCallback(() => {
       if (spotifyConnected) {
         const lastSync = useStreamingStore.getState().lastSyncAt;
-        const staleMs = 2 * 60 * 1000; // 2 minutes
+        const staleMs = 5 * 60 * 1000; // 5 minutes
         if (!lastSync || Date.now() - lastSync > staleMs) {
           console.log('[StreamingScreen] Playlists stale, auto-refreshing...');
           spotifyService.fetchPlaylists();
