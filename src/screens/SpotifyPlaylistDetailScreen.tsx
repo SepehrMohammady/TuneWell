@@ -226,7 +226,7 @@ export default function SpotifyPlaylistDetailScreen() {
           </Text>
           <View style={styles.playlistActions}>
             <TouchableOpacity
-              style={[styles.playButton, { backgroundColor: colors.primary }]}
+              style={[styles.playButton, { backgroundColor: '#1DB954' }]}
               onPress={handlePlayAll}
             >
               <MaterialIcons name="play-arrow" size={20} color="#FFFFFF" />

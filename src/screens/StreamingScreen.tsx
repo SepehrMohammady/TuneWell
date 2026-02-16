@@ -337,7 +337,7 @@ export default function StreamingScreen() {
               />
               <TouchableOpacity
                 style={[styles.importButton, { 
-                  backgroundColor: importUrl.trim() ? colors.primary : colors.surfaceLight 
+                  backgroundColor: importUrl.trim() ? '#1DB954' : colors.surfaceLight 
                 }]}
                 onPress={handleImportFromUrl}
                 disabled={!importUrl.trim() || isLoading}

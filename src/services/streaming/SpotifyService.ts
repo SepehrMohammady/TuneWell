@@ -343,28 +343,48 @@ class SpotifyService {
       throw new Error('Not authenticated with Spotify');
     }
 
-    const response = await fetch(`${SPOTIFY_CONFIG.apiBaseUrl}${endpoint}`, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
+    const doFetch = async (accessToken: string) => {
+      return fetch(`${SPOTIFY_CONFIG.apiBaseUrl}${endpoint}`, {
+        ...options,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
+    };
+
+    let response = await doFetch(token);
+
+    // Handle 429 Too Many Requests with retry
+    if (response.status === 429) {
+      const retryAfter = parseInt(response.headers.get('Retry-After') || '3', 10);
+      const waitMs = Math.min(retryAfter * 1000, 10000); // Cap at 10 seconds
+      console.warn(`[SpotifyService] Rate limited (429). Waiting ${retryAfter}s before retry...`);
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+      response = await doFetch(token);
+      // If still rate limited after retry, throw a user-friendly error
+      if (response.status === 429) {
+        throw new Error(
+          'Spotify rate limit reached. Please wait a minute before trying again.'
+        );
+      }
+    }
 
     if (response.status === 401 || response.status === 403) {
       // Token expired or forbidden — try refresh and retry
       const refreshed = await this.refreshToken();
       if (refreshed) {
         const newToken = useStreamingStore.getState().spotifyAccessToken;
-        const retryResponse = await fetch(`${SPOTIFY_CONFIG.apiBaseUrl}${endpoint}`, {
-          ...options,
-          headers: {
-            Authorization: `Bearer ${newToken}`,
-            'Content-Type': 'application/json',
-            ...options.headers,
-          },
-        });
+        let retryResponse = await doFetch(newToken!);
+        // Handle 429 on retry too
+        if (retryResponse.status === 429) {
+          const retryAfter = parseInt(retryResponse.headers.get('Retry-After') || '3', 10);
+          const waitMs = Math.min(retryAfter * 1000, 10000);
+          console.warn(`[SpotifyService] Rate limited on retry (429). Waiting ${retryAfter}s...`);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+          retryResponse = await doFetch(newToken!);
+        }
         if (!retryResponse.ok) {
           const errBody = await retryResponse.text().catch(() => '');
           if (retryResponse.status === 403) {
