@@ -61,8 +61,9 @@ export default function SpotifyPlaylistDetailScreen() {
       try {
         const fetchedTracks = await spotifyService.fetchPlaylistTracks(playlistId);
         setTracks(fetchedTracks);
-      } catch (error) {
-        Alert.alert('Error', 'Failed to load playlist tracks');
+      } catch (error: any) {
+        console.error('[PlaylistDetail] Failed to load tracks:', error);
+        Alert.alert('Error', error?.message || 'Failed to load playlist tracks');
       }
     } else {
       // Check imported playlists

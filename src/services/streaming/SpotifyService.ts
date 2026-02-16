@@ -417,7 +417,7 @@ class SpotifyService {
     try {
       useStreamingStore.getState().setLoading(true);
       
-      const data = await this.apiRequest<any>(`/me/playlists?limit=${limit}&offset=${offset}&market=from_token`);
+      const data = await this.apiRequest<any>(`/me/playlists?limit=${limit}&offset=${offset}`);
       
       const playlists: SpotifyPlaylist[] = data.items.map((item: any) => ({
         id: item.id,
@@ -448,25 +448,36 @@ class SpotifyService {
    */
   async fetchPlaylistTracks(playlistId: string, limit = 100, offset = 0): Promise<SpotifyTrack[]> {
     try {
-      const data = await this.apiRequest<any>(
-        `/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}&market=from_token`
-      );
+      const allTracks: SpotifyTrack[] = [];
+      let currentOffset = offset;
+      let hasMore = true;
 
-      const tracks: SpotifyTrack[] = data.items
-        .filter((item: any) => item.track && item.track.id)
-        .map((item: any) => ({
-          id: item.track.id,
-          name: item.track.name,
-          artist: item.track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
-          album: item.track.album?.name || 'Unknown',
-          duration: item.track.duration_ms,
-          imageUrl: item.track.album?.images?.[0]?.url,
-          uri: item.track.uri,
-          previewUrl: item.track.preview_url,
-          isPlayable: item.track.is_playable !== false,
-        }));
+      while (hasMore) {
+        const data = await this.apiRequest<any>(
+          `/playlists/${playlistId}/tracks?limit=${limit}&offset=${currentOffset}`
+        );
 
-      return tracks;
+        const items = data.items || [];
+        const tracks: SpotifyTrack[] = items
+          .filter((item: any) => item.track && item.track.id)
+          .map((item: any) => ({
+            id: item.track.id,
+            name: item.track.name,
+            artist: item.track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+            album: item.track.album?.name || 'Unknown',
+            duration: item.track.duration_ms,
+            imageUrl: item.track.album?.images?.[0]?.url,
+            uri: item.track.uri,
+            previewUrl: item.track.preview_url,
+            isPlayable: item.track.is_playable !== false,
+          }));
+
+        allTracks.push(...tracks);
+        hasMore = data.next !== null && items.length === limit;
+        currentOffset += limit;
+      }
+
+      return allTracks;
     } catch (error) {
       console.error('[SpotifyService] Failed to fetch playlist tracks:', error);
       throw error;
@@ -478,7 +489,7 @@ class SpotifyService {
    */
   async fetchPlaylistMetadata(playlistId: string): Promise<SpotifyPlaylist | null> {
     try {
-      const data = await this.apiRequest<any>(`/playlists/${playlistId}?market=from_token`);
+      const data = await this.apiRequest<any>(`/playlists/${playlistId}`);
       return {
         id: data.id,
         name: data.name,
