@@ -29,7 +29,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { THEME, ROUTES } from '../config';
 import { useStreamingStore, useThemeStore } from '../store';
-import { spotifyService, playlistImportService, isQobuzConfigured } from '../services/streaming';
+import { spotifyService, playlistImportService } from '../services/streaming';
 import type { SpotifyPlaylist, ImportedPlaylist } from '../types';
 import MiniPlayer from '../components/player/MiniPlayer';
 
@@ -222,52 +222,6 @@ function ImportedPlaylistCard({
   );
 }
 
-// --------------------------------------------------------------------------
-// Deezer Components (Public API — import via URL only)
-// --------------------------------------------------------------------------
-
-function DeezerInfoCard({ colors, onImport }: { colors: any; onImport: () => void }) {
-  return (
-    <View style={[styles.loginCard, { backgroundColor: colors.surface }]}>
-      <MaterialCommunityIcons name="music-circle" size={48} color="#A238FF" />
-      <Text style={[styles.loginTitle, { color: colors.text }]}>Deezer</Text>
-      <Text style={[styles.loginSubtitle, { color: colors.textSecondary }]}>
-        Import any public Deezer playlist by pasting its URL above.{'\n'}
-        Account login is unavailable — Deezer is not accepting new developer apps.
-      </Text>
-      <TouchableOpacity
-        style={[styles.connectButton, { backgroundColor: '#A238FF' }]}
-        onPress={onImport}
-      >
-        <MaterialIcons name="add-link" size={20} color="#FFFFFF" />
-        <Text style={styles.connectButtonText}>Import Deezer Playlist</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-// --------------------------------------------------------------------------
-// Qobuz Components
-// --------------------------------------------------------------------------
-
-function QobuzComingSoonCard({ colors }: { colors: any }) {
-  return (
-    <View style={[styles.loginCard, { backgroundColor: colors.surface, opacity: 0.7 }]}>
-      <MaterialCommunityIcons name="music-box" size={48} color="#0170EA" />
-      <Text style={[styles.loginTitle, { color: colors.text }]}>Qobuz</Text>
-      <Text style={[styles.loginSubtitle, { color: colors.textSecondary }]}>
-        Lossless & hi-res audio streaming — coming soon.{'\n'}
-        Qobuz API access requires partner approval.
-      </Text>
-      <View
-        style={[styles.connectButton, { backgroundColor: '#0170EA40' }]}
-      >
-        <MaterialCommunityIcons name="clock-outline" size={20} color="#0170EA" />
-        <Text style={[styles.connectButtonText, { color: '#0170EA' }]}>Coming Soon</Text>
-      </View>
-    </View>
-  );
-}
-
 // ============================================================================
 // Main Screen
 // ============================================================================
@@ -449,12 +403,6 @@ export default function StreamingScreen() {
           </>
         )}
 
-        {/* Deezer Section (Public API — URL import only) */}
-        <DeezerInfoCard colors={colors} onImport={() => setShowImportInput(true)} />
-
-        {/* Qobuz Section (Coming Soon) */}
-        <QobuzComingSoonCard colors={colors} />
-
         {/* Imported Playlists */}
         {importedPlaylists.length > 0 && (
           <View style={styles.section}>
@@ -579,17 +527,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-  },
-
-  // Qobuz Login Inputs
-  qobuzInput: {
-    width: '100%',
-    height: 44,
-    borderRadius: THEME.borderRadius.md,
-    paddingHorizontal: THEME.spacing.md,
-    fontSize: 14,
-    borderWidth: 1,
-    marginTop: THEME.spacing.sm,
   },
 
   // User Header

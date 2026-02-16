@@ -451,20 +451,8 @@ export interface StreamingState {
   spotifyRefreshToken: string | null;
   spotifyTokenExpiry: number | null;
   
-  // Deezer connection
-  deezerConnected: boolean;
-  deezerUser: DeezerUser | null;
-  deezerAccessToken: string | null;
-  
-  // Qobuz connection
-  qobuzConnected: boolean;
-  qobuzUser: QobuzUser | null;
-  qobuzUserAuthToken: string | null;
-  
   // Playlists
   spotifyPlaylists: SpotifyPlaylist[];
-  deezerPlaylists: DeezerPlaylist[];
-  qobuzPlaylists: QobuzPlaylist[];
   importedPlaylists: ImportedPlaylist[];
   
   // UI state
