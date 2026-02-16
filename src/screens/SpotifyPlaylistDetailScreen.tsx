@@ -34,7 +34,7 @@ export default function SpotifyPlaylistDetailScreen() {
   const route = useRoute<SpotifyPlaylistDetailRoute>();
   const { playlistId } = route.params;
   const { colors, mode: themeMode } = useThemeStore();
-  const { spotifyPlaylists, deezerPlaylists, qobuzPlaylists, importedPlaylists } = useStreamingStore();
+  const { spotifyPlaylists, importedPlaylists } = useStreamingStore();
   
   const [tracks, setTracks] = useState<StreamingTrack[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,48 +49,6 @@ export default function SpotifyPlaylistDetailScreen() {
 
   const loadPlaylistTracks = async () => {
     setLoading(true);
-    
-    // Check if it's a Deezer playlist (prefixed with deezer_)
-    if (playlistId.startsWith('deezer_')) {
-      const deezerPid = playlistId.replace('deezer_', '');
-      const deezerPlaylist = deezerPlaylists.find(p => p.id === deezerPid);
-      if (deezerPlaylist) {
-        setPlaylistName(deezerPlaylist.name);
-        setPlaylistImage(deezerPlaylist.imageUrl);
-        setPlaylistOwner(deezerPlaylist.creatorName);
-        setPlaylistSource('deezer');
-        
-        try {
-          const fetchedTracks = await deezerService.fetchPlaylistTracks(deezerPid);
-          setTracks(fetchedTracks);
-        } catch (error) {
-          Alert.alert('Error', 'Failed to load Deezer playlist tracks');
-        }
-        setLoading(false);
-        return;
-      }
-    }
-    
-    // Check if it's a Qobuz playlist (prefixed with qobuz_)
-    if (playlistId.startsWith('qobuz_')) {
-      const qobuzPid = playlistId.replace('qobuz_', '');
-      const qobuzPlaylist = qobuzPlaylists.find(p => p.id === qobuzPid);
-      if (qobuzPlaylist) {
-        setPlaylistName(qobuzPlaylist.name);
-        setPlaylistImage(qobuzPlaylist.imageUrl);
-        setPlaylistOwner(qobuzPlaylist.ownerName);
-        setPlaylistSource('qobuz');
-        
-        try {
-          const fetchedTracks = await qobuzService.fetchPlaylistTracks(qobuzPid);
-          setTracks(fetchedTracks);
-        } catch (error) {
-          Alert.alert('Error', 'Failed to load Qobuz playlist tracks');
-        }
-        setLoading(false);
-        return;
-      }
-    }
     
     // Check if it's a Spotify playlist
     const spotifyPlaylist = spotifyPlaylists.find(p => p.id === playlistId);
@@ -113,7 +71,7 @@ export default function SpotifyPlaylistDetailScreen() {
         setPlaylistName(imported.name);
         setPlaylistImage(imported.imageUrl);
         setPlaylistOwner(imported.source);
-        setPlaylistSource('imported');
+        setPlaylistSource(imported.source === 'deezer' ? 'deezer' : imported.source === 'qobuz' ? 'qobuz' : 'imported');
         setTracks(imported.tracks);
       }
     }
