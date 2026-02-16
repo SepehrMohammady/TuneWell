@@ -5,7 +5,8 @@
  * Web API calls, and playlist management.
  * 
  * Qobuz API requires an App ID obtained through their partner program.
- * Update the appId below with your credentials.
+ * Contact api@qobuz.com to request access.
+ * Once you receive an App ID, update QOBUZ_APP_ID below.
  * 
  * Qobuz is known for lossless/hi-res audio streaming.
  */
@@ -17,10 +18,20 @@ import type { QobuzUser, QobuzPlaylist, StreamingTrack, Track } from '../../type
 // Qobuz API Configuration
 // ============================================================================
 
+// Set this to your Qobuz partner App ID once you receive it from api@qobuz.com
+const QOBUZ_APP_ID = '';
+
 const QOBUZ_CONFIG = {
-  appId: 'YOUR_QOBUZ_APP_ID',
+  appId: QOBUZ_APP_ID,
   apiBaseUrl: 'https://www.qobuz.com/api.json/0.2',
 } as const;
+
+/**
+ * Check if Qobuz API is configured (has a valid App ID)
+ */
+export function isQobuzConfigured(): boolean {
+  return QOBUZ_APP_ID.length > 0;
+}
 
 // ============================================================================
 // Qobuz Service
@@ -48,6 +59,11 @@ class QobuzService {
    */
   async login(email: string, password: string): Promise<boolean> {
     try {
+      if (!isQobuzConfigured()) {
+        useStreamingStore.getState().setError('Qobuz API access is pending. Contact api@qobuz.com for a partner App ID.');
+        return false;
+      }
+
       useStreamingStore.getState().setLoading(true);
       useStreamingStore.getState().setError(null);
 
