@@ -352,8 +352,8 @@ class SpotifyService {
       },
     });
 
-    if (response.status === 401) {
-      // Token expired, try refresh
+    if (response.status === 401 || response.status === 403) {
+      // Token expired or forbidden — try refresh and retry
       const refreshed = await this.refreshToken();
       if (refreshed) {
         const newToken = useStreamingStore.getState().spotifyAccessToken;
@@ -367,9 +367,15 @@ class SpotifyService {
         });
         if (!retryResponse.ok) {
           const errBody = await retryResponse.text().catch(() => '');
+          if (retryResponse.status === 403) {
+            throw new Error('SPOTIFY_FORBIDDEN');
+          }
           throw new Error(`Spotify API error: ${retryResponse.status} ${errBody}`);
         }
         return retryResponse.json();
+      }
+      if (response.status === 403) {
+        throw new Error('SPOTIFY_FORBIDDEN');
       }
       throw new Error('Spotify authentication expired');
     }
@@ -447,7 +453,23 @@ class SpotifyService {
    * Fetch tracks from a Spotify playlist
    */
   async fetchPlaylistTracks(playlistId: string, limit = 100, offset = 0): Promise<SpotifyTrack[]> {
+    const parseTrackItem = (item: any): SpotifyTrack | null => {
+      if (!item.track || !item.track.id) return null;
+      return {
+        id: item.track.id,
+        name: item.track.name,
+        artist: item.track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+        album: item.track.album?.name || 'Unknown',
+        duration: item.track.duration_ms,
+        imageUrl: item.track.album?.images?.[0]?.url,
+        uri: item.track.uri,
+        previewUrl: item.track.preview_url,
+        isPlayable: item.track.is_playable !== false,
+      };
+    };
+
     try {
+      // Primary approach: dedicated tracks endpoint with pagination
       const allTracks: SpotifyTrack[] = [];
       let currentOffset = offset;
       let hasMore = true;
@@ -458,27 +480,35 @@ class SpotifyService {
         );
 
         const items = data.items || [];
-        const tracks: SpotifyTrack[] = items
-          .filter((item: any) => item.track && item.track.id)
-          .map((item: any) => ({
-            id: item.track.id,
-            name: item.track.name,
-            artist: item.track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
-            album: item.track.album?.name || 'Unknown',
-            duration: item.track.duration_ms,
-            imageUrl: item.track.album?.images?.[0]?.url,
-            uri: item.track.uri,
-            previewUrl: item.track.preview_url,
-            isPlayable: item.track.is_playable !== false,
-          }));
-
+        const tracks = items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
         allTracks.push(...tracks);
         hasMore = data.next !== null && items.length === limit;
         currentOffset += limit;
       }
 
       return allTracks;
-    } catch (error) {
+    } catch (error: any) {
+      // Fallback: fetch full playlist object which embeds tracks
+      if (error?.message === 'SPOTIFY_FORBIDDEN') {
+        console.warn('[SpotifyService] 403 on tracks endpoint, trying full playlist fallback');
+        try {
+          const data = await this.apiRequest<any>(
+            `/playlists/${playlistId}?fields=tracks.items(track(id,name,artists,album,duration_ms,uri,preview_url,is_playable)),tracks.next,tracks.total`
+          );
+          const items = data.tracks?.items || [];
+          return items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
+        } catch (fallbackError: any) {
+          console.error('[SpotifyService] Fallback also failed:', fallbackError);
+          // If still forbidden, throw a user-friendly error
+          if (fallbackError?.message === 'SPOTIFY_FORBIDDEN') {
+            throw new Error(
+              'Access denied by Spotify. This playlist may be restricted in Development Mode. ' +
+              'Try disconnecting and reconnecting your Spotify account, or try your own playlists.'
+            );
+          }
+          throw fallbackError;
+        }
+      }
       console.error('[SpotifyService] Failed to fetch playlist tracks:', error);
       throw error;
     }
