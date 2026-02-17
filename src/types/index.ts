@@ -302,6 +302,7 @@ export type RootStackParamList = {
   SelectFolder: undefined;
   EQPresetDetail: { presetId: string };
   SpotifyPlaylistDetail: { playlistId: string };
+  SystemPlaylistDetail: { type: 'favorites' | 'mostPlayed' | 'recentlyAdded' | 'recentlyPlayed' };
   ImportPlaylist: undefined;
 };
 

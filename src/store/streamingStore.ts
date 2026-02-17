@@ -157,10 +157,11 @@ export const useStreamingStore = create<StreamingStoreState>()(
       name: 'tunewell-streaming',
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
-        // Persist connection state and tokens, NOT UI state
+        // Persist connection state, tokens, and playlists
         spotifyConnected: state.spotifyConnected,
         spotifyUser: state.spotifyUser,
         spotifyRefreshToken: state.spotifyRefreshToken,
+        spotifyPlaylists: state.spotifyPlaylists,
         importedPlaylists: state.importedPlaylists,
         lastSyncAt: state.lastSyncAt,
       }),

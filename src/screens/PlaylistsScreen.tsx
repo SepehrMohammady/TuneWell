@@ -261,7 +261,7 @@ export default function PlaylistsScreen() {
           <View style={styles.sectionContent}>
             <TouchableOpacity 
               style={[styles.playlistItem, { borderBottomColor: colors.border }]}
-              onPress={() => handlePlaySystemPlaylist('favorites')}
+              onPress={() => navigation.navigate('SystemPlaylistDetail' as any, { type: 'favorites' })}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#FF6B6B' }]}>
                 <MaterialIcons name="favorite" size={20} color="#FFFFFF" />
@@ -270,12 +270,17 @@ export default function PlaylistsScreen() {
                 <Text style={[styles.playlistName, { color: colors.text }]}>Favorites</Text>
                 <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{favoritesCount} tracks</Text>
               </View>
-              <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+              <TouchableOpacity
+                onPress={() => handlePlaySystemPlaylist('favorites')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={[styles.playlistItem, { borderBottomColor: colors.border }]}
-              onPress={() => handlePlaySystemPlaylist('mostPlayed')}
+              onPress={() => navigation.navigate('SystemPlaylistDetail' as any, { type: 'mostPlayed' })}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#4ECDC4' }]}>
                 <MaterialIcons name="bolt" size={20} color="#FFFFFF" />
@@ -284,12 +289,17 @@ export default function PlaylistsScreen() {
                 <Text style={[styles.playlistName, { color: colors.text }]}>Most Played</Text>
                 <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{mostPlayedCount} tracks</Text>
               </View>
-              <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+              <TouchableOpacity
+                onPress={() => handlePlaySystemPlaylist('mostPlayed')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={[styles.playlistItem, { borderBottomColor: colors.border }]}
-              onPress={() => handlePlaySystemPlaylist('recentlyAdded')}
+              onPress={() => navigation.navigate('SystemPlaylistDetail' as any, { type: 'recentlyAdded' })}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#45B7D1' }]}>
                 <MaterialIcons name="star" size={20} color="#FFFFFF" />
@@ -298,12 +308,17 @@ export default function PlaylistsScreen() {
                 <Text style={[styles.playlistName, { color: colors.text }]}>Recently Added</Text>
                 <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{recentlyAddedCount} tracks</Text>
               </View>
-              <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+              <TouchableOpacity
+                onPress={() => handlePlaySystemPlaylist('recentlyAdded')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={[styles.playlistItem, { borderBottomColor: colors.border }]}
-              onPress={() => handlePlaySystemPlaylist('recentlyPlayed')}
+              onPress={() => navigation.navigate('SystemPlaylistDetail' as any, { type: 'recentlyPlayed' })}
             >
               <View style={[styles.playlistIcon, { backgroundColor: '#96CEB4' }]}>
                 <MaterialIcons name="history" size={20} color="#FFFFFF" />
@@ -312,7 +327,12 @@ export default function PlaylistsScreen() {
                 <Text style={[styles.playlistName, { color: colors.text }]}>Recently Played</Text>
                 <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>{recentlyPlayedCount} tracks</Text>
               </View>
-              <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+              <TouchableOpacity
+                onPress={() => handlePlaySystemPlaylist('recentlyPlayed')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
             </TouchableOpacity>
           </View>
         )}
