@@ -242,12 +242,12 @@ export default function StreamingScreen() {
   const [showImportInput, setShowImportInput] = useState(false);
 
   // Auto-refresh playlists on focus (includes initial mount)
-  // Skips if data is fresh (< 5 minutes old) to prevent excessive API calls
+  // Skips if data is fresh (< 15 minutes old) to prevent excessive API calls
   useFocusEffect(
     useCallback(() => {
       if (spotifyConnected) {
         const lastSync = useStreamingStore.getState().lastSyncAt;
-        const staleMs = 5 * 60 * 1000; // 5 minutes
+        const staleMs = 15 * 60 * 1000; // 15 minutes
         if (!lastSync || Date.now() - lastSync > staleMs) {
           console.log('[StreamingScreen] Playlists stale, auto-refreshing...');
           spotifyService.fetchPlaylists();

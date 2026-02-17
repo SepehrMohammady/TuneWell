@@ -188,6 +188,13 @@ export function RootNavigator() {
           }}
         />
         <Stack.Screen
+          name="SystemPlaylistDetail"
+          component={SystemPlaylistDetailScreen}
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen
           name={ROUTES.SPOTIFY_PLAYLIST_DETAIL as keyof RootStackParamList}
           component={SpotifyPlaylistDetailScreen}
           options={{

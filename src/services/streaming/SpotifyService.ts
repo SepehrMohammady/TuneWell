@@ -526,7 +526,8 @@ class SpotifyService {
     } catch (error: any) {
       console.error('[SpotifyService] Failed to fetch playlists:', error);
       useStreamingStore.getState().setError(error.message);
-      return [];
+      // On error, return existing cached playlists instead of clearing them
+      return useStreamingStore.getState().spotifyPlaylists;
     } finally {
       useStreamingStore.getState().setLoading(false);
     }
