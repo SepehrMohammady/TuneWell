@@ -16,6 +16,7 @@ import HomeScreen from '../screens/HomeScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import PlaylistsScreen from '../screens/PlaylistsScreen';
 import PlaylistDetailScreen from '../screens/PlaylistDetailScreen';
+import SystemPlaylistDetailScreen from '../screens/SystemPlaylistDetailScreen';
 import StreamingScreen from '../screens/StreamingScreen';
 import SpotifyPlaylistDetailScreen from '../screens/SpotifyPlaylistDetailScreen';
 import EqualizerScreen from '../screens/EqualizerScreen';
