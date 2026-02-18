@@ -53,7 +53,32 @@ const defaultSettings: AppSettings = {
   lastLibraryScan: undefined,
 };
 
+// Home screen section configuration
+export interface HomeSectionConfig {
+  id: string;
+  label: string;
+  visible: boolean;
+}
+
+const defaultHomeSections: HomeSectionConfig[] = [
+  { id: 'library', label: 'Your Library', visible: true },
+  { id: 'recentlyPlayed', label: 'Recently Played', visible: true },
+  { id: 'favorites', label: 'Favorites', visible: true },
+  { id: 'myPlaylists', label: 'My Playlists', visible: true },
+  { id: 'moodPlaylists', label: 'Mood Playlists', visible: true },
+  { id: 'spotifyPlaylists', label: 'Spotify Playlists', visible: true },
+];
+
 interface SettingsState extends AppSettings {
+  // Home screen sections
+  homeSections: HomeSectionConfig[];
+  
+  // Actions - Home sections
+  setHomeSections: (sections: HomeSectionConfig[]) => void;
+  toggleHomeSection: (sectionId: string) => void;
+  moveHomeSection: (sectionId: string, direction: 'up' | 'down') => void;
+  resetHomeSections: () => void;
+  
   // Actions
   setTheme: (theme: AppSettings['theme']) => void;
   setLanguage: (language: string) => void;
@@ -85,6 +110,32 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       ...defaultSettings,
+      
+      // Home sections
+      homeSections: defaultHomeSections,
+      
+      setHomeSections: (sections) => set({ homeSections: sections }),
+      
+      toggleHomeSection: (sectionId) => {
+        const sections = [...get().homeSections];
+        const idx = sections.findIndex(s => s.id === sectionId);
+        if (idx !== -1) {
+          sections[idx] = { ...sections[idx], visible: !sections[idx].visible };
+          set({ homeSections: sections });
+        }
+      },
+      
+      moveHomeSection: (sectionId, direction) => {
+        const sections = [...get().homeSections];
+        const idx = sections.findIndex(s => s.id === sectionId);
+        if (idx === -1) return;
+        const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (swapIdx < 0 || swapIdx >= sections.length) return;
+        [sections[idx], sections[swapIdx]] = [sections[swapIdx], sections[idx]];
+        set({ homeSections: sections });
+      },
+      
+      resetHomeSections: () => set({ homeSections: defaultHomeSections }),
       
       setTheme: (theme) => set({ theme }),
       

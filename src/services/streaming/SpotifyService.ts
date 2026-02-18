@@ -535,6 +535,10 @@ class SpotifyService {
 
   /**
    * Fetch tracks from a Spotify playlist
+   * Uses multiple strategies for resilience in Development Mode:
+   * 1. Dedicated /tracks endpoint
+   * 2. Full playlist object (embedded tracks)
+   * 3. Fields-restricted fallback
    */
   async fetchPlaylistTracks(playlistId: string, limit = 100, offset = 0): Promise<SpotifyTrack[]> {
     // Special handling for Liked Songs
@@ -547,7 +551,7 @@ class SpotifyService {
     }
 
     const parseTrackItem = (item: any): SpotifyTrack | null => {
-      if (!item.track || !item.track.id) return null;
+      if (!item?.track || !item.track.id) return null;
       return {
         id: item.track.id,
         name: item.track.name,
@@ -561,59 +565,104 @@ class SpotifyService {
       };
     };
 
+    // Strategy 1: Dedicated tracks endpoint with pagination
     try {
-      // Primary approach: dedicated tracks endpoint with pagination
       const allTracks: SpotifyTrack[] = [];
       let currentOffset = offset;
       let hasMore = true;
 
       while (hasMore) {
         const data = await this.apiRequest<any>(
-          `/playlists/${playlistId}/tracks?limit=${limit}&offset=${currentOffset}`
+          `/playlists/${playlistId}/tracks?limit=${limit}&offset=${currentOffset}&additional_types=track`
         );
+        if (!data || !data.items) {
+          console.warn('[SpotifyService] Strategy 1: data or data.items is null/undefined');
+          break;
+        }
 
-        const items = data.items || [];
+        const items = data.items;
         const tracks = items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
         allTracks.push(...tracks);
         hasMore = data.next !== null && items.length === limit;
         currentOffset += limit;
       }
 
-      // Cache fetched tracks
       if (allTracks.length > 0) {
         useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, allTracks);
+        return allTracks;
       }
-
-      return allTracks;
+      // If zero tracks returned, fall through to strategy 2
+      console.warn('[SpotifyService] Strategy 1 returned 0 tracks, trying full playlist object');
     } catch (error: any) {
-      // Fallback: fetch full playlist object which embeds tracks
-      if (error?.message === 'SPOTIFY_FORBIDDEN') {
-        console.warn('[SpotifyService] 403 on tracks endpoint, trying full playlist fallback');
-        try {
-          const data = await this.apiRequest<any>(
-            `/playlists/${playlistId}?fields=tracks.items(track(id,name,artists,album,duration_ms,uri,preview_url,is_playable)),tracks.next,tracks.total`
-          );
-          const items = data.tracks?.items || [];
-          const fallbackTracks = items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
-          if (fallbackTracks.length > 0) {
-            useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, fallbackTracks);
+      console.warn('[SpotifyService] Strategy 1 failed:', error?.message);
+      // Fall through to strategy 2
+    }
+
+    // Strategy 2: Full playlist object (includes embedded tracks on first page)
+    try {
+      const data = await this.apiRequest<any>(`/playlists/${playlistId}`);
+      if (data?.tracks?.items) {
+        const allTracks: SpotifyTrack[] = [];
+        const firstPageTracks = data.tracks.items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
+        allTracks.push(...firstPageTracks);
+
+        // Paginate remaining tracks if any
+        if (data.tracks.next && data.tracks.total > allTracks.length) {
+          let nextOffset = data.tracks.items.length;
+          let hasMore = true;
+          while (hasMore) {
+            try {
+              const pageData = await this.apiRequest<any>(
+                `/playlists/${playlistId}/tracks?limit=100&offset=${nextOffset}&additional_types=track`
+              );
+              if (!pageData?.items) break;
+              const pageTracks = pageData.items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
+              allTracks.push(...pageTracks);
+              hasMore = pageData.next !== null && pageData.items.length === 100;
+              nextOffset += 100;
+            } catch {
+              // Can't paginate further, return what we have
+              break;
+            }
           }
-          return fallbackTracks;
-        } catch (fallbackError: any) {
-          console.error('[SpotifyService] Fallback also failed:', fallbackError);
-          // If still forbidden, throw a user-friendly error
-          if (fallbackError?.message === 'SPOTIFY_FORBIDDEN') {
-            throw new Error(
-              'Access denied by Spotify. This playlist may be restricted in Development Mode. ' +
-              'Try disconnecting and reconnecting your Spotify account, or try your own playlists.'
-            );
-          }
-          throw fallbackError;
+        }
+
+        if (allTracks.length > 0) {
+          useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, allTracks);
+          return allTracks;
         }
       }
-      console.error('[SpotifyService] Failed to fetch playlist tracks:', error);
+      console.warn('[SpotifyService] Strategy 2 returned 0 tracks, trying fields fallback');
+    } catch (error: any) {
+      console.warn('[SpotifyService] Strategy 2 failed:', error?.message);
+    }
+
+    // Strategy 3: Fields-restricted endpoint (lighter response, may bypass restrictions)
+    try {
+      const data = await this.apiRequest<any>(
+        `/playlists/${playlistId}?fields=tracks.items(track(id,name,artists,album,duration_ms,uri,preview_url,is_playable)),tracks.next,tracks.total`
+      );
+      if (data?.tracks?.items) {
+        const tracks = data.tracks.items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
+        if (tracks.length > 0) {
+          useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, tracks);
+          return tracks;
+        }
+      }
+    } catch (error: any) {
+      console.error('[SpotifyService] All 3 strategies failed for playlist:', playlistId, error?.message);
+      if (error?.message === 'SPOTIFY_FORBIDDEN') {
+        throw new Error(
+          'Access denied by Spotify. This playlist may be restricted in Development Mode. ' +
+          'Try disconnecting and reconnecting your Spotify account, or try your own playlists.'
+        );
+      }
       throw error;
     }
+
+    // All strategies returned empty
+    console.warn('[SpotifyService] All strategies returned 0 tracks for playlist:', playlistId);
+    return [];
   }
 
   /**
