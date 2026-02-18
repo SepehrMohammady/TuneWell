@@ -34,7 +34,7 @@ export default function SpotifyPlaylistDetailScreen() {
   const route = useRoute<SpotifyPlaylistDetailRoute>();
   const { playlistId } = route.params;
   const { colors, mode: themeMode } = useThemeStore();
-  const { spotifyPlaylists, importedPlaylists } = useStreamingStore();
+  const { spotifyPlaylists, importedPlaylists, getSpotifyPlaylistTracks, setSpotifyPlaylistTracks } = useStreamingStore();
   
   const [tracks, setTracks] = useState<StreamingTrack[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,13 +60,23 @@ export default function SpotifyPlaylistDetailScreen() {
       setPlaylistSource('spotify');
       setExpectedTrackCount(spotifyPlaylist.trackCount);
       
+      // Show cached tracks immediately if available
+      const cachedTracks = getSpotifyPlaylistTracks(playlistId);
+      if (cachedTracks.length > 0) {
+        setTracks(cachedTracks);
+        setLoading(false);
+      }
+      
       try {
         const fetchedTracks = await spotifyService.fetchPlaylistTracks(playlistId);
-        setTracks(fetchedTracks);
         
-        // Detect empty tracks when playlist should have tracks
-        if (fetchedTracks.length === 0) {
-          // Re-fetch metadata to get accurate track count
+        if (fetchedTracks.length > 0) {
+          setTracks(fetchedTracks);
+          // Cache tracks for future use
+          setSpotifyPlaylistTracks(playlistId, fetchedTracks);
+        } else if (cachedTracks.length === 0) {
+          // Only show empty-tracks alert if we had no cached data either
+          setTracks([]);
           try {
             const meta = await spotifyService.fetchPlaylistMetadata(playlistId);
             if (meta && meta.trackCount > 0) {
@@ -80,26 +90,30 @@ export default function SpotifyPlaylistDetailScreen() {
               );
             }
           } catch (metaErr) {
-            // Metadata also failed - show generic message
             Alert.alert(
               'Tracks Unavailable',
               'Could not load tracks for this playlist. Try disconnecting and reconnecting your Spotify account.',
             );
           }
         }
+        // If fetchedTracks is empty but cachedTracks had data, keep showing cached data
       } catch (error: any) {
         console.error('[PlaylistDetail] Failed to load tracks:', error);
-        const msg = error?.message || 'Failed to load playlist tracks';
-        if (msg.includes('Access denied') || msg.includes('FORBIDDEN')) {
-          Alert.alert(
-            'Spotify Access Restricted',
-            'This playlist cannot be loaded. Your Spotify app may be in Development Mode which restricts access to playlists owned by other users.\n\n' +
-            'To fix this:\n' +
-            '1. Disconnect and reconnect your Spotify account\n' +
-            '2. Make sure you are added as a user in the Spotify Developer Dashboard',
-          );
-        } else {
-          Alert.alert('Error', msg);
+        // If we already have cached tracks showing, don't clear them
+        if (cachedTracks.length === 0) {
+          const msg = error?.message || 'Failed to load playlist tracks';
+          if (msg.includes('Access denied') || msg.includes('FORBIDDEN')) {
+            Alert.alert(
+              'Spotify Access Restricted',
+              'This playlist cannot be loaded. Your Spotify app may be in Development Mode which restricts access to playlists owned by other users.\n\n' +
+              'To fix this:\n' +
+              '1. Disconnect and reconnect your Spotify account\n' +
+              '2. Make sure you are added as a user in the Spotify Developer Dashboard',
+            );
+          } else if (!msg.includes('rate limit')) {
+            // Don't show error alert for rate limits if we have cached data
+            Alert.alert('Error', msg);
+          }
         }
       }
     } else {

@@ -539,7 +539,11 @@ class SpotifyService {
   async fetchPlaylistTracks(playlistId: string, limit = 100, offset = 0): Promise<SpotifyTrack[]> {
     // Special handling for Liked Songs
     if (playlistId === 'liked_songs') {
-      return this.fetchLikedSongs(limit, offset);
+      const songs = await this.fetchLikedSongs(limit, offset);
+      if (songs.length > 0) {
+        useStreamingStore.getState().setSpotifyPlaylistTracks('liked_songs', songs);
+      }
+      return songs;
     }
 
     const parseTrackItem = (item: any): SpotifyTrack | null => {
@@ -575,6 +579,11 @@ class SpotifyService {
         currentOffset += limit;
       }
 
+      // Cache fetched tracks
+      if (allTracks.length > 0) {
+        useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, allTracks);
+      }
+
       return allTracks;
     } catch (error: any) {
       // Fallback: fetch full playlist object which embeds tracks
@@ -585,7 +594,11 @@ class SpotifyService {
             `/playlists/${playlistId}?fields=tracks.items(track(id,name,artists,album,duration_ms,uri,preview_url,is_playable)),tracks.next,tracks.total`
           );
           const items = data.tracks?.items || [];
-          return items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
+          const fallbackTracks = items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
+          if (fallbackTracks.length > 0) {
+            useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, fallbackTracks);
+          }
+          return fallbackTracks;
         } catch (fallbackError: any) {
           console.error('[SpotifyService] Fallback also failed:', fallbackError);
           // If still forbidden, throw a user-friendly error

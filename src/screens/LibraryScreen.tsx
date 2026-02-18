@@ -85,6 +85,12 @@ export default function LibraryScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSubfolderModal, setShowSubfolderModal] = useState(false);
   const [showSortModal, setShowSortModal] = useState(false);
+  const [albumSortBy, setAlbumSortBy] = useState<'name' | 'artist' | 'trackCount' | 'dateAdded'>('name');
+  const [albumSortDesc, setAlbumSortDesc] = useState(false);
+  const [artistSortBy, setArtistSortBy] = useState<'name' | 'trackCount' | 'albumCount'>('name');
+  const [artistSortDesc, setArtistSortDesc] = useState(false);
+  const [showAlbumSortModal, setShowAlbumSortModal] = useState(false);
+  const [showArtistSortModal, setShowArtistSortModal] = useState(false);
   const [subfolders, setSubfolders] = useState<SubfolderInfo[]>([]);
   const [parentFolderUri, setParentFolderUri] = useState<string>('');
   const [parentFolderName, setParentFolderName] = useState<string>('');
@@ -169,7 +175,7 @@ export default function LibraryScreen() {
 
   // Group tracks by album
   const albumGroups = useMemo(() => {
-    const groups: Record<string, { name: string; artist: string; artwork?: string; tracks: ScannedTrack[] }> = {};
+    const groups: Record<string, { name: string; artist: string; artwork?: string; tracks: ScannedTrack[]; earliestDate: number }> = {};
     for (const track of filteredTracks) {
       const albumName = track.album || 'Unknown Album';
       if (!groups[albumName]) {
@@ -178,12 +184,27 @@ export default function LibraryScreen() {
           artist: track.artist || 'Unknown Artist',
           artwork: track.albumArtUri || track.artwork,
           tracks: [],
+          earliestDate: track.modifiedAt || 0,
         };
       }
       groups[albumName].tracks.push(track);
+      if (track.modifiedAt && track.modifiedAt < groups[albumName].earliestDate) {
+        groups[albumName].earliestDate = track.modifiedAt;
+      }
     }
-    return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
-  }, [filteredTracks]);
+    const sorted = Object.values(groups);
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (albumSortBy) {
+        case 'name': cmp = a.name.localeCompare(b.name); break;
+        case 'artist': cmp = a.artist.localeCompare(b.artist); break;
+        case 'trackCount': cmp = a.tracks.length - b.tracks.length; break;
+        case 'dateAdded': cmp = a.earliestDate - b.earliestDate; break;
+      }
+      return albumSortDesc ? -cmp : cmp;
+    });
+    return sorted;
+  }, [filteredTracks, albumSortBy, albumSortDesc]);
 
   // Group tracks by artist
   const artistGroups = useMemo(() => {
@@ -201,8 +222,18 @@ export default function LibraryScreen() {
       groups[artistName].tracks.push(track);
       if (track.album) groups[artistName].albums.add(track.album);
     }
-    return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
-  }, [filteredTracks]);
+    const sorted = Object.values(groups);
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (artistSortBy) {
+        case 'name': cmp = a.name.localeCompare(b.name); break;
+        case 'trackCount': cmp = a.tracks.length - b.tracks.length; break;
+        case 'albumCount': cmp = a.albums.size - b.albums.size; break;
+      }
+      return artistSortDesc ? -cmp : cmp;
+    });
+    return sorted;
+  }, [filteredTracks, artistSortBy, artistSortDesc]);
 
   // Request permission on mount
   useEffect(() => {
@@ -769,6 +800,26 @@ export default function LibraryScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Play All / Shuffle */}
+      {filteredTracks.length > 0 && (
+        <View style={styles.playAllRow}>
+          <TouchableOpacity
+            style={[styles.playAllButton, { backgroundColor: colors.primary }]}
+            onPress={() => handlePlayAllTracks(false)}
+          >
+            <MaterialIcons name="play-arrow" size={20} color={colors.background} />
+            <Text style={[styles.playAllText, { color: colors.background }]}>Play All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shuffleAllButton, { backgroundColor: colors.surface }]}
+            onPress={() => handlePlayAllTracks(true)}
+          >
+            <MaterialIcons name="shuffle" size={20} color={colors.text} />
+            <Text style={[styles.shuffleAllText, { color: colors.text }]}>Shuffle</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       
       {filteredTracks.length === 0 ? (
         <View style={styles.emptyFolders}>
@@ -852,6 +903,72 @@ export default function LibraryScreen() {
     }
   }, []);
 
+  // Play All / Shuffle handlers for tabs
+  const handlePlayAllTracks = useCallback(async (shuffle = false) => {
+    if (filteredTracks.length === 0) return;
+    try {
+      await audioService.initialize();
+      let tracksToPlay = [...filteredTracks];
+      if (shuffle) {
+        tracksToPlay = tracksToPlay.sort(() => Math.random() - 0.5);
+      }
+      const allTracks: Track[] = tracksToPlay.map(convertToTrack);
+      const queueItems = allTracks.map((track, idx) => ({
+        id: `queue_${track.id}_${Date.now()}_${idx}`,
+        track,
+        addedAt: Date.now(),
+        source: 'library' as const,
+      }));
+      await audioService.playQueue(queueItems, 0);
+    } catch (error: any) {
+      Alert.alert('Playback Error', error.message || 'Failed to play');
+    }
+  }, [filteredTracks]);
+
+  const handlePlayAllAlbums = useCallback(async (shuffle = false) => {
+    const allAlbumTracks = albumGroups.flatMap(g => g.tracks);
+    if (allAlbumTracks.length === 0) return;
+    try {
+      await audioService.initialize();
+      let tracksToPlay = [...allAlbumTracks];
+      if (shuffle) {
+        tracksToPlay = tracksToPlay.sort(() => Math.random() - 0.5);
+      }
+      const allTracks: Track[] = tracksToPlay.map(convertToTrack);
+      const queueItems = allTracks.map((track, idx) => ({
+        id: `queue_${track.id}_${Date.now()}_${idx}`,
+        track,
+        addedAt: Date.now(),
+        source: 'library' as const,
+      }));
+      await audioService.playQueue(queueItems, 0);
+    } catch (error: any) {
+      Alert.alert('Playback Error', error.message || 'Failed to play');
+    }
+  }, [albumGroups]);
+
+  const handlePlayAllArtists = useCallback(async (shuffle = false) => {
+    const allArtistTracks = artistGroups.flatMap(g => g.tracks);
+    if (allArtistTracks.length === 0) return;
+    try {
+      await audioService.initialize();
+      let tracksToPlay = [...allArtistTracks];
+      if (shuffle) {
+        tracksToPlay = tracksToPlay.sort(() => Math.random() - 0.5);
+      }
+      const allTracks: Track[] = tracksToPlay.map(convertToTrack);
+      const queueItems = allTracks.map((track, idx) => ({
+        id: `queue_${track.id}_${Date.now()}_${idx}`,
+        track,
+        addedAt: Date.now(),
+        source: 'library' as const,
+      }));
+      await audioService.playQueue(queueItems, 0);
+    } catch (error: any) {
+      Alert.alert('Playback Error', error.message || 'Failed to play');
+    }
+  }, [artistGroups]);
+
   const renderAlbumsView = () => (
     <View style={styles.viewContent}>
       {/* Search Box */}
@@ -870,6 +987,46 @@ export default function LibraryScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Sort Bar */}
+      <View style={styles.sortBar}>
+        <Text style={styles.sortLabel}>
+          {albumGroups.length} albums
+        </Text>
+        <View style={styles.sortControls}>
+          <TouchableOpacity style={styles.sortButton} onPress={() => setShowAlbumSortModal(true)}>
+            <Text style={styles.sortButtonText}>
+              {albumSortBy === 'name' ? 'Name' :
+               albumSortBy === 'artist' ? 'Artist' :
+               albumSortBy === 'trackCount' ? 'Tracks' :
+               albumSortBy === 'dateAdded' ? 'Date' : albumSortBy}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sortDirectionBtn} onPress={() => setAlbumSortDesc(!albumSortDesc)}>
+            <Text style={styles.sortDirection}>{albumSortDesc ? '↓' : '↑'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Play All / Shuffle */}
+      {albumGroups.length > 0 && (
+        <View style={styles.playAllRow}>
+          <TouchableOpacity
+            style={[styles.playAllButton, { backgroundColor: colors.primary }]}
+            onPress={() => handlePlayAllAlbums(false)}
+          >
+            <MaterialIcons name="play-arrow" size={20} color={colors.background} />
+            <Text style={[styles.playAllText, { color: colors.background }]}>Play All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shuffleAllButton, { backgroundColor: colors.surface }]}
+            onPress={() => handlePlayAllAlbums(true)}
+          >
+            <MaterialIcons name="shuffle" size={20} color={colors.text} />
+            <Text style={[styles.shuffleAllText, { color: colors.text }]}>Shuffle</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {albumGroups.length === 0 ? (
         renderEmptyLibrary()
@@ -927,6 +1084,45 @@ export default function LibraryScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Sort Bar */}
+      <View style={styles.sortBar}>
+        <Text style={styles.sortLabel}>
+          {artistGroups.length} artists
+        </Text>
+        <View style={styles.sortControls}>
+          <TouchableOpacity style={styles.sortButton} onPress={() => setShowArtistSortModal(true)}>
+            <Text style={styles.sortButtonText}>
+              {artistSortBy === 'name' ? 'Name' :
+               artistSortBy === 'trackCount' ? 'Tracks' :
+               artistSortBy === 'albumCount' ? 'Albums' : artistSortBy}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sortDirectionBtn} onPress={() => setArtistSortDesc(!artistSortDesc)}>
+            <Text style={styles.sortDirection}>{artistSortDesc ? '↓' : '↑'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Play All / Shuffle */}
+      {artistGroups.length > 0 && (
+        <View style={styles.playAllRow}>
+          <TouchableOpacity
+            style={[styles.playAllButton, { backgroundColor: colors.primary }]}
+            onPress={() => handlePlayAllArtists(false)}
+          >
+            <MaterialIcons name="play-arrow" size={20} color={colors.background} />
+            <Text style={[styles.playAllText, { color: colors.background }]}>Play All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shuffleAllButton, { backgroundColor: colors.surface }]}
+            onPress={() => handlePlayAllArtists(true)}
+          >
+            <MaterialIcons name="shuffle" size={20} color={colors.text} />
+            <Text style={[styles.shuffleAllText, { color: colors.text }]}>Shuffle</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {artistGroups.length === 0 ? (
         renderEmptyLibrary()
@@ -1213,6 +1409,101 @@ export default function LibraryScreen() {
             <TouchableOpacity
               style={[styles.sortCancelButton, { backgroundColor: colors.surfaceLight }]}
               onPress={() => setShowSortModal(false)}
+            >
+              <Text style={[styles.sortCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Album Sort Modal */}
+      <Modal
+        visible={showAlbumSortModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowAlbumSortModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.sortModalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sortModalTitle, { color: colors.text }]}>Sort Albums By</Text>
+            {[
+              { key: 'name' as const, label: 'Name' },
+              { key: 'artist' as const, label: 'Artist' },
+              { key: 'trackCount' as const, label: 'Track Count' },
+              { key: 'dateAdded' as const, label: 'Date Added' },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.sortOption,
+                  albumSortBy === option.key && { backgroundColor: colors.surfaceLight },
+                ]}
+                onPress={() => {
+                  setAlbumSortBy(option.key);
+                  setShowAlbumSortModal(false);
+                }}
+              >
+                <Text style={[
+                  styles.sortOptionText,
+                  { color: albumSortBy === option.key ? colors.primary : colors.text }
+                ]}>
+                  {option.label}
+                </Text>
+                {albumSortBy === option.key && (
+                  <MaterialIcons name="check" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.sortCancelButton, { backgroundColor: colors.surfaceLight }]}
+              onPress={() => setShowAlbumSortModal(false)}
+            >
+              <Text style={[styles.sortCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Artist Sort Modal */}
+      <Modal
+        visible={showArtistSortModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowArtistSortModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.sortModalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sortModalTitle, { color: colors.text }]}>Sort Artists By</Text>
+            {[
+              { key: 'name' as const, label: 'Name' },
+              { key: 'trackCount' as const, label: 'Track Count' },
+              { key: 'albumCount' as const, label: 'Album Count' },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.sortOption,
+                  artistSortBy === option.key && { backgroundColor: colors.surfaceLight },
+                ]}
+                onPress={() => {
+                  setArtistSortBy(option.key);
+                  setShowArtistSortModal(false);
+                }}
+              >
+                <Text style={[
+                  styles.sortOptionText,
+                  { color: artistSortBy === option.key ? colors.primary : colors.text }
+                ]}>
+                  {option.label}
+                </Text>
+                {artistSortBy === option.key && (
+                  <MaterialIcons name="check" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.sortCancelButton, { backgroundColor: colors.surfaceLight }]}
+              onPress={() => setShowArtistSortModal(false)}
             >
               <Text style={[styles.sortCancelText, { color: colors.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
@@ -1789,5 +2080,35 @@ const styles = StyleSheet.create({
   selectButtonsRow: {
     flexDirection: 'row',
     marginBottom: THEME.spacing.sm,
+  },
+  // Play All / Shuffle buttons
+  playAllRow: {
+    flexDirection: 'row',
+    gap: THEME.spacing.sm,
+    marginBottom: THEME.spacing.md,
+  },
+  playAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: THEME.spacing.md,
+    paddingVertical: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.full,
+    gap: 4,
+  },
+  playAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  shuffleAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: THEME.spacing.md,
+    paddingVertical: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.full,
+    gap: 4,
+  },
+  shuffleAllText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
