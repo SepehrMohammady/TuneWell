@@ -12,6 +12,7 @@ import type {
   SpotifyUser, 
   SpotifyPlaylist, 
   ImportedPlaylist,
+  StreamingTrack,
   QobuzUser,
   QobuzPlaylist,
 } from '../types';
@@ -26,6 +27,7 @@ interface StreamingStoreState {
   
   // Playlists
   spotifyPlaylists: SpotifyPlaylist[];
+  spotifyPlaylistTracks: Record<string, StreamingTrack[]>;
   importedPlaylists: ImportedPlaylist[];
   
   // Qobuz (future — currently "Coming Soon")
@@ -46,6 +48,8 @@ interface StreamingStoreState {
   
   // Actions - Playlists
   setSpotifyPlaylists: (playlists: SpotifyPlaylist[]) => void;
+  setSpotifyPlaylistTracks: (playlistId: string, tracks: StreamingTrack[]) => void;
+  getSpotifyPlaylistTracks: (playlistId: string) => StreamingTrack[];
   addImportedPlaylist: (playlist: ImportedPlaylist) => void;
   updateImportedPlaylist: (id: string, updates: Partial<ImportedPlaylist>) => void;
   removeImportedPlaylist: (id: string) => void;
@@ -72,6 +76,7 @@ const initialState = {
   spotifyRefreshToken: null,
   spotifyTokenExpiry: null,
   spotifyPlaylists: [],
+  spotifyPlaylistTracks: {},
   importedPlaylists: [],
   qobuzUserAuthToken: null,
   qobuzUser: null,
@@ -105,10 +110,19 @@ export const useStreamingStore = create<StreamingStoreState>()(
         spotifyRefreshToken: null,
         spotifyTokenExpiry: null,
         spotifyPlaylists: [],
+        spotifyPlaylistTracks: {},
       }),
       
       // Playlists
       setSpotifyPlaylists: (playlists) => set({ spotifyPlaylists: playlists }),
+      
+      setSpotifyPlaylistTracks: (playlistId, tracks) => set((state) => ({
+        spotifyPlaylistTracks: { ...state.spotifyPlaylistTracks, [playlistId]: tracks },
+      })),
+      
+      getSpotifyPlaylistTracks: (playlistId) => {
+        return get().spotifyPlaylistTracks[playlistId] || [];
+      },
       
       addImportedPlaylist: (playlist) => set((state) => ({
         importedPlaylists: [...state.importedPlaylists, playlist],
@@ -162,6 +176,7 @@ export const useStreamingStore = create<StreamingStoreState>()(
         spotifyUser: state.spotifyUser,
         spotifyRefreshToken: state.spotifyRefreshToken,
         spotifyPlaylists: state.spotifyPlaylists,
+        spotifyPlaylistTracks: state.spotifyPlaylistTracks,
         importedPlaylists: state.importedPlaylists,
         lastSyncAt: state.lastSyncAt,
       }),

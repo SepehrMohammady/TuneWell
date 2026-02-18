@@ -1,13 +1,16 @@
 /**
  * TuneWell Home Screen
  * 
- * Main landing screen showing:
- * - Now playing mini player
- * - Recently played
- * - Quick access to favorites and playlists
+ * Personalized landing screen showing:
+ * - Your Library overview
+ * - Recently Played tracks
+ * - Favorites
+ * - Custom Playlists
+ * - Mood Playlists
+ * - Streaming Playlists
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +18,8 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  Image,
+  FlatList,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,26 +27,42 @@ import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { THEME, ROUTES, MOOD_CATEGORIES, MoodId } from '../config';
-import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
+import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore, useStreamingStore } from '../store';
+import { audioService } from '../services/audio';
 import MiniPlayer from '../components/player/MiniPlayer';
+import type { Track, QueueItem } from '../types';
+import type { ScannedTrack } from '../services/libraryScanner';
 
 export default function HomeScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { currentTrack } = usePlayerStore();
-  const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood, trackMeta, recentlyPlayed } = usePlaylistStore();
+  const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood, trackMeta, recentlyPlayed, customPlaylists } = usePlaylistStore();
   const { tracks, stats, scanFolders } = useLibraryStore();
   const { colors, mode: themeMode } = useThemeStore();
+  const { spotifyPlaylists, spotifyConnected } = useStreamingStore();
   
-  // Calculate counts for quick actions - use trackMeta as dependency
+  // Recently played tracks (last 5)
+  const recentlyPlayedTracks = useMemo(() => {
+    return recentlyPlayed.slice(0, 5).map(trackId => {
+      const track = tracks.find(t => t.id === trackId);
+      return track ? { id: trackId, track } : null;
+    }).filter(Boolean) as { id: string; track: ScannedTrack }[];
+  }, [recentlyPlayed, tracks]);
+
+  // Favorite tracks (last 5 added favorites)
+  const favoriteTracks = useMemo(() => {
+    const favIds = getFavoriteIds();
+    return favIds.slice(0, 5).map(trackId => {
+      const track = tracks.find(t => t.id === trackId);
+      return track ? { id: trackId, track } : null;
+    }).filter(Boolean) as { id: string; track: ScannedTrack }[];
+  }, [trackMeta, tracks]);
+
   const favoritesCount = useMemo(() => {
     return Object.values(trackMeta).filter(m => m.isFavorite).length;
   }, [trackMeta]);
   
-  const recentlyPlayedTracks = useMemo(() => {
-    return recentlyPlayed.slice(0, 10);
-  }, [recentlyPlayed]);
-  
-  // Get mood track counts - use trackMeta as dependency
+  // Mood track counts
   const moodTrackCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     MOOD_CATEGORIES.forEach(mood => {
@@ -49,21 +70,75 @@ export default function HomeScreen() {
     });
     return counts;
   }, [trackMeta]);
-  
+
+  // convert ScannedTrack -> Track for playback
+  const convertToTrack = useCallback((st: ScannedTrack): Track => ({
+    id: st.id,
+    uri: st.uri,
+    filePath: st.path,
+    fileName: st.filename,
+    folderPath: st.folder,
+    folderName: st.folder.split('/').pop() || 'Music',
+    title: st.title || st.filename.replace(/\.[^/.]+$/, ''),
+    artist: st.artist || 'Unknown Artist',
+    album: st.album || 'Unknown Album',
+    albumArtist: st.albumArtist,
+    genre: st.genre,
+    year: st.year ? parseInt(st.year, 10) : undefined,
+    trackNumber: st.trackNumber ? parseInt(st.trackNumber, 10) : undefined,
+    duration: st.duration || 0,
+    sampleRate: st.sampleRate ? parseInt(st.sampleRate, 10) : 44100,
+    bitDepth: 16,
+    bitRate: st.bitrate ? parseInt(st.bitrate, 10) : undefined,
+    channels: 2,
+    format: st.extension.replace('.', '').toUpperCase(),
+    fileSize: st.size,
+    isLossless: ['.flac', '.wav', '.aiff', '.alac', '.ape'].includes(st.extension.toLowerCase()),
+    isHighRes: st.sampleRate ? parseInt(st.sampleRate, 10) > 48000 : false,
+    isDSD: ['.dff', '.dsf', '.dsd'].includes(st.extension.toLowerCase()),
+    artworkUri: st.albumArtUri || st.artwork || undefined,
+    playCount: 0,
+    isFavorite: false,
+    moods: [],
+    dateAdded: st.modifiedAt,
+    dateModified: st.modifiedAt,
+  }), []);
+
+  const handlePlayTrack = useCallback(async (scannedTrack: ScannedTrack, allScannedTracks: ScannedTrack[], index: number) => {
+    try {
+      await audioService.initialize();
+      const allTracks = allScannedTracks.map(convertToTrack);
+      const queueItems: QueueItem[] = allTracks.map((track, idx) => ({
+        id: `queue_${track.id}_${Date.now()}_${idx}`,
+        track,
+        addedAt: Date.now(),
+        source: 'library' as const,
+      }));
+      await audioService.playQueue(queueItems, index);
+    } catch (error: any) {
+      Alert.alert('Playback Error', error.message || 'Failed to play');
+    }
+  }, [convertToTrack]);
+
   const handleMoodPress = (moodId: MoodId, moodName: string) => {
     const count = moodTrackCounts[moodId] || 0;
     if (count === 0) {
-      Alert.alert('Empty Playlist', `No tracks in ${moodName} yet. Add mood to tracks from the player screen.`);
+      Alert.alert('Empty Playlist', `No tracks in ${moodName} yet.\nAdd moods to tracks from the player screen.`);
     } else {
-      Alert.alert('Coming Soon', `Playing ${count} ${moodName} tracks`);
+      navigation.navigate(ROUTES.PLAYLIST_DETAIL, { playlistId: moodId });
     }
   };
 
-  // Format file size
   const formatSize = (bytes: number): string => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const min = Math.floor(seconds / 60);
+    const sec = Math.floor(seconds % 60);
+    return `${min}:${sec.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -75,10 +150,16 @@ export default function HomeScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Library Stats */}
+        {/* Your Library Card */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Library</Text>
-          <View style={[styles.statsCard, { backgroundColor: colors.surface }]}>
+          <TouchableOpacity onPress={() => navigation.navigate(ROUTES.LIBRARY)}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Library</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.statsCard, { backgroundColor: colors.surface }]}
+            onPress={() => navigation.navigate(ROUTES.LIBRARY)}
+            activeOpacity={0.7}
+          >
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <MaterialIcons name="music-note" size={24} color={colors.primary} />
@@ -86,9 +167,9 @@ export default function HomeScreen() {
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Tracks</Text>
               </View>
               <View style={styles.statItem}>
-                <MaterialIcons name="folder" size={24} color={colors.primary} />
-                <Text style={[styles.statValue, { color: colors.text }]}>{scanFolders.length}</Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Folders</Text>
+                <MaterialIcons name="album" size={24} color={colors.primary} />
+                <Text style={[styles.statValue, { color: colors.text }]}>{stats?.totalAlbums || 0}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Albums</Text>
               </View>
               <View style={styles.statItem}>
                 <MaterialIcons name="favorite" size={24} color={colors.primary} />
@@ -101,41 +182,148 @@ export default function HomeScreen() {
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Size</Text>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Recently Played */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Recently Played</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recently Played</Text>
+            {recentlyPlayedTracks.length > 0 && (
+              <TouchableOpacity onPress={() => navigation.navigate('SystemPlaylistDetail', { type: 'recentlyPlayed' })}>
+                <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           {recentlyPlayedTracks.length === 0 ? (
-            <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
-              <MaterialIcons name="music-note" size={48} color={colors.textMuted} />
-              <Text style={[styles.emptyStateText, { color: colors.text }]}>No recently played tracks</Text>
-              <Text style={[styles.emptyStateSubtext, { color: colors.textSecondary }]}>
-                Add folders to your library to start listening
+            <View style={[styles.emptyCard, { backgroundColor: colors.surface }]}>
+              <MaterialIcons name="history" size={32} color={colors.textMuted} />
+              <Text style={[styles.emptyCardText, { color: colors.textSecondary }]}>
+                Start playing music to see your history
               </Text>
             </View>
           ) : (
-            <View style={[styles.recentList, { backgroundColor: colors.surface }]}>
-              {recentlyPlayedTracks.map((trackId, index) => {
-                const track = tracks.find(t => t.id === trackId);
-                return (
-                  <View key={`${trackId}-${index}`} style={[styles.recentItem, { borderBottomColor: colors.border }]}>
-                    <MaterialIcons name="music-note" size={20} color={colors.textMuted} style={styles.recentIcon} />
-                    <View style={styles.recentInfo}>
-                      <Text style={[styles.recentItemText, { color: colors.text }]} numberOfLines={1}>
-                        {track?.title || track?.fileName || 'Unknown Track'}
-                      </Text>
-                      <Text style={[styles.recentItemSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {track?.artist || 'Unknown Artist'}
-                      </Text>
+            <View style={[styles.trackListCard, { backgroundColor: colors.surface }]}>
+              {recentlyPlayedTracks.map(({ id, track }, index) => (
+                <TouchableOpacity
+                  key={`recent-${id}-${index}`}
+                  style={[styles.trackRow, index < recentlyPlayedTracks.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+                  onPress={() => handlePlayTrack(track, recentlyPlayedTracks.map(r => r.track), index)}
+                  activeOpacity={0.7}
+                >
+                  {(track.albumArtUri || track.artwork) ? (
+                    <Image source={{ uri: track.albumArtUri || track.artwork }} style={styles.trackThumb} />
+                  ) : (
+                    <View style={[styles.trackThumbPlaceholder, { backgroundColor: colors.surfaceLight }]}>
+                      <MaterialIcons name="music-note" size={18} color={colors.textMuted} />
                     </View>
+                  )}
+                  <View style={styles.trackRowInfo}>
+                    <Text style={[styles.trackRowTitle, { color: colors.text }]} numberOfLines={1}>
+                      {track.title || track.filename}
+                    </Text>
+                    <Text style={[styles.trackRowSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {track.artist || 'Unknown Artist'}
+                    </Text>
                   </View>
-                );
-              })}
+                  <Text style={[styles.trackRowDuration, { color: colors.textMuted }]}>
+                    {track.duration ? formatDuration(track.duration) : ''}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           )}
         </View>
+
+        {/* Favorites */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Favorites</Text>
+            {favoriteTracks.length > 0 && (
+              <TouchableOpacity onPress={() => navigation.navigate('SystemPlaylistDetail', { type: 'favorites' })}>
+                <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {favoriteTracks.length === 0 ? (
+            <View style={[styles.emptyCard, { backgroundColor: colors.surface }]}>
+              <MaterialIcons name="favorite-border" size={32} color={colors.textMuted} />
+              <Text style={[styles.emptyCardText, { color: colors.textSecondary }]}>
+                Tap the heart icon on tracks to add favorites
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.trackListCard, { backgroundColor: colors.surface }]}>
+              {favoriteTracks.map(({ id, track }, index) => (
+                <TouchableOpacity
+                  key={`fav-${id}-${index}`}
+                  style={[styles.trackRow, index < favoriteTracks.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+                  onPress={() => handlePlayTrack(track, favoriteTracks.map(f => f.track), index)}
+                  activeOpacity={0.7}
+                >
+                  {(track.albumArtUri || track.artwork) ? (
+                    <Image source={{ uri: track.albumArtUri || track.artwork }} style={styles.trackThumb} />
+                  ) : (
+                    <View style={[styles.trackThumbPlaceholder, { backgroundColor: colors.surfaceLight }]}>
+                      <MaterialIcons name="favorite" size={18} color={colors.primary} />
+                    </View>
+                  )}
+                  <View style={styles.trackRowInfo}>
+                    <Text style={[styles.trackRowTitle, { color: colors.text }]} numberOfLines={1}>
+                      {track.title || track.filename}
+                    </Text>
+                    <Text style={[styles.trackRowSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {track.artist || 'Unknown Artist'}
+                    </Text>
+                  </View>
+                  <Text style={[styles.trackRowDuration, { color: colors.textMuted }]}>
+                    {track.duration ? formatDuration(track.duration) : ''}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* My Playlists */}
+        {customPlaylists.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>My Playlists</Text>
+              <TouchableOpacity onPress={() => navigation.navigate(ROUTES.PLAYLISTS)}>
+                <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+              {customPlaylists.slice(0, 6).map((playlist) => {
+                const playlistTracks = playlist.trackIds.slice(0, 1).map(tid => tracks.find(t => t.id === tid)).filter(Boolean);
+                const artworkUri = playlistTracks[0]?.albumArtUri || playlistTracks[0]?.artwork;
+                return (
+                  <TouchableOpacity
+                    key={playlist.id}
+                    style={[styles.playlistCard, { backgroundColor: colors.surface }]}
+                    onPress={() => navigation.navigate(ROUTES.PLAYLIST_DETAIL, { playlistId: playlist.id })}
+                    activeOpacity={0.7}
+                  >
+                    {artworkUri ? (
+                      <Image source={{ uri: artworkUri }} style={styles.playlistCardImage} />
+                    ) : (
+                      <View style={[styles.playlistCardImage, { backgroundColor: colors.surfaceLight, justifyContent: 'center', alignItems: 'center' }]}>
+                        <MaterialIcons name="queue-music" size={28} color={colors.textMuted} />
+                      </View>
+                    )}
+                    <Text style={[styles.playlistCardName, { color: colors.text }]} numberOfLines={1}>
+                      {playlist.name}
+                    </Text>
+                    <Text style={[styles.playlistCardCount, { color: colors.textSecondary }]}>
+                      {playlist.trackIds.length} tracks
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Mood Playlists */}
         <View style={styles.section}>
@@ -156,6 +344,42 @@ export default function HomeScreen() {
             ))}
           </View>
         </View>
+
+        {/* Streaming Playlists */}
+        {spotifyConnected && spotifyPlaylists.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Spotify Playlists</Text>
+              <TouchableOpacity onPress={() => navigation.navigate(ROUTES.STREAMING)}>
+                <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+              {spotifyPlaylists.slice(0, 6).map((playlist) => (
+                <TouchableOpacity
+                  key={playlist.id}
+                  style={[styles.playlistCard, { backgroundColor: colors.surface }]}
+                  onPress={() => navigation.navigate(ROUTES.SPOTIFY_PLAYLIST_DETAIL, { playlistId: playlist.id })}
+                  activeOpacity={0.7}
+                >
+                  {playlist.imageUrl ? (
+                    <Image source={{ uri: playlist.imageUrl }} style={styles.playlistCardImage} />
+                  ) : (
+                    <View style={[styles.playlistCardImage, { backgroundColor: '#1DB954', justifyContent: 'center', alignItems: 'center' }]}>
+                      <MaterialCommunityIcons name="spotify" size={28} color="#FFFFFF" />
+                    </View>
+                  )}
+                  <Text style={[styles.playlistCardName, { color: colors.text }]} numberOfLines={1}>
+                    {playlist.name}
+                  </Text>
+                  <Text style={[styles.playlistCardCount, { color: colors.textSecondary }]}>
+                    {playlist.trackCount} tracks
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Spacer for mini player */}
         <View style={{ height: 100 }} />
@@ -181,9 +405,20 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: THEME.spacing.xl,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: THEME.spacing.md,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
+    marginBottom: THEME.spacing.md,
+  },
+  seeAll: {
+    fontSize: 14,
+    fontWeight: '500',
     marginBottom: THEME.spacing.md,
   },
   statsCard: {
@@ -206,44 +441,84 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  emptyState: {
+  // Track rows
+  trackListCard: {
+    borderRadius: THEME.borderRadius.lg,
+    overflow: 'hidden',
+  },
+  trackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: THEME.spacing.md,
+    paddingVertical: THEME.spacing.sm + 2,
+  },
+  trackThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: THEME.borderRadius.sm,
+  },
+  trackThumbPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: THEME.borderRadius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trackRowInfo: {
+    flex: 1,
+    marginLeft: THEME.spacing.md,
+  },
+  trackRowTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  trackRowSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  trackRowDuration: {
+    fontSize: 12,
+    marginLeft: THEME.spacing.sm,
+  },
+  // Empty states
+  emptyCard: {
     borderRadius: THEME.borderRadius.lg,
     padding: THEME.spacing.xl,
     alignItems: 'center',
   },
-  emptyStateText: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginTop: THEME.spacing.md,
-    marginBottom: 4,
-  },
-  emptyStateSubtext: {
+  emptyCardText: {
     fontSize: 14,
     textAlign: 'center',
+    marginTop: THEME.spacing.sm,
   },
-  recentList: {
+  // Horizontal playlist cards
+  horizontalScroll: {
+    marginHorizontal: -THEME.spacing.lg,
+    paddingHorizontal: THEME.spacing.lg,
+  },
+  playlistCard: {
+    width: 130,
+    marginRight: THEME.spacing.md,
     borderRadius: THEME.borderRadius.lg,
-    padding: THEME.spacing.md,
+    overflow: 'hidden',
   },
-  recentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: THEME.spacing.sm,
-    borderBottomWidth: 1,
+  playlistCardImage: {
+    width: 130,
+    height: 130,
+    borderRadius: THEME.borderRadius.lg,
   },
-  recentIcon: {
-    marginRight: THEME.spacing.sm,
+  playlistCardName: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: THEME.spacing.sm,
+    paddingHorizontal: THEME.spacing.xs,
   },
-  recentInfo: {
-    flex: 1,
+  playlistCardCount: {
+    fontSize: 11,
+    paddingHorizontal: THEME.spacing.xs,
+    paddingBottom: THEME.spacing.sm,
   },
-  recentItemText: {
-    fontSize: 14,
-  },
-  recentItemSubtext: {
-    fontSize: 12,
-    marginTop: 2,
-  },
+  // Mood grid
   moodGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
