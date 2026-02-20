@@ -42,7 +42,8 @@ export default function HomeScreen() {
   const { getFavoriteIds, getRecentlyPlayedIds, getTracksByMood, trackMeta, recentlyPlayed, customPlaylists } = usePlaylistStore();
   const { tracks, stats, scanFolders } = useLibraryStore();
   const { colors, mode: themeMode } = useThemeStore();
-  const { spotifyPlaylists, spotifyConnected } = useStreamingStore();
+  // Streaming hidden for now — no unrestricted streaming API available
+  // const { spotifyPlaylists, spotifyConnected } = useStreamingStore();
   const { homeSections, toggleHomeSection, moveHomeSection, resetHomeSections } = useSettingsStore();
   const [customizeVisible, setCustomizeVisible] = useState(false);
   
@@ -348,43 +349,8 @@ export default function HomeScreen() {
     </View>
   );
 
-  const renderSpotifyPlaylists = () => {
-    if (!spotifyConnected || spotifyPlaylists.length === 0) return null;
-    return (
-      <View style={styles.section} key="spotifyPlaylists">
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Spotify Playlists</Text>
-          <TouchableOpacity onPress={() => navigation.navigate(ROUTES.STREAMING)}>
-            <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-          {spotifyPlaylists.slice(0, 6).map((playlist) => (
-            <TouchableOpacity
-              key={playlist.id}
-              style={[styles.playlistCard, { backgroundColor: colors.surface }]}
-              onPress={() => navigation.navigate(ROUTES.SPOTIFY_PLAYLIST_DETAIL, { playlistId: playlist.id })}
-              activeOpacity={0.7}
-            >
-              {playlist.imageUrl ? (
-                <Image source={{ uri: playlist.imageUrl }} style={styles.playlistCardImage} />
-              ) : (
-                <View style={[styles.playlistCardImage, { backgroundColor: '#1DB954', justifyContent: 'center', alignItems: 'center' }]}>
-                  <MaterialCommunityIcons name="spotify" size={28} color="#FFFFFF" />
-                </View>
-              )}
-              <Text style={[styles.playlistCardName, { color: colors.text }]} numberOfLines={1}>
-                {playlist.name}
-              </Text>
-              <Text style={[styles.playlistCardCount, { color: colors.textSecondary }]}>
-                {playlist.trackCount} tracks
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  };
+  // Streaming hidden — renderSpotifyPlaylists disabled
+  const renderSpotifyPlaylists = () => null;
 
   const sectionMap: Record<string, () => React.ReactNode> = {
     library: renderLibrary,

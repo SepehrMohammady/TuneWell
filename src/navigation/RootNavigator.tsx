@@ -123,14 +123,7 @@ function MainTabs() {
           tabBarIcon: ({ focused, color }) => <TabIcon name="Playlists" focused={focused} color={color} />,
         }}
       />
-      <Tab.Screen
-        name={ROUTES.STREAMING as keyof MainTabsParamList}
-        component={StreamingScreen}
-        options={{
-          tabBarLabel: 'Streaming',
-          tabBarIcon: ({ focused, color }) => <TabIcon name="Streaming" focused={focused} color={color} />,
-        }}
-      />
+      {/* Streaming tab hidden — no unrestricted streaming API available for public release */}
       <Tab.Screen
         name={ROUTES.EQUALIZER as keyof MainTabsParamList}
         component={EqualizerScreen}

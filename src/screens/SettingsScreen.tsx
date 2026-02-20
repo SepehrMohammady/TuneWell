@@ -228,22 +228,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Connected Accounts Section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>CONNECTED ACCOUNTS</Text>
-          <View style={[styles.sectionContent, { backgroundColor: colors.surface }]}>
-            {renderSettingRow(
-              'Spotify',
-              useStreamingStore.getState().spotifyConnected 
-                ? useStreamingStore.getState().spotifyUser?.displayName || 'Connected'
-                : 'Not connected',
-              () => {
-                const nav = navigation as any;
-                nav.navigate(ROUTES.STREAMING);
-              }
-            )}
-          </View>
-        </View>
+        {/* Connected Accounts Section — hidden until streaming API restrictions are resolved */}
 
         {/* About Section */}
         <View style={styles.section}>
