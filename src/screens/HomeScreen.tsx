@@ -407,7 +407,7 @@ export default function HomeScreen() {
           onPress={() => setCustomizeVisible(true)}
           activeOpacity={0.7}
         >
-          <MaterialIcons name="tune" size={20} color={colors.primary} />
+          <MaterialIcons name="dashboard-customize" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
