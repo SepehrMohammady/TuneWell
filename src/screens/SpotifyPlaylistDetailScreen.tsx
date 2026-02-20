@@ -74,9 +74,19 @@ export default function SpotifyPlaylistDetailScreen() {
           setTracks(fetchedTracks);
           setSpotifyPlaylistTracks(playlistId, fetchedTracks);
         }
+        // Refresh expected track count from store (may have been updated by fetchPlaylistTracks)
+        const updatedPlaylist = useStreamingStore.getState().spotifyPlaylists.find(p => p.id === playlistId);
+        if (updatedPlaylist && updatedPlaylist.trackCount > 0) {
+          setExpectedTrackCount(updatedPlaylist.trackCount);
+        }
         // If fetchedTracks is empty but cachedTracks had data, keep showing cached data
       } catch (error: any) {
         console.error('[PlaylistDetail] Failed to load tracks:', error);
+        // Refresh expected track count — fetchPlaylistTracks may have updated metadata even on failure
+        const updatedP = useStreamingStore.getState().spotifyPlaylists.find(p => p.id === playlistId);
+        if (updatedP && updatedP.trackCount > 0) {
+          setExpectedTrackCount(updatedP.trackCount);
+        }
         // If we already have cached tracks showing, don't clear them
         if (cachedTracks.length === 0) {
           const msg = error?.message || 'Failed to load playlist tracks';
@@ -223,7 +233,11 @@ export default function SpotifyPlaylistDetailScreen() {
             {playlistName}
           </Text>
           <Text style={[styles.playlistSubtitle, { color: colors.textSecondary }]}>
-            {tracks.length > 0 ? tracks.length : expectedTrackCount} tracks · {playlistOwner}
+            {tracks.length > 0
+              ? (expectedTrackCount > tracks.length
+                ? `${tracks.length} of ${expectedTrackCount}`
+                : `${tracks.length}`)
+              : `${expectedTrackCount}`} tracks · {playlistOwner}
           </Text>
           <View style={styles.playlistActions}>
             <TouchableOpacity

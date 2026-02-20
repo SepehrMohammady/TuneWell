@@ -50,6 +50,7 @@ interface StreamingStoreState {
   setSpotifyPlaylists: (playlists: SpotifyPlaylist[]) => void;
   setSpotifyPlaylistTracks: (playlistId: string, tracks: StreamingTrack[]) => void;
   getSpotifyPlaylistTracks: (playlistId: string) => StreamingTrack[];
+  updateSpotifyPlaylistMeta: (playlistId: string, updates: Partial<Pick<SpotifyPlaylist, 'trackCount' | 'name' | 'imageUrl' | 'ownerName'>>) => void;
   addImportedPlaylist: (playlist: ImportedPlaylist) => void;
   updateImportedPlaylist: (id: string, updates: Partial<ImportedPlaylist>) => void;
   removeImportedPlaylist: (id: string) => void;
@@ -118,11 +119,23 @@ export const useStreamingStore = create<StreamingStoreState>()(
       
       setSpotifyPlaylistTracks: (playlistId, tracks) => set((state) => ({
         spotifyPlaylistTracks: { ...state.spotifyPlaylistTracks, [playlistId]: tracks },
+        // Auto-update trackCount to at least match loaded tracks
+        spotifyPlaylists: state.spotifyPlaylists.map(p =>
+          p.id === playlistId && tracks.length > p.trackCount
+            ? { ...p, trackCount: tracks.length }
+            : p
+        ),
       })),
       
       getSpotifyPlaylistTracks: (playlistId) => {
         return get().spotifyPlaylistTracks[playlistId] || [];
       },
+
+      updateSpotifyPlaylistMeta: (playlistId, updates) => set((state) => ({
+        spotifyPlaylists: state.spotifyPlaylists.map(p =>
+          p.id === playlistId ? { ...p, ...updates } : p
+        ),
+      })),
       
       addImportedPlaylist: (playlist) => set((state) => ({
         importedPlaylists: [...state.importedPlaylists, playlist],

@@ -362,7 +362,7 @@ class SpotifyService {
     if (response.status === 429) {
       const retryAfter = parseInt(response.headers.get('Retry-After') || '3', 10);
       const waitMs = Math.min(retryAfter * 1000, 10000); // Cap at 10 seconds
-      console.warn(`[SpotifyService] Rate limited (429). Waiting ${retryAfter}s before retry...`);
+      console.warn(`[SpotifyService] Rate limited (429). Waiting ${waitMs / 1000}s (Spotify asked for ${retryAfter}s)...`);
       await new Promise(resolve => setTimeout(resolve, waitMs));
       response = await doFetch(token);
       // If still rate limited after retry, throw a user-friendly error
@@ -373,8 +373,8 @@ class SpotifyService {
       }
     }
 
-    if (response.status === 401 || response.status === 403) {
-      // Token expired or forbidden — try refresh and retry
+    if (response.status === 401) {
+      // Token expired — try refresh and retry
       const refreshed = await this.refreshToken();
       if (refreshed) {
         const newToken = useStreamingStore.getState().spotifyAccessToken;
@@ -383,7 +383,7 @@ class SpotifyService {
         if (retryResponse.status === 429) {
           const retryAfter = parseInt(retryResponse.headers.get('Retry-After') || '3', 10);
           const waitMs = Math.min(retryAfter * 1000, 10000);
-          console.warn(`[SpotifyService] Rate limited on retry (429). Waiting ${retryAfter}s...`);
+          console.warn(`[SpotifyService] Rate limited on retry (429). Waiting ${waitMs / 1000}s...`);
           await new Promise(resolve => setTimeout(resolve, waitMs));
           retryResponse = await doFetch(newToken!);
         }
@@ -400,10 +400,12 @@ class SpotifyService {
         }
         return retryResponse.json();
       }
-      if (response.status === 403) {
-        throw new Error('SPOTIFY_FORBIDDEN');
-      }
       throw new Error('Spotify authentication expired');
+    }
+
+    // 403 Forbidden — Dev Mode policy or scope restriction, no retry needed
+    if (response.status === 403) {
+      throw new Error('SPOTIFY_FORBIDDEN');
     }
 
     if (!response.ok) {
@@ -472,6 +474,13 @@ class SpotifyService {
     try {
       useStreamingStore.getState().setLoading(true);
       
+      // Keep existing data for fallback track counts (Dev Mode may report 0)
+      const existingPlaylists = useStreamingStore.getState().spotifyPlaylists;
+      const existingCounts: Record<string, number> = {};
+      existingPlaylists.forEach(p => { existingCounts[p.id] = p.trackCount; });
+      
+      const cachedTracks = useStreamingStore.getState().spotifyPlaylistTracks;
+      
       const allPlaylists: SpotifyPlaylist[] = [];
       let currentOffset = offset;
       let hasMore = true;
@@ -484,15 +493,23 @@ class SpotifyService {
         const items = (data.items || []).filter((item: any) => item != null);
         console.log(`[SpotifyService] Fetched ${items.length} playlists (offset=${currentOffset}, total=${data.total})`);
         
-        const playlists: SpotifyPlaylist[] = items.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description || '',
-          imageUrl: item.images?.[0]?.url,
-          ownerName: item.owner?.display_name || 'Unknown',
-          trackCount: item.tracks?.total || 0,
-          uri: item.uri,
-        }));
+        const playlists: SpotifyPlaylist[] = items.map((item: any) => {
+          const apiTotal = item.tracks?.total || 0;
+          const cached = cachedTracks[item.id]?.length || 0;
+          const existing = existingCounts[item.id] || 0;
+          // Use the best available track count: API > existing metadata > cached tracks
+          const trackCount = apiTotal > 0 ? apiTotal : Math.max(existing, cached);
+          
+          return {
+            id: item.id,
+            name: item.name,
+            description: item.description || '',
+            imageUrl: item.images?.[0]?.url,
+            ownerName: item.owner?.display_name || 'Unknown',
+            trackCount,
+            uri: item.uri,
+          };
+        });
 
         allPlaylists.push(...playlists);
         hasMore = data.next !== null && items.length === limit;
@@ -579,63 +596,85 @@ class SpotifyService {
       return null;
     };
 
+    // Helper: update playlist metadata (trackCount) in the store from API response
+    const updateMetaFromResponse = (data: any) => {
+      const apiTotal = data?.tracks?.total ?? data?.total ?? 0;
+      if (apiTotal > 0) {
+        useStreamingStore.getState().updateSpotifyPlaylistMeta(playlistId, {
+          trackCount: apiTotal,
+        });
+      }
+    };
+
+    // Helper: paginate remaining tracks after loading initial batch
+    const paginateRemaining = async (
+      allTracks: SpotifyTrack[],
+      total: number,
+      nextUrl: string | null,
+    ): Promise<void> => {
+      if (total <= allTracks.length) return;
+      let nextEndpoint = nextUrl
+        ? nextUrl.replace(SPOTIFY_CONFIG.apiBaseUrl, '')
+        : `/playlists/${playlistId}/tracks?limit=100&offset=${allTracks.length}&additional_types=track`;
+      
+      while (allTracks.length < total) {
+        try {
+          const pd = await this.apiRequest<any>(nextEndpoint);
+          const pi = extractItems(pd);
+          if (!pi) break;
+          allTracks.push(...pi.map(parseTrackItem).filter(Boolean) as SpotifyTrack[]);
+          if (!pd?.next) break;
+          nextEndpoint = pd.next.replace(SPOTIFY_CONFIG.apiBaseUrl, '');
+        } catch {
+          console.warn(`[SpotifyService] Pagination stopped at ${allTracks.length}/${total} tracks (Dev Mode likely)`);
+          break;
+        }
+      }
+    };
+
     // Strategy 1: /playlists/{id}/tracks (standard endpoint)
     try {
-      const allTracks: SpotifyTrack[] = [];
-      let currentOffset = offset;
-      let hasMore = true;
+      const data = await this.apiRequest<any>(
+        `/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}&additional_types=track`
+      );
+      const items = extractItems(data) || (Array.isArray(data?.items) ? data.items : null);
+      
+      if (items && items.length > 0) {
+        const allTracks = items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
+        const total = data?.total ?? 0;
 
-      while (hasMore) {
-        const data = await this.apiRequest<any>(
-          `/playlists/${playlistId}/tracks?limit=${limit}&offset=${currentOffset}&additional_types=track`
-        );
-        const items = extractItems(data) || data?.items;
-        if (!items || !Array.isArray(items) || items.length === 0) break;
+        // Paginate remaining pages
+        await paginateRemaining(allTracks, total, data?.next);
 
-        const tracks = items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
-        allTracks.push(...tracks);
-        hasMore = data?.next !== null && items.length === limit;
-        currentOffset += limit;
-      }
-
-      if (allTracks.length > 0) {
-        console.log(`[SpotifyService] tracks endpoint: ${allTracks.length} tracks loaded`);
+        console.log(`[SpotifyService] tracks endpoint: ${allTracks.length}${total ? '/' + total : ''} tracks loaded`);
         useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, allTracks);
+        if (total > 0) {
+          useStreamingStore.getState().updateSpotifyPlaylistMeta(playlistId, { trackCount: total });
+        }
         return allTracks;
       }
     } catch (error: any) {
       console.warn('[SpotifyService] /tracks endpoint failed:', error?.message);
     }
 
-    // Strategy 2: /playlists/{id} (full playlist object)
+    // Strategy 2: /playlists/{id} (full playlist object — embeds up to 100 tracks)
     try {
       const data = await this.apiRequest<any>(`/playlists/${playlistId}`);
+
+      // Always update metadata (trackCount) from the full object, even if no tracks
+      updateMetaFromResponse(data);
+
       const items = extractItems(data);
 
       if (items) {
-        const allTracks: SpotifyTrack[] = [];
-        allTracks.push(...items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[]);
-
-        // Paginate remaining
+        const allTracks = items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
         const total = data?.tracks?.total ?? data?.total ?? 0;
-        if (total > allTracks.length) {
-          let nextOff = items.length;
-          while (nextOff < total) {
-            try {
-              const pd = await this.apiRequest<any>(
-                `/playlists/${playlistId}/tracks?limit=100&offset=${nextOff}&additional_types=track`
-              );
-              const pi = extractItems(pd);
-              if (!pi) break;
-              allTracks.push(...pi.map(parseTrackItem).filter(Boolean) as SpotifyTrack[]);
-              if (!pd?.next) break;
-              nextOff += 100;
-            } catch { break; }
-          }
-        }
+
+        // Try to paginate remaining (embedded tracks max 100, need the rest)
+        await paginateRemaining(allTracks, total, data?.tracks?.next);
 
         if (allTracks.length > 0) {
-          console.log(`[SpotifyService] playlist object: ${allTracks.length} tracks loaded`);
+          console.log(`[SpotifyService] playlist object: ${allTracks.length}/${total} tracks loaded`);
           useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, allTracks);
           return allTracks;
         }
