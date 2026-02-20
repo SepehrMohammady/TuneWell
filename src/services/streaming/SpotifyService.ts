@@ -344,7 +344,7 @@ class SpotifyService {
     }
 
     const doFetch = async (accessToken: string) => {
-      return fetch(`${SPOTIFY_CONFIG.apiBaseUrl}${endpoint}`, {
+      const resp = await fetch(`${SPOTIFY_CONFIG.apiBaseUrl}${endpoint}`, {
         ...options,
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -352,6 +352,8 @@ class SpotifyService {
           ...options.headers,
         },
       });
+      console.log(`[SpotifyAPI] ${options.method || 'GET'} ${endpoint} → ${resp.status}`);
+      return resp;
     };
 
     let response = await doFetch(token);
@@ -551,21 +553,33 @@ class SpotifyService {
     }
 
     const parseTrackItem = (item: any): SpotifyTrack | null => {
-      if (!item?.track || !item.track.id) return null;
+      if (!item) return null;
+      // Handle both {track: {...}} wrapper and direct track objects
+      const t = item.track || item;
+      if (!t?.id) return null;
       return {
-        id: item.track.id,
-        name: item.track.name,
-        artist: item.track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
-        album: item.track.album?.name || 'Unknown',
-        duration: item.track.duration_ms,
-        imageUrl: item.track.album?.images?.[0]?.url,
-        uri: item.track.uri,
-        previewUrl: item.track.preview_url,
-        isPlayable: item.track.is_playable !== false,
+        id: t.id,
+        name: t.name || 'Unknown',
+        artist: t.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+        album: t.album?.name || 'Unknown',
+        duration: t.duration_ms,
+        imageUrl: t.album?.images?.[0]?.url,
+        uri: t.uri,
+        previewUrl: t.preview_url,
+        isPlayable: t.is_playable !== false,
       };
     };
 
-    // Strategy 1: Dedicated tracks endpoint with pagination
+    // Helper: extract items array from response (handles normal + Dev Mode shapes)
+    const extractItems = (data: any): any[] | null => {
+      // Normal: data.tracks.items (from /playlists/{id})
+      if (Array.isArray(data?.tracks?.items) && data.tracks.items.length > 0) return data.tracks.items;
+      // Paging: data.items (from /playlists/{id}/tracks or Dev Mode top-level)
+      if (Array.isArray(data?.items) && data.items.length > 0) return data.items;
+      return null;
+    };
+
+    // Strategy 1: /playlists/{id}/tracks (standard endpoint)
     try {
       const allTracks: SpotifyTrack[] = [];
       let currentOffset = offset;
@@ -575,94 +589,65 @@ class SpotifyService {
         const data = await this.apiRequest<any>(
           `/playlists/${playlistId}/tracks?limit=${limit}&offset=${currentOffset}&additional_types=track`
         );
-        if (!data || !data.items) {
-          console.warn('[SpotifyService] Strategy 1: data or data.items is null/undefined');
-          break;
-        }
+        const items = extractItems(data) || data?.items;
+        if (!items || !Array.isArray(items) || items.length === 0) break;
 
-        const items = data.items;
         const tracks = items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
         allTracks.push(...tracks);
-        hasMore = data.next !== null && items.length === limit;
+        hasMore = data?.next !== null && items.length === limit;
         currentOffset += limit;
       }
 
       if (allTracks.length > 0) {
+        console.log(`[SpotifyService] tracks endpoint: ${allTracks.length} tracks loaded`);
         useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, allTracks);
         return allTracks;
       }
-      // If zero tracks returned, fall through to strategy 2
-      console.warn('[SpotifyService] Strategy 1 returned 0 tracks, trying full playlist object');
     } catch (error: any) {
-      console.warn('[SpotifyService] Strategy 1 failed:', error?.message);
-      // Fall through to strategy 2
+      console.warn('[SpotifyService] /tracks endpoint failed:', error?.message);
     }
 
-    // Strategy 2: Full playlist object (includes embedded tracks on first page)
+    // Strategy 2: /playlists/{id} (full playlist object)
     try {
       const data = await this.apiRequest<any>(`/playlists/${playlistId}`);
-      if (data?.tracks?.items) {
-        const allTracks: SpotifyTrack[] = [];
-        const firstPageTracks = data.tracks.items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
-        allTracks.push(...firstPageTracks);
+      const items = extractItems(data);
 
-        // Paginate remaining tracks if any
-        if (data.tracks.next && data.tracks.total > allTracks.length) {
-          let nextOffset = data.tracks.items.length;
-          let hasMore = true;
-          while (hasMore) {
+      if (items) {
+        const allTracks: SpotifyTrack[] = [];
+        allTracks.push(...items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[]);
+
+        // Paginate remaining
+        const total = data?.tracks?.total ?? data?.total ?? 0;
+        if (total > allTracks.length) {
+          let nextOff = items.length;
+          while (nextOff < total) {
             try {
-              const pageData = await this.apiRequest<any>(
-                `/playlists/${playlistId}/tracks?limit=100&offset=${nextOffset}&additional_types=track`
+              const pd = await this.apiRequest<any>(
+                `/playlists/${playlistId}/tracks?limit=100&offset=${nextOff}&additional_types=track`
               );
-              if (!pageData?.items) break;
-              const pageTracks = pageData.items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
-              allTracks.push(...pageTracks);
-              hasMore = pageData.next !== null && pageData.items.length === 100;
-              nextOffset += 100;
-            } catch {
-              // Can't paginate further, return what we have
-              break;
-            }
+              const pi = extractItems(pd);
+              if (!pi) break;
+              allTracks.push(...pi.map(parseTrackItem).filter(Boolean) as SpotifyTrack[]);
+              if (!pd?.next) break;
+              nextOff += 100;
+            } catch { break; }
           }
         }
 
         if (allTracks.length > 0) {
+          console.log(`[SpotifyService] playlist object: ${allTracks.length} tracks loaded`);
           useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, allTracks);
           return allTracks;
         }
       }
-      console.warn('[SpotifyService] Strategy 2 returned 0 tracks, trying fields fallback');
     } catch (error: any) {
-      console.warn('[SpotifyService] Strategy 2 failed:', error?.message);
+      console.warn('[SpotifyService] playlist object failed:', error?.message);
     }
 
-    // Strategy 3: Fields-restricted endpoint (lighter response, may bypass restrictions)
-    try {
-      const data = await this.apiRequest<any>(
-        `/playlists/${playlistId}?fields=tracks.items(track(id,name,artists,album,duration_ms,uri,preview_url,is_playable)),tracks.next,tracks.total`
-      );
-      if (data?.tracks?.items) {
-        const tracks = data.tracks.items.map(parseTrackItem).filter(Boolean) as SpotifyTrack[];
-        if (tracks.length > 0) {
-          useStreamingStore.getState().setSpotifyPlaylistTracks(playlistId, tracks);
-          return tracks;
-        }
-      }
-    } catch (error: any) {
-      console.error('[SpotifyService] All 3 strategies failed for playlist:', playlistId, error?.message);
-      if (error?.message === 'SPOTIFY_FORBIDDEN') {
-        throw new Error(
-          'Access denied by Spotify. This playlist may be restricted in Development Mode. ' +
-          'Try disconnecting and reconnecting your Spotify account, or try your own playlists.'
-        );
-      }
-      throw error;
-    }
-
-    // All strategies returned empty
-    console.warn('[SpotifyService] All strategies returned 0 tracks for playlist:', playlistId);
-    return [];
+    // All strategies failed — this is a Spotify Development Mode restriction
+    console.warn('[SpotifyService] No tracks returned for playlist:', playlistId,
+      '— likely a Spotify Developer Dashboard configuration issue');
+    throw new Error('SPOTIFY_DEV_MODE_RESTRICTED');
   }
 
   /**
