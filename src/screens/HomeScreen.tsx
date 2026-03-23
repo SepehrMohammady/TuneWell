@@ -361,6 +361,9 @@ export default function HomeScreen() {
     spotifyPlaylists: renderSpotifyPlaylists,
   };
 
+  // Sections hidden from UI (streaming disabled)
+  const hiddenSections = new Set(['spotifyPlaylists']);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
@@ -383,7 +386,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {homeSections
-          .filter(s => s.visible)
+          .filter(s => s.visible && !hiddenSections.has(s.id))
           .map(section => (
             <React.Fragment key={section.id}>
               {sectionMap[section.id]?.()}
@@ -416,7 +419,9 @@ export default function HomeScreen() {
               Show or hide sections and reorder them
             </Text>
             <ScrollView style={styles.modalList}>
-              {homeSections.map((section, index) => (
+              {(() => {
+                const visibleSections = homeSections.filter(s => !hiddenSections.has(s.id));
+                return visibleSections.map((section, index) => (
                 <View key={section.id} style={[styles.customizeRow, { borderBottomColor: colors.border }]}>
                   <View style={styles.customizeLeft}>
                     <MaterialIcons
@@ -442,10 +447,10 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => moveHomeSection(section.id, 'down')}
-                      disabled={index === homeSections.length - 1}
+                      disabled={index === visibleSections.length - 1}
                       style={styles.arrowBtn}
                     >
-                      <MaterialIcons name="keyboard-arrow-down" size={22} color={index === homeSections.length - 1 ? colors.textMuted : colors.textSecondary} />
+                      <MaterialIcons name="keyboard-arrow-down" size={22} color={index === visibleSections.length - 1 ? colors.textMuted : colors.textSecondary} />
                     </TouchableOpacity>
                     <Switch
                       value={section.visible}
@@ -455,7 +460,8 @@ export default function HomeScreen() {
                     />
                   </View>
                 </View>
-              ))}
+              ));
+              })()}
             </ScrollView>
             <TouchableOpacity
               style={[styles.resetBtn, { borderColor: colors.border }]}
