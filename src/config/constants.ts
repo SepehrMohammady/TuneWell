@@ -239,6 +239,10 @@ export const ROUTES = {
   STREAMING: 'Streaming',
   SPOTIFY_PLAYLIST_DETAIL: 'SpotifyPlaylistDetail',
   IMPORT_PLAYLIST: 'ImportPlaylist',
+  
+  // Telegram
+  TELEGRAM: 'TelegramScreen',
+  TELEGRAM_CHANNEL_DETAIL: 'TelegramChannelDetail',
 } as const;
 
 export type Route = typeof ROUTES[keyof typeof ROUTES];

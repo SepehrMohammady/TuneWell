@@ -16,7 +16,6 @@ import {
   TouchableOpacity,
   StatusBar,
   FlatList,
-  Alert,
   PermissionsAndroid,
   Platform,
   TextInput,
@@ -27,6 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { pickDirectory } from '@react-native-documents/picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { showAlert } from '../store/alertStore';
 import { THEME, SORT_OPTIONS } from '../config';
 import { useLibraryStore, usePlayerStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
@@ -270,7 +270,7 @@ export default function LibraryScreen() {
         const granted = await requestStoragePermission();
         setHasPermission(granted);
         if (!granted) {
-          Alert.alert(
+          showAlert(
             'Permission Required',
             'TuneWell needs storage permission to access your music files. Please grant permission in Settings.',
             [{ text: 'OK' }]
@@ -287,7 +287,7 @@ export default function LibraryScreen() {
         
         // Check if folder already exists
         if (scanFolders.includes(folderPath)) {
-          Alert.alert('Already Added', 'This folder is already in your library.');
+          showAlert('Already Added', 'This folder is already in your library.');
           return;
         }
         
@@ -304,7 +304,7 @@ export default function LibraryScreen() {
         } else {
           // No subfolders, just add the folder
           addScanFolder(folderPath);
-          Alert.alert(
+          showAlert(
             'Folder Added', 
             `Added folder to library.\n\nTap "Scan" to find music files.`,
             [
@@ -326,20 +326,20 @@ export default function LibraryScreen() {
 
   const handleManualAddFolder = useCallback(() => {
     if (!manualPath.trim()) {
-      Alert.alert('Error', 'Please enter a folder path.');
+      showAlert('Error', 'Please enter a folder path.');
       return;
     }
     
     const path = manualPath.trim();
     if (scanFolders.includes(path)) {
-      Alert.alert('Already Added', 'This folder is already in your library.');
+      showAlert('Already Added', 'This folder is already in your library.');
       return;
     }
     
     addScanFolder(path);
     setManualPath('');
     setShowFolderModal(false);
-    Alert.alert('Folder Added', 'Folder added to library.');
+    showAlert('Folder Added', 'Folder added to library.');
   }, [manualPath, addScanFolder, scanFolders]);
 
   // Handle adding parent folder (includes all subfolders when scanned)
@@ -351,7 +351,7 @@ export default function LibraryScreen() {
     setSubfolders([]);
     setParentFolderUri('');
     setParentFolderName('');
-    Alert.alert(
+    showAlert(
       'Folder Added', 
       `Added folder to library.\n\nTap "Scan" to find music files.`,
       [
@@ -427,7 +427,7 @@ export default function LibraryScreen() {
     setSubfolders([]);
     setParentFolderUri('');
     setParentFolderName('');
-    Alert.alert(
+    showAlert(
       'Folders Added', 
       `Tap "Scan" to find music files.`,
       [
@@ -439,7 +439,7 @@ export default function LibraryScreen() {
   }, [startScan, handleAddFolder]);
 
   const handleRemoveFolder = useCallback((folderPath: string) => {
-    Alert.alert(
+    showAlert(
       'Remove Folder',
       'Remove this folder from your library?\n\nThis will not delete your music files.',
       [
@@ -456,7 +456,7 @@ export default function LibraryScreen() {
   const handleClearAllFolders = useCallback(() => {
     if (scanFolders.length === 0) return;
     
-    Alert.alert(
+    showAlert(
       'Clear All Folders',
       `Remove all ${scanFolders.length} folder${scanFolders.length !== 1 ? 's' : ''} from your library?\n\nThis will not delete your music files.`,
       [
@@ -475,13 +475,13 @@ export default function LibraryScreen() {
       const granted = await requestStoragePermission();
       setHasPermission(granted);
       if (!granted) {
-        Alert.alert('Permission Required', 'Please grant storage permission to scan for music.');
+        showAlert('Permission Required', 'Please grant storage permission to scan for music.');
         return;
       }
     }
     
     if (scanFolders.length === 0) {
-      Alert.alert('No Folders', 'Please add at least one folder to scan.');
+      showAlert('No Folders', 'Please add at least one folder to scan.');
       return;
     }
     startScan();
@@ -539,7 +539,7 @@ export default function LibraryScreen() {
       
       // If we filtered out the track, show error
       if (allTracks.length === 0) {
-        Alert.alert('No Playable Tracks', 'No audio files found.');
+        showAlert('No Playable Tracks', 'No audio files found.');
         return;
       }
       
@@ -560,7 +560,7 @@ export default function LibraryScreen() {
       await audioService.playQueue(queueItems, playIndex);
     } catch (error: any) {
       console.error('Playback error:', error);
-      Alert.alert('Playback Error', error.message || 'Failed to play track');
+      showAlert('Playback Error', error.message || 'Failed to play track');
     }
   }, [filteredTracks]);
 
@@ -598,7 +598,7 @@ export default function LibraryScreen() {
       console.log('[handlePlayFolder] Folder name:', folderName);
       
       if (!folderName) {
-        Alert.alert('Error', 'Could not determine folder name from path.');
+        showAlert('Error', 'Could not determine folder name from path.');
         return;
       }
       
@@ -638,7 +638,7 @@ export default function LibraryScreen() {
       console.log('[handlePlayFolder] Found', folderTracks.length, 'tracks for folder:', folderName);
       
       if (folderTracks.length === 0) {
-        Alert.alert('No Tracks', `No audio files found in folder "${folderName}".\n\nMake sure you have scanned the library after adding this folder.`);
+        showAlert('No Tracks', `No audio files found in folder "${folderName}".\n\nMake sure you have scanned the library after adding this folder.`);
         return;
       }
       
@@ -660,10 +660,10 @@ export default function LibraryScreen() {
       await audioService.playQueue(queueItems, 0);
       
       // Show brief confirmation
-      Alert.alert('Now Playing', `Playing ${folderTracks.length} tracks from "${folderName}"`);
+      showAlert('Now Playing', `Playing ${folderTracks.length} tracks from "${folderName}"`);
     } catch (error: any) {
       console.error('Folder playback error:', error);
-      Alert.alert('Playback Error', error.message || 'Failed to play folder');
+      showAlert('Playback Error', error.message || 'Failed to play folder');
     }
   }, [tracks]);
 
@@ -899,7 +899,7 @@ export default function LibraryScreen() {
       }));
       await audioService.playQueue(queueItems, 0);
     } catch (error: any) {
-      Alert.alert('Playback Error', error.message || 'Failed to play album');
+      showAlert('Playback Error', error.message || 'Failed to play album');
     }
   }, []);
 
@@ -921,7 +921,7 @@ export default function LibraryScreen() {
       }));
       await audioService.playQueue(queueItems, 0);
     } catch (error: any) {
-      Alert.alert('Playback Error', error.message || 'Failed to play');
+      showAlert('Playback Error', error.message || 'Failed to play');
     }
   }, [filteredTracks]);
 
@@ -943,7 +943,7 @@ export default function LibraryScreen() {
       }));
       await audioService.playQueue(queueItems, 0);
     } catch (error: any) {
-      Alert.alert('Playback Error', error.message || 'Failed to play');
+      showAlert('Playback Error', error.message || 'Failed to play');
     }
   }, [albumGroups]);
 
@@ -965,7 +965,7 @@ export default function LibraryScreen() {
       }));
       await audioService.playQueue(queueItems, 0);
     } catch (error: any) {
-      Alert.alert('Playback Error', error.message || 'Failed to play');
+      showAlert('Playback Error', error.message || 'Failed to play');
     }
   }, [artistGroups]);
 

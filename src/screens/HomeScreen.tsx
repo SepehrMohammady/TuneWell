@@ -20,7 +20,6 @@ import {
   StatusBar,
   Image,
   FlatList,
-  Alert,
   Modal,
   Switch,
 } from 'react-native';
@@ -28,6 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { showAlert } from '../store/alertStore';
 import { THEME, ROUTES, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore, useStreamingStore } from '../store';
 import { useSettingsStore } from '../store/settingsStore';
@@ -122,14 +122,14 @@ export default function HomeScreen() {
       }));
       await audioService.playQueue(queueItems, index);
     } catch (error: any) {
-      Alert.alert('Playback Error', error.message || 'Failed to play');
+      showAlert('Playback Error', error.message || 'Failed to play');
     }
   }, [convertToTrack]);
 
   const handleMoodPress = (moodId: MoodId, moodName: string) => {
     const count = moodTrackCounts[moodId] || 0;
     if (count === 0) {
-      Alert.alert('Empty Playlist', `No tracks in ${moodName} yet.\nAdd moods to tracks from the player screen.`);
+      showAlert('Empty Playlist', `No tracks in ${moodName} yet.\nAdd moods to tracks from the player screen.`);
     } else {
       navigation.navigate(ROUTES.PLAYLIST_DETAIL, { playlistId: moodId });
     }
@@ -352,6 +352,32 @@ export default function HomeScreen() {
   // Streaming hidden — renderSpotifyPlaylists disabled
   const renderSpotifyPlaylists = () => null;
 
+  const renderTelegram = () => (
+    <View style={styles.section} key="telegram">
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Telegram Music</Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.statsCard, { backgroundColor: colors.surface }]}
+        onPress={() => navigation.navigate('TelegramScreen')}
+        activeOpacity={0.7}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}>
+          <MaterialCommunityIcons name="telegram" size={32} color="#0088cc" />
+          <View style={{ marginLeft: 12, flex: 1 }}>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 2 }]}>
+              Manage Telegram Bot
+            </Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+              Play music from your Telegram channels &amp; groups
+            </Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={24} color={colors.textMuted} />
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+
   const sectionMap: Record<string, () => React.ReactNode> = {
     library: renderLibrary,
     recentlyPlayed: renderRecentlyPlayed,
@@ -359,6 +385,7 @@ export default function HomeScreen() {
     myPlaylists: renderMyPlaylists,
     moodPlaylists: renderMoodPlaylists,
     spotifyPlaylists: renderSpotifyPlaylists,
+    telegram: renderTelegram,
   };
 
   // Sections hidden from UI (streaming disabled)
@@ -429,7 +456,8 @@ export default function HomeScreen() {
                             section.id === 'recentlyPlayed' ? 'history' :
                             section.id === 'favorites' ? 'favorite' :
                             section.id === 'myPlaylists' ? 'queue-music' :
-                            section.id === 'moodPlaylists' ? 'mood' : 'cloud'}
+                            section.id === 'moodPlaylists' ? 'mood' :
+                            section.id === 'telegram' ? 'send' : 'cloud'}
                       size={20}
                       color={section.visible ? colors.primary : colors.textMuted}
                     />
@@ -467,7 +495,7 @@ export default function HomeScreen() {
               style={[styles.resetBtn, { borderColor: colors.border }]}
               onPress={() => {
                 resetHomeSections();
-                Alert.alert('Reset', 'Home layout restored to default.');
+                showAlert('Reset', 'Home layout restored to default.');
               }}
             >
               <MaterialIcons name="restore" size={18} color={colors.textSecondary} />

@@ -17,9 +17,9 @@ import {
   TouchableOpacity,
   Modal,
   ScrollView,
-  Alert,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { showAlert } from '../../store/alertStore';
 
 // ============================================================================
 // MOOD DATA - Neuropsychology-based mood categories
@@ -411,7 +411,7 @@ export const NeuroMoodSelector: React.FC<NeuroMoodSelectorProps> = ({
       } else {
         // Check max limit
         if (selectedMoods.length >= maxSelections) {
-          Alert.alert(
+          showAlert(
             'Maximum Reached',
             `You can only select up to ${maxSelections} moods per track.`,
             [{ text: 'OK' }]

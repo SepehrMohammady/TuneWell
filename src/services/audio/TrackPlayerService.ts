@@ -12,7 +12,7 @@ import TrackPlayer, {
   RepeatMode,
   AppKilledPlaybackBehavior,
 } from 'react-native-track-player';
-import { Alert } from 'react-native';
+import { showAlert } from '../../store/alertStore';
 
 /**
  * Register playback service for background operation
@@ -82,7 +82,7 @@ export async function PlaybackService(): Promise<void> {
       // Ignore if we can't get track info
     }
     // Show error alert for debugging
-    Alert.alert(
+    showAlert(
       'Playback Error (Debug)',
       errorDetails,
       [{ text: 'OK' }]

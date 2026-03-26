@@ -6,6 +6,7 @@
 export { audioService, PlaybackService, setupTrackPlayer } from './audio';
 export * from './metadata';
 export { spotifyService, playlistImportService } from './streaming';
+export { telegramService } from './telegram';
 
 // Note: libraryScannerService is available but not currently used
 // The app uses libraryScanner.ts directly via libraryStore

@@ -15,7 +15,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  Alert,
   TextInput,
   Modal,
 } from 'react-native';
@@ -24,6 +23,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { showAlert } from '../store/alertStore';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
@@ -97,14 +97,14 @@ export default function PlaylistsScreen() {
 
   const handleCreatePlaylist = useCallback(() => {
     if (!newPlaylistName.trim()) {
-      Alert.alert('Error', 'Please enter a playlist name');
+      showAlert('Error', 'Please enter a playlist name');
       return;
     }
     
     createPlaylist(newPlaylistName.trim());
     setNewPlaylistName('');
     setShowCreateModal(false);
-    Alert.alert('Success', `Playlist "${newPlaylistName.trim()}" created!`);
+    showAlert('Success', `Playlist "${newPlaylistName.trim()}" created!`);
   }, [newPlaylistName, createPlaylist]);
   
   // Play a system playlist
@@ -128,7 +128,7 @@ export default function PlaylistsScreen() {
     }
     
     if (trackIds.length === 0) {
-      Alert.alert('Empty Playlist', 'No tracks in this playlist yet.');
+      showAlert('Empty Playlist', 'No tracks in this playlist yet.');
       return;
     }
     
@@ -138,7 +138,7 @@ export default function PlaylistsScreen() {
       .filter((t): t is NonNullable<typeof t> => t !== undefined);
     
     if (playlistTracks.length === 0) {
-      Alert.alert('Error', 'Could not find tracks in library.');
+      showAlert('Error', 'Could not find tracks in library.');
       return;
     }
     
@@ -158,7 +158,7 @@ export default function PlaylistsScreen() {
     const trackIds = getTracksByMood(moodId);
     
     if (trackIds.length === 0) {
-      Alert.alert('Empty Playlist', 'No tracks with this mood yet. Add mood to tracks from the player screen.');
+      showAlert('Empty Playlist', 'No tracks with this mood yet. Add mood to tracks from the player screen.');
       return;
     }
     
@@ -168,7 +168,7 @@ export default function PlaylistsScreen() {
       .filter((t): t is NonNullable<typeof t> => t !== undefined);
     
     if (playlistTracks.length === 0) {
-      Alert.alert('Error', 'Could not find tracks in library.');
+      showAlert('Error', 'Could not find tracks in library.');
       return;
     }
     

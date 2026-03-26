@@ -17,7 +17,6 @@ import {
   TouchableOpacity,
   StatusBar,
   Switch,
-  Alert,
   Modal,
   TextInput,
   PanResponder,
@@ -28,6 +27,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RNFS from 'react-native-fs';
+import { showAlert } from '../store/alertStore';
 import { pick, types } from '@react-native-documents/picker';
 import { THEME, EQ_FREQUENCIES, EQ_PRESETS } from '../config';
 import { useEQStore, BUILT_IN_PRESETS, useThemeStore } from '../store';
@@ -109,7 +109,7 @@ export default function EqualizerScreen() {
       // Use store's saveCustomPreset which persists the preset
       saveCustomPreset(presetName.trim());
       setShowSaveModal(false);
-      Alert.alert('Saved', `Preset "${presetName.trim()}" saved successfully!`);
+      showAlert('Saved', `Preset "${presetName.trim()}" saved successfully!`);
     }
   }, [presetName, saveCustomPreset]);
 
@@ -150,14 +150,14 @@ export default function EqualizerScreen() {
       
       await RNFS.writeFile(downloadPath, JSON.stringify(presetData, null, 2), 'utf8');
       
-      Alert.alert(
+      showAlert(
         '✅ Exported Successfully',
         `EQ preset "${presetDisplayName}" saved to:\n${downloadPath}`,
         [{ text: 'OK' }]
       );
     } catch (error: any) {
       console.error('[EQ Export] Error:', error);
-      Alert.alert('Export Error', error?.message || 'Failed to export preset');
+      showAlert('Export Error', error?.message || 'Failed to export preset');
     }
   }, [bands, preamp, currentPreset, currentCustomPresetId, customPresets]);
 
@@ -209,7 +209,7 @@ export default function EqualizerScreen() {
         setPreamp(presetData.preamp);
       }
       
-      Alert.alert(
+      showAlert(
         '✅ Imported Successfully',
         `EQ preset "${presetData.name || 'Unknown'}" has been applied.`,
         [{ text: 'OK' }]
@@ -219,7 +219,7 @@ export default function EqualizerScreen() {
         return; // User cancelled - not an error
       }
       console.error('[EQ Import] Error:', error);
-      Alert.alert('Import Error', error?.message || 'Failed to import preset. Make sure the file is a valid TuneWell EQ preset.');
+      showAlert('Import Error', error?.message || 'Failed to import preset. Make sure the file is a valid TuneWell EQ preset.');
     }
   }, [bands, setBandGain, setPreamp]);
 
@@ -393,7 +393,7 @@ export default function EqualizerScreen() {
                     style={styles.savedPresetContent}
                     onPress={() => {
                       loadCustomPreset(preset.id);
-                      Alert.alert('Applied', `Preset "${preset.name}" applied`);
+                      showAlert('Applied', `Preset "${preset.name}" applied`);
                     }}
                   >
                     <Text style={[styles.savedPresetName, { color: colors.text }]}>{preset.name}</Text>
@@ -401,7 +401,7 @@ export default function EqualizerScreen() {
                   <TouchableOpacity 
                     style={styles.savedPresetDelete}
                     onPress={() => {
-                      Alert.alert(
+                      showAlert(
                         'Delete Preset',
                         `Are you sure you want to delete "${preset.name}"?`,
                         [

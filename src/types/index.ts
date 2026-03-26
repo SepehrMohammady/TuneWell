@@ -304,6 +304,8 @@ export type RootStackParamList = {
   SpotifyPlaylistDetail: { playlistId: string };
   SystemPlaylistDetail: { type: 'favorites' | 'mostPlayed' | 'recentlyAdded' | 'recentlyPlayed' };
   ImportPlaylist: undefined;
+  TelegramScreen: undefined;
+  TelegramChannelDetail: { chatId: number; title: string };
 };
 
 export type MainTabsParamList = {

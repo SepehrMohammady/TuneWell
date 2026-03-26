@@ -132,6 +132,14 @@ export default function App() {
     return () => subscription.remove();
   }, []);
 
+  // Lazy-load CustomAlert to avoid eager import
+  const [CustomAlert, setCustomAlert] = useState<React.ComponentType | null>(null);
+  useEffect(() => {
+    import('./components/common/CustomAlert').then(mod => {
+      setCustomAlert(() => mod.default);
+    });
+  }, []);
+
   if (error) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -157,6 +165,7 @@ export default function App() {
           translucent={false}
         />
         <RootNavigator />
+        {CustomAlert && <CustomAlert />}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

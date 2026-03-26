@@ -15,12 +15,12 @@ import {
   StatusBar,
   Image,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { showAlert } from '../store/alertStore';
 import { THEME, ROUTES } from '../config';
 import { useStreamingStore, usePlayerStore, useThemeStore } from '../store';
 import { spotifyService, deezerService, qobuzService } from '../services/streaming';
@@ -91,7 +91,7 @@ export default function SpotifyPlaylistDetailScreen() {
         if (cachedTracks.length === 0) {
           const msg = error?.message || 'Failed to load playlist tracks';
           if (msg.includes('DEV_MODE_RESTRICTED')) {
-            Alert.alert(
+            showAlert(
               'Spotify Developer Mode',
               'Playlist tracks are restricted by Spotify in Development Mode.\n\n' +
               'To fix this, go to your Spotify Developer Dashboard:\n\n' +
@@ -103,13 +103,13 @@ export default function SpotifyPlaylistDetailScreen() {
               'Liked Songs will still work.',
             );
           } else if (msg.includes('Access denied') || msg.includes('FORBIDDEN')) {
-            Alert.alert(
+            showAlert(
               'Spotify Access Restricted',
               'This playlist cannot be loaded. Your Spotify app may be in Development Mode.\n\n' +
               'Go to developer.spotify.com/dashboard → Settings → User Management and ensure your account is registered.',
             );
           } else if (!msg.includes('rate limit')) {
-            Alert.alert('Error', msg);
+            showAlert('Error', msg);
           }
         }
       }
@@ -152,7 +152,7 @@ export default function SpotifyPlaylistDetailScreen() {
       await audioService.playQueue(queueItems, index);
       navigation.navigate(ROUTES.PLAYER);
     } catch (error: any) {
-      Alert.alert('Playback Error', error.message || 'Failed to play track');
+      showAlert('Playback Error', error.message || 'Failed to play track');
     }
   }, [tracks, playlistId, playlistSource, navigation]);
 

@@ -66,6 +66,7 @@ const defaultHomeSections: HomeSectionConfig[] = [
   { id: 'favorites', label: 'Favorites', visible: true },
   { id: 'myPlaylists', label: 'My Playlists', visible: true },
   { id: 'moodPlaylists', label: 'Mood Playlists', visible: true },
+  { id: 'telegram', label: 'Telegram Music', visible: true },
   // Spotify Playlists hidden — streaming APIs require business agreements for public release
 ];
 

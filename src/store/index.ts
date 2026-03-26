@@ -9,5 +9,7 @@ export { useSettingsStore } from './settingsStore';
 export { usePlaylistStore } from './playlistStore';
 export { useThemeStore, THEMES } from './themeStore';
 export { useStreamingStore } from './streamingStore';
+export { useTelegramStore } from './telegramStore';
+export { useAlertStore, showAlert } from './alertStore';
 export type { TrackMeta, CustomPlaylist } from './playlistStore';
 export type { ThemeMode, ThemeColors } from './themeStore';

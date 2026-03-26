@@ -20,13 +20,13 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { showAlert } from '../store/alertStore';
 import { THEME, ROUTES } from '../config';
 import { useStreamingStore, useThemeStore } from '../store';
 import { spotifyService, playlistImportService } from '../services/streaming';
@@ -45,7 +45,7 @@ function SpotifyLoginCard({ colors }: { colors: any }) {
     try {
       await spotifyService.startAuth();
     } catch (error) {
-      Alert.alert('Error', 'Failed to open Spotify login');
+      showAlert('Error', 'Failed to open Spotify login');
     } finally {
       setConnecting(false);
     }
@@ -101,7 +101,7 @@ function SpotifyUserHeader({ colors }: { colors: any }) {
       </View>
       <TouchableOpacity
         onPress={() => {
-          Alert.alert(
+          showAlert(
             'Disconnect Spotify',
             'This will remove your Spotify connection. Imported playlists will be kept.',
             [
@@ -201,7 +201,7 @@ function ImportedPlaylistCard({
       </View>
       <TouchableOpacity
         onPress={() => {
-          Alert.alert(
+          showAlert(
             'Remove Playlist',
             `Remove "${playlist.name}" from imports?`,
             [
@@ -280,10 +280,10 @@ export default function StreamingScreen() {
     if (result) {
       setImportUrl('');
       setShowImportInput(false);
-      Alert.alert('Success', `Imported "${result.name}" with ${result.trackCount} tracks`);
+      showAlert('Success', `Imported "${result.name}" with ${result.trackCount} tracks`);
     } else {
       const errorMsg = useStreamingStore.getState().error;
-      Alert.alert('Import Failed', errorMsg || 'Could not import playlist from this URL');
+      showAlert('Import Failed', errorMsg || 'Could not import playlist from this URL');
     }
   };
 

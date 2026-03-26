@@ -20,7 +20,6 @@ import {
   Dimensions,
   Modal,
   ScrollView,
-  Alert,
   PanResponder,
   TextInput,
 } from 'react-native';
@@ -28,6 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { showAlert } from '../store/alertStore';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
 import { useCombinedProgress } from '../hooks';
@@ -178,7 +178,7 @@ export default function PlayerScreen() {
         });
       } catch (err: any) {
         if (!err?.message?.includes('cancel')) {
-          Alert.alert('Share Error', 'Could not share this track');
+          showAlert('Share Error', 'Could not share this track');
         }
       }
       return;
@@ -251,7 +251,7 @@ export default function PlayerScreen() {
       // User cancelled is not an error
       if (error?.message && !error.message.includes('cancel') && !error.message.includes('dismiss')) {
         console.log('[Share] Error:', error?.message || error);
-        Alert.alert('Share Error', 'Could not share this audio file');
+        showAlert('Share Error', 'Could not share this audio file');
       }
     } finally {
       setIsSharing(false);
@@ -292,7 +292,7 @@ export default function PlayerScreen() {
     if (!currentTrack) return;
     addToPlaylist(playlistId, [currentTrack.id]);
     setShowPlaylistModal(false);
-    Alert.alert('Added', 'Track added to playlist');
+    showAlert('Added', 'Track added to playlist');
   }, [currentTrack, addToPlaylist]);
 
   if (!currentTrack) {
@@ -596,7 +596,7 @@ export default function PlayerScreen() {
                     const playlistId = createPlaylist(newPlaylistName.trim());
                     if (currentTrack) {
                       addToPlaylist(playlistId, currentTrack.id);
-                      Alert.alert('Success', `Added "${currentTrack.title}" to "${newPlaylistName.trim()}"`);
+                      showAlert('Success', `Added "${currentTrack.title}" to "${newPlaylistName.trim()}"`);
                     }
                     setShowCreatePlaylistModal(false);
                     setNewPlaylistName('');

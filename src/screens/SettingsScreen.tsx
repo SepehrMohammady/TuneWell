@@ -230,6 +230,14 @@ export default function SettingsScreen() {
 
         {/* Connected Accounts Section — hidden until streaming API restrictions are resolved */}
 
+        {/* Telegram Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Telegram</Text>
+          <View style={[styles.sectionContent, { backgroundColor: colors.surface }]}>
+            {renderSettingRow('Telegram Bot', 'Manage', () => navigation.navigate('TelegramScreen'))}
+          </View>
+        </View>
+
         {/* About Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ABOUT</Text>

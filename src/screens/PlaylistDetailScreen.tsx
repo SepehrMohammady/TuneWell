@@ -15,13 +15,13 @@ import {
   FlatList,
   TouchableOpacity,
   StatusBar,
-  Alert,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { showAlert } from '../store/alertStore';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
@@ -57,7 +57,7 @@ export default function PlaylistDetailScreen() {
   // Play all tracks
   const handlePlayAll = useCallback(async (shuffle = false) => {
     if (playlistTracks.length === 0) {
-      Alert.alert('Empty Playlist', 'No tracks in this playlist.');
+      showAlert('Empty Playlist', 'No tracks in this playlist.');
       return;
     }
     
@@ -90,7 +90,7 @@ export default function PlaylistDetailScreen() {
   
   // Remove track from playlist
   const handleRemoveTrack = useCallback((trackId: string, trackTitle: string) => {
-    Alert.alert(
+    showAlert(
       'Remove from Playlist',
       `Remove "${trackTitle}" from ${moodName}?`,
       [

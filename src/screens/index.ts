@@ -5,3 +5,5 @@ export { default as EqualizerScreen } from './EqualizerScreen';
 export { default as SettingsScreen } from './SettingsScreen';
 export { default as PlayerScreen } from './PlayerScreen';
 export { default as QueueScreen } from './QueueScreen';
+export { default as TelegramScreen } from './TelegramScreen';
+export { default as TelegramChannelDetailScreen } from './TelegramChannelDetailScreen';

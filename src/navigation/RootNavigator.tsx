@@ -19,6 +19,8 @@ import PlaylistDetailScreen from '../screens/PlaylistDetailScreen';
 import SystemPlaylistDetailScreen from '../screens/SystemPlaylistDetailScreen';
 import StreamingScreen from '../screens/StreamingScreen';
 import SpotifyPlaylistDetailScreen from '../screens/SpotifyPlaylistDetailScreen';
+import TelegramScreen from '../screens/TelegramScreen';
+import TelegramChannelDetailScreen from '../screens/TelegramChannelDetailScreen';
 import EqualizerScreen from '../screens/EqualizerScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlayerScreen from '../screens/PlayerScreen';
@@ -191,6 +193,20 @@ export function RootNavigator() {
         <Stack.Screen
           name={ROUTES.SPOTIFY_PLAYLIST_DETAIL as keyof RootStackParamList}
           component={SpotifyPlaylistDetailScreen}
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen
+          name={ROUTES.TELEGRAM as keyof RootStackParamList}
+          component={TelegramScreen}
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen
+          name={ROUTES.TELEGRAM_CHANNEL_DETAIL as keyof RootStackParamList}
+          component={TelegramChannelDetailScreen}
           options={{
             animation: 'slide_from_right',
           }}
