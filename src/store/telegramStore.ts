@@ -117,8 +117,11 @@ export const useTelegramStore = create<TelegramState>()(
 
       addAudioFiles: (chatId, newFiles) => {
         const existing = get().audioFiles[chatId] || [];
-        const existingIds = new Set(existing.map((f) => f.fileUniqueId));
-        const unique = newFiles.filter((f) => !existingIds.has(f.fileUniqueId));
+        const existingUniqueIds = new Set(existing.map((f) => f.fileUniqueId));
+        const existingMsgIds = new Set(existing.map((f) => `${f.chatId}_${f.messageId}`));
+        const unique = newFiles.filter(
+          (f) => !existingUniqueIds.has(f.fileUniqueId) && !existingMsgIds.has(`${f.chatId}_${f.messageId}`),
+        );
         set({
           audioFiles: {
             ...get().audioFiles,

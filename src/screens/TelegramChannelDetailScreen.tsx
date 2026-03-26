@@ -58,8 +58,15 @@ export default function TelegramChannelDetailScreen() {
 
   const items = useMemo(() => {
     const files = audioFiles[chatId] || [];
+    // Deduplicate by fileUniqueId (handles legacy persisted duplicates)
+    const seen = new Set<string>();
+    const deduped = files.filter((f) => {
+      if (seen.has(f.fileUniqueId)) return false;
+      seen.add(f.fileUniqueId);
+      return true;
+    });
     // Sort by date descending (newest first)
-    return [...files].sort((a, b) => b.date - a.date);
+    return [...deduped].sort((a, b) => b.date - a.date);
   }, [audioFiles, chatId]);
 
   // Convert Telegram audio to a Track-like object and play

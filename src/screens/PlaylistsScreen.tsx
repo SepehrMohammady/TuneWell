@@ -90,11 +90,19 @@ export default function PlaylistsScreen() {
           setSyncing(true);
           try {
             telegramService.setBotToken(token);
-            const { updates, nextOffset } = await telegramService.getUpdates(
-              lastUpdateOffset || undefined,
-            );
-            setLastUpdateOffset(nextOffset);
-            if (updates.length > 0) {
+            let currentOffset = lastUpdateOffset || undefined;
+            let hasMore = true;
+
+            while (hasMore) {
+              const { updates, nextOffset } = await telegramService.getUpdates(currentOffset);
+              currentOffset = nextOffset;
+              setLastUpdateOffset(nextOffset);
+
+              if (updates.length === 0) {
+                hasMore = false;
+                break;
+              }
+
               // Auto-discover new chats (custom bot only)
               if (botMode === 'custom') {
                 const discoveredChats = telegramService.extractChatsFromUpdates(updates);
@@ -124,6 +132,10 @@ export default function PlaylistsScreen() {
                 addAudioFiles(chatId, items);
                 const existing = audioFiles[chatId]?.length || 0;
                 updateChannelSync(chatId, existing + items.length);
+              }
+
+              if (updates.length < 100) {
+                hasMore = false;
               }
             }
           } catch (_) {

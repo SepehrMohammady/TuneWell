@@ -66,6 +66,8 @@ export default function TelegramScreen() {
       setBotUser(bot);
       setBotMode(mode);
       setConnected(true);
+      // Reset update offset — each bot has its own update queue
+      setLastUpdateOffset(0);
       if (mode === 'tunewell') {
         showAlert('Connected', `@TuneWellBot is ready!\n\nAdd the bot to your public channels as admin, then add them by @username.`);
       } else {
@@ -77,7 +79,7 @@ export default function TelegramScreen() {
     } finally {
       setIsConnecting(false);
     }
-  }, [setBotToken, setBotUser, setBotMode, setConnected]);
+  }, [setBotToken, setBotUser, setBotMode, setConnected, setLastUpdateOffset]);
 
   const handleConnectTuneWell = useCallback(() => {
     connectWithToken(TUNEWELL_BOT_TOKEN, 'tunewell');
@@ -194,19 +196,27 @@ export default function TelegramScreen() {
     if (isSyncing) return;
     setSyncing(true);
     let totalNew = 0;
+    let restored = 0;
 
     try {
-      const { updates, nextOffset } = await telegramService.getUpdates(
-        lastUpdateOffset || undefined,
-      );
-      setLastUpdateOffset(nextOffset);
+      // Loop to consume ALL pending updates (getUpdates returns max 100 at a time)
+      let currentOffset = lastUpdateOffset || undefined;
+      let hasMore = true;
 
-      if (updates.length > 0) {
+      while (hasMore) {
+        const { updates, nextOffset } = await telegramService.getUpdates(currentOffset);
+        currentOffset = nextOffset;
+        setLastUpdateOffset(nextOffset);
+
+        if (updates.length === 0) {
+          hasMore = false;
+          break;
+        }
+
         // Auto-discover: only for custom bot mode
         if (isCustomBot) {
           const discoveredChats = telegramService.extractChatsFromUpdates(updates);
           const knownIds = new Set(channels.map((c) => c.id));
-          let discovered = 0;
           for (const chat of discoveredChats) {
             if (!knownIds.has(chat.id) && chat.type !== 'private') {
               addChannel({
@@ -219,11 +229,7 @@ export default function TelegramScreen() {
               });
               knownIds.add(chat.id);
               fetchChannelPhoto(chat.id);
-              discovered++;
             }
-          }
-          if (discovered > 0 && totalNew === 0) {
-            // Continue to process audio below before showing message
           }
         }
 
@@ -242,6 +248,11 @@ export default function TelegramScreen() {
           const existing = audioFiles[chatId]?.length || 0;
           updateChannelSync(chatId, existing + items.length);
           totalNew += items.length;
+        }
+
+        // If fewer than 100***, we've caught up
+        if (updates.length < 100) {
+          hasMore = false;
         }
       }
 
