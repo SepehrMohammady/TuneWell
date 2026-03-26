@@ -53,6 +53,7 @@ export default function TelegramScreen() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isAddingChannel, setIsAddingChannel] = useState(false);
   const [showCustomBot, setShowCustomBot] = useState(false);
+  const syncAfterAddRef = React.useRef(false);
 
   const isCustomBot = botMode === 'custom';
 
@@ -163,6 +164,14 @@ export default function TelegramScreen() {
           );
           return;
         }
+        // Bot must be admin to see messages in groups
+        if (member.status !== 'administrator' && member.status !== 'creator') {
+          showAlert(
+            'Admin Required',
+            `@${botUser.username} must be an admin in "${chat.title}" to see audio messages.\n\nGo to the group in Telegram → Members → tap the bot → Promote to Admin.`,
+          );
+          return;
+        }
       }
 
       addChannel({
@@ -182,14 +191,16 @@ export default function TelegramScreen() {
       if (cachedCount > 0) {
         showAlert('Restored', `"${chat.title}" restored with ${cachedCount} cached audio file${cachedCount !== 1 ? 's' : ''}.`);
       } else {
-        showAlert('Added', `"${chat.title}" added. Tap Sync to fetch audio.`);
+        showAlert('Added', `"${chat.title}" added. Syncing audio now...`);
+        // Auto-trigger sync after adding channel
+        syncAfterAddRef.current = true;
       }
     } catch (err: any) {
       showAlert('Error', err.message || 'Could not find channel/group.');
     } finally {
       setIsAddingChannel(false);
     }
-  }, [channelInput, botUser, addChannel, audioFiles, fetchChannelPhoto]);
+  }, [channelInput, isCustomBot, botUser, addChannel, audioFiles, fetchChannelPhoto]);
 
   // Sync all channels + auto-discover new groups (custom bot only)
   const handleSync = useCallback(async () => {
@@ -257,7 +268,6 @@ export default function TelegramScreen() {
       }
 
       // Auto-restore orphaned groups (custom bot only)
-      let restored = 0;
       if (isCustomBot) {
         const currentIds = new Set(channels.map((c) => c.id));
         const orphanedIds = Object.keys(audioFiles)
@@ -302,6 +312,14 @@ export default function TelegramScreen() {
       setSyncing(false);
     }
   }, [isSyncing, isCustomBot, lastUpdateOffset, audioFiles, channels, addChannel, addAudioFiles, updateChannelSync, setLastUpdateOffset, setSyncing, fetchChannelPhoto]);
+
+  // Auto-sync after adding a channel
+  React.useEffect(() => {
+    if (syncAfterAddRef.current && !isSyncing) {
+      syncAfterAddRef.current = false;
+      handleSync();
+    }
+  }, [isSyncing, handleSync]);
 
   // Clear all data
   const handleDisconnect = useCallback(() => {
@@ -480,8 +498,8 @@ export default function TelegramScreen() {
               </View>
               <Text style={[styles.hint, { color: colors.textMuted, marginTop: 10 }]}>
                 {isCustomBot
-                  ? 'Add the bot to your channel or group as admin. Tap Sync to auto-discover private groups.'
-                  : 'Add @TuneWellBot to a public channel as admin, then add it by @username below.'}
+                  ? 'Add the bot as admin to your channel or group. Tap Sync to auto-discover private groups.'
+                  : 'Add @TuneWellBot as ADMIN to your public channel/group, then add it by @username below.'}
               </Text>
             </View>
 
