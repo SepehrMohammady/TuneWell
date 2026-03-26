@@ -2,7 +2,7 @@
  * TuneWell Telegram Screen
  * 
  * Manage Telegram integration:
- * - Connect via built-in TuneWellBot or custom bot
+ * - Connect via user's own custom bot
  * - Add channels/groups where bot is admin
  * - Auto-discover groups from sync
  * - Sync and browse audio files
@@ -18,6 +18,7 @@ import {
   TextInput,
   ActivityIndicator,
   Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -26,8 +27,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import RNFS from 'react-native-fs';
 import { useThemeStore } from '../store/themeStore';
 import { useTelegramStore } from '../store/telegramStore';
-import type { BotMode } from '../store/telegramStore';
-import { telegramService, TUNEWELL_BOT_TOKEN } from '../services/telegram';
+import { telegramService } from '../services/telegram';
 import { showAlert } from '../store/alertStore';
 import MiniPlayer from '../components/player/MiniPlayer';
 import { usePlayerStore } from '../store';
@@ -40,72 +40,58 @@ export default function TelegramScreen() {
   const { currentTrack } = usePlayerStore();
   const {
     botUser, isConnected, channels, audioFiles,
-    isSyncing, botMode,
-    setBotToken, setBotUser, setConnected, setBotMode,
+    isSyncing,
+    setBotToken, setBotUser, setConnected,
     addChannel, removeChannel, updateChannelSync, setChannelPhoto,
     addAudioFiles, setLastUpdateOffset, setSyncing,
     disconnect, lastUpdateOffset,
   } = useTelegramStore();
 
   const [channelInput, setChannelInput] = useState('');
-  const [customTokenInput, setCustomTokenInput] = useState('');
+  const [tokenInput, setTokenInput] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isAddingChannel, setIsAddingChannel] = useState(false);
-  const [showCustomBot, setShowCustomBot] = useState(false);
 
-  // Connect with a token (TuneWellBot or custom)
-  const connectWithToken = useCallback(async (token: string, mode: BotMode) => {
-    setIsConnecting(true);
-    try {
-      telegramService.setBotToken(token);
-      const bot = await telegramService.verifyToken();
-      setBotToken(token);
-      setBotUser(bot);
-      setBotMode(mode);
-      setConnected(true);
-      showAlert('Connected', `Bot @${bot.username} is ready!\n\nNow add it to your channels or groups as admin.`);
-    } catch (err: any) {
-      telegramService.setBotToken(null);
-      showAlert('Connection Failed', err.message || 'Could not connect. Check your internet connection.');
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [setBotToken, setBotUser, setBotMode, setConnected]);
-
-  const handleConnectTuneWell = useCallback(() => {
-    connectWithToken(TUNEWELL_BOT_TOKEN, 'tunewell');
-  }, [connectWithToken]);
-
-  const handleConnectCustom = useCallback(() => {
-    const token = customTokenInput.trim();
+  // Connect with user's bot token
+  const handleConnect = useCallback(async () => {
+    const token = tokenInput.trim();
     if (!token) {
-      showAlert('Error', 'Please enter a bot token.');
+      showAlert('Error', 'Please enter your bot token.');
       return;
     }
     if (!/^\d+:[A-Za-z0-9_-]+$/.test(token)) {
       showAlert('Invalid Token', 'Token format should be like:\n123456789:ABCdefGHIjklMNOpqrSTUvwxYZ');
       return;
     }
-    connectWithToken(token, 'custom');
-    setCustomTokenInput('');
-  }, [customTokenInput, connectWithToken]);
+    setIsConnecting(true);
+    try {
+      telegramService.setBotToken(token);
+      const bot = await telegramService.verifyToken();
+      setBotToken(token);
+      setBotUser(bot);
+      setConnected(true);
+      showAlert('Connected', `Bot @${bot.username} is ready!\n\nNow add it to your channels or groups as admin, then tap Sync.`);
+    } catch (err: any) {
+      telegramService.setBotToken(null);
+      showAlert('Connection Failed', err.message || 'Could not verify the token. Check it and try again.');
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [tokenInput, setBotToken, setBotUser, setConnected]);
 
   // Auto-restore connection on mount
   React.useEffect(() => {
-    const { botToken, isConnected: connected, botMode: mode } = useTelegramStore.getState();
-    const token = mode === 'custom' && botToken ? botToken : TUNEWELL_BOT_TOKEN;
-
-    if (!connected) {
-      telegramService.setBotToken(token);
+    const { botToken, isConnected: connected } = useTelegramStore.getState();
+    if (connected && botToken) {
+      telegramService.setBotToken(botToken);
+    } else if (botToken) {
+      telegramService.setBotToken(botToken);
       telegramService.verifyToken()
         .then((bot) => {
-          setBotToken(token);
           setBotUser(bot);
           setConnected(true);
         })
         .catch(() => setConnected(false));
-    } else {
-      telegramService.setBotToken(token);
     }
   }, []);
 
@@ -353,61 +339,54 @@ export default function TelegramScreen() {
               <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
                 Listen to audio from your Telegram channels and groups right inside TuneWell.
               </Text>
+
+              {/* Step-by-step guide */}
+              <View style={[styles.guideBox, { backgroundColor: colors.surfaceLight, borderColor: colors.border }]}>
+                <Text style={[styles.guideTitle, { color: colors.text }]}>How to set up:</Text>
+                <Text style={[styles.guideStep, { color: colors.textSecondary }]}>
+                  {'1. '}Open Telegram and search for{' '}
+                  <Text
+                    style={{ color: '#0088cc', fontWeight: '600' }}
+                    onPress={() => Linking.openURL('https://t.me/BotFather')}
+                  >@BotFather</Text>
+                </Text>
+                <Text style={[styles.guideStep, { color: colors.textSecondary }]}>
+                  {'2. '}Send /newbot and follow the steps to create a bot
+                </Text>
+                <Text style={[styles.guideStep, { color: colors.textSecondary }]}>
+                  {'3. '}Copy the token BotFather gives you
+                </Text>
+                <Text style={[styles.guideStep, { color: colors.textSecondary }]}>
+                  {'4. '}Paste it below and tap Connect
+                </Text>
+                <Text style={[styles.guideStep, { color: colors.textSecondary }]}>
+                  {'5. '}Add your bot to a group/channel as admin
+                </Text>
+                <Text style={[styles.guideStep, { color: colors.textSecondary }]}>
+                  {'6. '}Send audio there, come back and tap Sync
+                </Text>
+              </View>
+
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.surfaceLight, color: colors.text, borderColor: colors.border }]}
+                placeholder="Paste your bot token here..."
+                placeholderTextColor={colors.textMuted}
+                value={tokenInput}
+                onChangeText={setTokenInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
               <TouchableOpacity
                 style={[styles.primaryBtn, { backgroundColor: '#0088cc' }]}
-                onPress={handleConnectTuneWell}
+                onPress={handleConnect}
                 disabled={isConnecting}
               >
-                {isConnecting && !showCustomBot ? (
+                {isConnecting ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Quick Connect</Text>
+                  <Text style={styles.primaryBtnText}>Connect</Text>
                 )}
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.customToggle}
-                onPress={() => setShowCustomBot(!showCustomBot)}
-              >
-                <Text style={[styles.customToggleText, { color: colors.textSecondary }]}>
-                  {showCustomBot ? 'Hide custom bot' : 'Use your own bot (recommended)'}
-                </Text>
-                <MaterialIcons
-                  name={showCustomBot ? 'expand-less' : 'expand-more'}
-                  size={18}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              {showCustomBot && (
-                <View style={styles.customBotSection}>
-                  <Text style={[styles.hint, { color: colors.textMuted }]}>
-                    For privacy, create your own bot via @BotFather on Telegram and paste the token below. This ensures only you can access your groups.
-                  </Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: colors.surfaceLight, color: colors.text, borderColor: colors.border }]}
-                    placeholder="Paste bot token here..."
-                    placeholderTextColor={colors.textMuted}
-                    value={customTokenInput}
-                    onChangeText={setCustomTokenInput}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  <TouchableOpacity
-                    style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-                    onPress={handleConnectCustom}
-                    disabled={isConnecting}
-                  >
-                    {isConnecting && showCustomBot ? (
-                      <ActivityIndicator size="small" color={colors.background} />
-                    ) : (
-                      <Text style={[styles.primaryBtnText, { color: colors.background }]}>
-                        Connect Custom Bot
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              )}
             </View>
           </>
         ) : (
@@ -421,7 +400,7 @@ export default function TelegramScreen() {
                     @{botUser?.username || 'TuneWellBot'}
                   </Text>
                   <Text style={[styles.botStatus, { color: colors.success }]}>
-                    Connected{botMode === 'custom' ? ' (Custom Bot)' : ''}
+                    Connected
                   </Text>
                 </View>
                 <TouchableOpacity onPress={handleDisconnect}>
@@ -558,15 +537,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  customToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 14,
-    gap: 4,
+  guideBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 16,
   },
-  customToggleText: { fontSize: 13 },
-  customBotSection: { marginTop: 14 },
+  guideTitle: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  guideStep: { fontSize: 13, lineHeight: 22 },
   botRow: { flexDirection: 'row', alignItems: 'center' },
   botInfo: { flex: 1, marginLeft: 12 },
   botName: { fontSize: 16, fontWeight: '600' },

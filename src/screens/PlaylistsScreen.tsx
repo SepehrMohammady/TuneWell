@@ -29,7 +29,7 @@ import { showAlert } from '../store/alertStore';
 import { THEME, MOOD_CATEGORIES, MoodId, ROUTES } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore, useTelegramStore } from '../store';
 import { audioService } from '../services/audio';
-import { telegramService, TUNEWELL_BOT_TOKEN } from '../services/telegram';
+import { telegramService } from '../services/telegram';
 import { scannedTrackToTrack } from '../services/metadata';
 import MiniPlayer from '../components/player/MiniPlayer';
 import { PlaylistsStackParamList } from '../types';
@@ -43,7 +43,7 @@ export default function PlaylistsScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const { currentTrack } = usePlayerStore();
-  const { isConnected, channels, audioFiles, isSyncing, botMode, botToken, setSyncing, setLastUpdateOffset, addChannel, addAudioFiles, updateChannelSync, lastUpdateOffset } = useTelegramStore();
+  const { isConnected, channels, audioFiles, isSyncing, botToken, setSyncing, setLastUpdateOffset, addChannel, addAudioFiles, updateChannelSync, lastUpdateOffset } = useTelegramStore();
   const { colors, mode: themeMode } = useThemeStore();
   const { tracks } = useLibraryStore();
   
@@ -84,12 +84,11 @@ export default function PlaylistsScreen() {
     useCallback(() => {
       setRefreshCounter(c => c + 1);
       // Auto-sync Telegram channels on focus
-      if (isConnected && !isSyncing) {
+      if (isConnected && botToken && !isSyncing) {
         (async () => {
           setSyncing(true);
           try {
-            const token = botMode === 'custom' && botToken ? botToken : TUNEWELL_BOT_TOKEN;
-            telegramService.setBotToken(token);
+            telegramService.setBotToken(botToken);
             const { updates, nextOffset } = await telegramService.getUpdates(
               lastUpdateOffset || undefined,
             );
