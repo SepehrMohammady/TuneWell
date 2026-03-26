@@ -65,10 +65,21 @@ export interface TelegramMessage {
   document?: TelegramDocument;
 }
 
+export interface TelegramChatMemberUpdated {
+  chat: TelegramChat;
+  from: { id: number; first_name: string };
+  date: number;
+  new_chat_member: {
+    status: string;
+    user: { id: number; is_bot: boolean; first_name: string; username?: string };
+  };
+}
+
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
   channel_post?: TelegramMessage;
+  my_chat_member?: TelegramChatMemberUpdated;
 }
 
 export interface TelegramFile {
@@ -177,7 +188,7 @@ class TelegramService {
    */
   async getUpdates(offset?: number): Promise<{ updates: TelegramUpdate[]; nextOffset: number }> {
     const params: Record<string, any> = {
-      allowed_updates: ['message', 'channel_post'],
+      allowed_updates: ['message', 'channel_post', 'my_chat_member'],
       timeout: 0,
       limit: 100,
     };
@@ -242,6 +253,24 @@ class TelegramService {
     }
 
     return items;
+  }
+
+  /**
+   * Extract all unique chats seen in a batch of updates.
+   * Used for auto-discovering groups/channels the bot is in.
+   */
+  extractChatsFromUpdates(updates: TelegramUpdate[]): TelegramChat[] {
+    const seen = new Map<number, TelegramChat>();
+    for (const update of updates) {
+      const msg = update.message || update.channel_post;
+      if (msg && !seen.has(msg.chat.id)) {
+        seen.set(msg.chat.id, msg.chat);
+      }
+      if (update.my_chat_member && !seen.has(update.my_chat_member.chat.id)) {
+        seen.set(update.my_chat_member.chat.id, update.my_chat_member.chat);
+      }
+    }
+    return Array.from(seen.values());
   }
 
   /**

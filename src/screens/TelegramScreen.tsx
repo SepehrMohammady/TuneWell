@@ -189,6 +189,26 @@ export default function TelegramScreen() {
       setLastUpdateOffset(nextOffset);
 
       if (updates.length > 0) {
+        // Auto-discover: detect ALL chats from any update type
+        const discoveredChats = telegramService.extractChatsFromUpdates(updates);
+        const knownIds = new Set(channels.map((c) => c.id));
+        let discovered = 0;
+        for (const chat of discoveredChats) {
+          if (!knownIds.has(chat.id) && chat.type !== 'private') {
+            addChannel({
+              id: chat.id,
+              title: chat.title || `Chat ${chat.id}`,
+              username: chat.username,
+              type: chat.type as 'channel' | 'group' | 'supergroup',
+              audioCount: 0,
+              lastSyncAt: 0,
+            });
+            knownIds.add(chat.id);
+            fetchChannelPhoto(chat.id);
+            discovered++;
+          }
+        }
+
         const audioItems = telegramService.extractAudioFromUpdates(updates);
 
         // Group by chat
@@ -198,36 +218,17 @@ export default function TelegramScreen() {
           byChat[item.chatId].push(item);
         }
 
-        // Auto-discover: add channels we don't have yet
-        const knownIds = new Set(channels.map((c) => c.id));
-        for (const chatIdStr of Object.keys(byChat)) {
-          const chatId = parseInt(chatIdStr, 10);
-          if (!knownIds.has(chatId)) {
-            try {
-              const chat = await telegramService.getChat(chatId);
-              if (chat.type !== 'private') {
-                addChannel({
-                  id: chat.id,
-                  title: chat.title || `Chat ${chat.id}`,
-                  username: chat.username,
-                  type: chat.type as 'channel' | 'group' | 'supergroup',
-                  audioCount: 0,
-                  lastSyncAt: 0,
-                });
-                fetchChannelPhoto(chat.id);
-              }
-            } catch {
-              // Ignore if we can't get chat info
-            }
-          }
-        }
-
         for (const [chatIdStr, items] of Object.entries(byChat)) {
           const chatId = parseInt(chatIdStr, 10);
           addAudioFiles(chatId, items);
           const existing = audioFiles[chatId]?.length || 0;
           updateChannelSync(chatId, existing + items.length);
           totalNew += items.length;
+        }
+
+        if (discovered > 0 && totalNew === 0) {
+          showAlert('Groups Found', `Discovered ${discovered} new group${discovered !== 1 ? 's' : ''}. Send audio there and sync again.`);
+          return;
         }
       }
 
@@ -239,7 +240,7 @@ export default function TelegramScreen() {
       if (totalNew > 0) {
         showAlert('Sync Complete', `Found ${totalNew} new audio file${totalNew !== 1 ? 's' : ''}.`);
       } else {
-        showAlert('Up to Date', 'No new audio files found.\n\nSend audio to your channels/groups and sync again.');
+        showAlert('Up to Date', 'No new audio found.\n\nThe bot can only detect audio sent AFTER it joins. Forward or re-send existing audio in your groups to pick it up.');
       }
     } catch (err: any) {
       showAlert('Sync Error', err.message || 'Failed to sync.');
@@ -408,15 +409,14 @@ export default function TelegramScreen() {
             <View style={[styles.card, { backgroundColor: colors.surface }]}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Add Channel / Group</Text>
               <Text style={[styles.hint, { color: colors.textMuted }]}>
-                Enter the @username (public) or numeric ID of a channel/group where the bot is admin.
-                {'\n\n'}
-                <Text style={{ fontWeight: '600', color: colors.textSecondary }}>Private groups:</Text>
-                {' '}Invite links are not supported. Add the bot to the group, then tap Sync — private groups are auto-discovered.
+                For public channels/groups, enter the @username.
+                {' '}For private groups, just add the bot as admin and tap Sync — they appear automatically.
+                {' '}The bot detects audio sent after it joins.
               </Text>
               <View style={styles.addRow}>
                 <TextInput
                   style={[styles.input, styles.addInput, { backgroundColor: colors.surfaceLight, color: colors.text, borderColor: colors.border }]}
-                  placeholder="@username or -1001234567890"
+                  placeholder="@channel_username"
                   placeholderTextColor={colors.textMuted}
                   value={channelInput}
                   onChangeText={setChannelInput}

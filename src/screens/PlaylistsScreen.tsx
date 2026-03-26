@@ -43,7 +43,7 @@ export default function PlaylistsScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const { currentTrack } = usePlayerStore();
-  const { isConnected, channels, audioFiles, isSyncing, setSyncing, setLastUpdateOffset, addAudioFiles, updateChannelSync, lastUpdateOffset } = useTelegramStore();
+  const { isConnected, channels, audioFiles, isSyncing, botMode, botToken, setSyncing, setLastUpdateOffset, addChannel, addAudioFiles, updateChannelSync, lastUpdateOffset } = useTelegramStore();
   const { colors, mode: themeMode } = useThemeStore();
   const { tracks } = useLibraryStore();
   
@@ -84,16 +84,33 @@ export default function PlaylistsScreen() {
     useCallback(() => {
       setRefreshCounter(c => c + 1);
       // Auto-sync Telegram channels on focus
-      if (isConnected && channels.length > 0 && !isSyncing) {
+      if (isConnected && !isSyncing) {
         (async () => {
           setSyncing(true);
           try {
-            telegramService.setBotToken(TUNEWELL_BOT_TOKEN);
+            const token = botMode === 'custom' && botToken ? botToken : TUNEWELL_BOT_TOKEN;
+            telegramService.setBotToken(token);
             const { updates, nextOffset } = await telegramService.getUpdates(
               lastUpdateOffset || undefined,
             );
             setLastUpdateOffset(nextOffset);
             if (updates.length > 0) {
+              // Auto-discover new chats
+              const discoveredChats = telegramService.extractChatsFromUpdates(updates);
+              const knownIds = new Set(channels.map((c: any) => c.id));
+              for (const chat of discoveredChats) {
+                if (!knownIds.has(chat.id) && chat.type !== 'private') {
+                  addChannel({
+                    id: chat.id,
+                    title: chat.title || `Chat ${chat.id}`,
+                    username: chat.username,
+                    type: chat.type as 'channel' | 'group' | 'supergroup',
+                    audioCount: 0,
+                    lastSyncAt: 0,
+                  });
+                }
+              }
+
               const audioItems = telegramService.extractAudioFromUpdates(updates);
               const byChat: Record<number, typeof audioItems> = {};
               for (const item of audioItems) {
