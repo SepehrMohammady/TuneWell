@@ -232,15 +232,43 @@ export default function TelegramScreen() {
         }
       }
 
+      // Auto-restore: re-add groups that have cached audio but were removed from list
+      const currentIds = new Set(channels.map((c) => c.id));
+      const orphanedIds = Object.keys(audioFiles)
+        .map(Number)
+        .filter((id) => !currentIds.has(id) && audioFiles[id]?.length > 0);
+      let restored = 0;
+      for (const orphanId of orphanedIds) {
+        try {
+          const chat = await telegramService.getChat(orphanId);
+          if (chat.type !== 'private') {
+            addChannel({
+              id: chat.id,
+              title: chat.title || `Chat ${chat.id}`,
+              username: chat.username,
+              type: chat.type as 'channel' | 'group' | 'supergroup',
+              audioCount: 0,
+              lastSyncAt: 0,
+            });
+            fetchChannelPhoto(chat.id);
+            restored++;
+          }
+        } catch {
+          // Bot may no longer be in this chat
+        }
+      }
+
       // Fetch missing photos
       for (const ch of channels) {
         if (!ch.photoPath) fetchChannelPhoto(ch.id);
       }
 
       if (totalNew > 0) {
-        showAlert('Sync Complete', `Found ${totalNew} new audio file${totalNew !== 1 ? 's' : ''}.`);
+        showAlert('Sync Complete', `Found ${totalNew} new audio file${totalNew !== 1 ? 's' : ''}${restored > 0 ? ` and restored ${restored} group${restored !== 1 ? 's' : ''}` : ''}.`);
+      } else if (restored > 0) {
+        showAlert('Groups Restored', `Restored ${restored} group${restored !== 1 ? 's' : ''} with cached audio.`);
       } else {
-        showAlert('Up to Date', 'No new audio found.\n\nThe bot can only detect audio sent AFTER it joins. Forward or re-send existing audio in your groups to pick it up.');
+        showAlert('Up to Date', 'No new audio found.\n\nThe bot can only detect audio sent AFTER it joins. Forward or re-send existing audio to pick it up.');
       }
     } catch (err: any) {
       showAlert('Sync Error', err.message || 'Failed to sync.');
@@ -333,7 +361,7 @@ export default function TelegramScreen() {
                 {isConnecting && !showCustomBot ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Connect with @TuneWellBot</Text>
+                  <Text style={styles.primaryBtnText}>Quick Connect</Text>
                 )}
               </TouchableOpacity>
 
@@ -342,7 +370,7 @@ export default function TelegramScreen() {
                 onPress={() => setShowCustomBot(!showCustomBot)}
               >
                 <Text style={[styles.customToggleText, { color: colors.textSecondary }]}>
-                  {showCustomBot ? 'Hide custom bot' : 'Use your own bot instead'}
+                  {showCustomBot ? 'Hide custom bot' : 'Use your own bot (recommended)'}
                 </Text>
                 <MaterialIcons
                   name={showCustomBot ? 'expand-less' : 'expand-more'}
@@ -354,7 +382,7 @@ export default function TelegramScreen() {
               {showCustomBot && (
                 <View style={styles.customBotSection}>
                   <Text style={[styles.hint, { color: colors.textMuted }]}>
-                    Create a bot via @BotFather on Telegram, then paste the token below.
+                    For privacy, create your own bot via @BotFather on Telegram and paste the token below. This ensures only you can access your groups.
                   </Text>
                   <TextInput
                     style={[styles.input, { backgroundColor: colors.surfaceLight, color: colors.text, borderColor: colors.border }]}

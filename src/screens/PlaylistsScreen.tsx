@@ -458,7 +458,7 @@ export default function PlaylistsScreen() {
         {/* Telegram Playlists */}
         {isConnected && channels.length > 0 && (
           <>
-            {renderSectionHeader('telegram', 'Groups/Channels', channels.length)}
+            {renderSectionHeader('telegram', 'Telegram', channels.length)}
             {expandedSection === 'telegram' && (
               <View style={styles.sectionContent}>
                 {isSyncing && (
