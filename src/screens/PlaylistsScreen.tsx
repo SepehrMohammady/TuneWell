@@ -29,7 +29,7 @@ import { showAlert } from '../store/alertStore';
 import { THEME, MOOD_CATEGORIES, MoodId, ROUTES } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore, useTelegramStore } from '../store';
 import { audioService } from '../services/audio';
-import { telegramService } from '../services/telegram';
+import { telegramService, TUNEWELL_BOT_TOKEN } from '../services/telegram';
 import { scannedTrackToTrack } from '../services/metadata';
 import MiniPlayer from '../components/player/MiniPlayer';
 import { PlaylistsStackParamList } from '../types';
@@ -43,7 +43,7 @@ export default function PlaylistsScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const { currentTrack } = usePlayerStore();
-  const { isConnected, channels, audioFiles, isSyncing, botToken, setSyncing, setLastUpdateOffset, addChannel, addAudioFiles, updateChannelSync, lastUpdateOffset } = useTelegramStore();
+  const { isConnected, channels, audioFiles, isSyncing, botToken, botMode, setSyncing, setLastUpdateOffset, addChannel, addAudioFiles, updateChannelSync, lastUpdateOffset } = useTelegramStore();
   const { colors, mode: themeMode } = useThemeStore();
   const { tracks } = useLibraryStore();
   
@@ -84,29 +84,32 @@ export default function PlaylistsScreen() {
     useCallback(() => {
       setRefreshCounter(c => c + 1);
       // Auto-sync Telegram channels on focus
-      if (isConnected && botToken && !isSyncing) {
+      if (isConnected && !isSyncing) {
+        const token = botMode === 'custom' && botToken ? botToken : TUNEWELL_BOT_TOKEN;
         (async () => {
           setSyncing(true);
           try {
-            telegramService.setBotToken(botToken);
+            telegramService.setBotToken(token);
             const { updates, nextOffset } = await telegramService.getUpdates(
               lastUpdateOffset || undefined,
             );
             setLastUpdateOffset(nextOffset);
             if (updates.length > 0) {
-              // Auto-discover new chats
-              const discoveredChats = telegramService.extractChatsFromUpdates(updates);
-              const knownIds = new Set(channels.map((c: any) => c.id));
-              for (const chat of discoveredChats) {
-                if (!knownIds.has(chat.id) && chat.type !== 'private') {
-                  addChannel({
-                    id: chat.id,
-                    title: chat.title || `Chat ${chat.id}`,
-                    username: chat.username,
-                    type: chat.type as 'channel' | 'group' | 'supergroup',
-                    audioCount: 0,
-                    lastSyncAt: 0,
-                  });
+              // Auto-discover new chats (custom bot only)
+              if (botMode === 'custom') {
+                const discoveredChats = telegramService.extractChatsFromUpdates(updates);
+                const knownIds = new Set(channels.map((c: any) => c.id));
+                for (const chat of discoveredChats) {
+                  if (!knownIds.has(chat.id) && chat.type !== 'private') {
+                    addChannel({
+                      id: chat.id,
+                      title: chat.title || `Chat ${chat.id}`,
+                      username: chat.username,
+                      type: chat.type as 'channel' | 'group' | 'supergroup',
+                      audioCount: 0,
+                      lastSyncAt: 0,
+                    });
+                  }
                 }
               }
 
