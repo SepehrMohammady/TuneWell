@@ -23,15 +23,17 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { ActivityIndicator } from 'react-native';
 import { showAlert } from '../store/alertStore';
-import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
-import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
+import { THEME, MOOD_CATEGORIES, MoodId, ROUTES } from '../config';
+import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore, useTelegramStore } from '../store';
 import { audioService } from '../services/audio';
+import { telegramService, TUNEWELL_BOT_TOKEN } from '../services/telegram';
 import { scannedTrackToTrack } from '../services/metadata';
 import MiniPlayer from '../components/player/MiniPlayer';
 import { PlaylistsStackParamList } from '../types';
 
-type Section = 'system' | 'mood' | 'custom';
+type Section = 'system' | 'mood' | 'custom' | 'telegram';
 type PlaylistsNavigation = NativeStackNavigationProp<PlaylistsStackParamList>;
 
 export default function PlaylistsScreen() {
@@ -40,6 +42,7 @@ export default function PlaylistsScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const { currentTrack } = usePlayerStore();
+  const { isConnected, channels, audioFiles, isSyncing, setSyncing, setLastUpdateOffset, addAudioFiles, updateChannelSync, lastUpdateOffset } = useTelegramStore();
   const { colors, mode: themeMode } = useThemeStore();
   const { tracks } = useLibraryStore();
   
@@ -75,11 +78,42 @@ export default function PlaylistsScreen() {
   // Also use a refresh counter to force recalculation on screen focus
   const [refreshCounter, setRefreshCounter] = useState(0);
   
-  // Force refresh when screen comes into focus
+  // Force refresh when screen comes into focus + auto-sync Telegram
   useFocusEffect(
     useCallback(() => {
       setRefreshCounter(c => c + 1);
-    }, [])
+      // Auto-sync Telegram channels on focus
+      if (isConnected && channels.length > 0 && !isSyncing) {
+        (async () => {
+          setSyncing(true);
+          try {
+            telegramService.setBotToken(TUNEWELL_BOT_TOKEN);
+            const { updates, nextOffset } = await telegramService.getUpdates(
+              lastUpdateOffset || undefined,
+            );
+            setLastUpdateOffset(nextOffset);
+            if (updates.length > 0) {
+              const audioItems = telegramService.extractAudioFromUpdates(updates);
+              const byChat: Record<number, typeof audioItems> = {};
+              for (const item of audioItems) {
+                if (!byChat[item.chatId]) byChat[item.chatId] = [];
+                byChat[item.chatId].push(item);
+              }
+              for (const [chatIdStr, items] of Object.entries(byChat)) {
+                const chatId = parseInt(chatIdStr, 10);
+                addAudioFiles(chatId, items);
+                const existing = audioFiles[chatId]?.length || 0;
+                updateChannelSync(chatId, existing + items.length);
+              }
+            }
+          } catch (_) {
+            // Silent fail on auto-sync
+          } finally {
+            setSyncing(false);
+          }
+        })();
+      }
+    }, [isConnected, channels.length])
   );
   
   const moodTrackCounts = useMemo(() => {
@@ -401,6 +435,48 @@ export default function PlaylistsScreen() {
               ))
             )}
           </View>
+        )}
+
+        {/* Telegram Playlists */}
+        {isConnected && channels.length > 0 && (
+          <>
+            {renderSectionHeader('telegram', 'Telegram', channels.length)}
+            {expandedSection === 'telegram' && (
+              <View style={styles.sectionContent}>
+                {isSyncing && (
+                  <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                )}
+                {channels.map((ch) => {
+                  const count = audioFiles[ch.id]?.length || 0;
+                  return (
+                    <TouchableOpacity
+                      key={ch.id}
+                      style={[styles.playlistItem, { borderBottomColor: colors.border }]}
+                      onPress={() => (navigation as any).navigate(ROUTES.TELEGRAM_CHANNEL_DETAIL, { chatId: ch.id, title: ch.title })}
+                    >
+                      <View style={[styles.playlistIcon, { backgroundColor: '#0088cc' }]}>
+                        <MaterialCommunityIcons
+                          name={ch.type === 'channel' ? 'bullhorn' : 'account-group'}
+                          size={20}
+                          color="#FFFFFF"
+                        />
+                      </View>
+                      <View style={styles.playlistInfo}>
+                        <Text style={[styles.playlistName, { color: colors.text }]}>{ch.title}</Text>
+                        <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>
+                          {count} audio file{count !== 1 ? 's' : ''}
+                          {ch.lastSyncAt > 0 ? ` · Synced ${new Date(ch.lastSyncAt).toLocaleDateString()}` : ''}
+                        </Text>
+                      </View>
+                      <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </>
         )}
 
         {/* Spacer for mini player */}

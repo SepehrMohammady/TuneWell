@@ -118,43 +118,45 @@ export default function TelegramChannelDetailScreen() {
     try {
       setDownloadingId('__all__');
 
-      // Download first track, queue rest
-      const first = items[0];
-      const localPath = await telegramService.downloadAudio(
-        first.fileId,
-        CACHE_DIR,
-        first.fileName.replace(/[<>:"/\\|?*]/g, '_'),
-      );
+      // Download all tracks first
+      const queueItems = [];
+      for (const item of items) {
+        const localPath = await telegramService.downloadAudio(
+          item.fileId,
+          CACHE_DIR,
+          item.fileName.replace(/[<>:"/\\|?*]/g, '_'),
+        );
 
-      const queueItems = items.map((item) => ({
-        id: `tg_${item.fileUniqueId}`,
-        track: {
+        queueItems.push({
           id: `tg_${item.fileUniqueId}`,
-          uri: item === first ? `file://${localPath}` : '', // will be resolved on play
-          filePath: item === first ? localPath : '',
-          fileName: item.fileName,
-          folderPath: CACHE_DIR,
-          folderName: 'Telegram',
-          title: item.title,
-          artist: item.performer,
-          album: title || 'Telegram',
-          duration: item.duration,
-          sampleRate: 44100,
-          bitDepth: 16,
-          channels: 2,
-          format: item.mimeType.includes('flac') ? 'flac' : 'mp3',
-          isLossless: item.mimeType.includes('flac'),
-          isHighRes: false,
-          isDSD: false,
-          playCount: 0,
-          isFavorite: false,
-          moods: [] as any[],
-          dateAdded: Date.now(),
-          dateModified: item.date * 1000,
-        },
-        addedAt: Date.now(),
-        source: 'streaming' as const,
-      }));
+          track: {
+            id: `tg_${item.fileUniqueId}`,
+            uri: `file://${localPath}`,
+            filePath: localPath,
+            fileName: item.fileName,
+            folderPath: CACHE_DIR,
+            folderName: 'Telegram',
+            title: item.title,
+            artist: item.performer,
+            album: title || 'Telegram',
+            duration: item.duration,
+            sampleRate: 44100,
+            bitDepth: 16,
+            channels: 2,
+            format: item.mimeType.includes('flac') ? 'flac' : 'mp3',
+            isLossless: item.mimeType.includes('flac'),
+            isHighRes: false,
+            isDSD: false,
+            playCount: 0,
+            isFavorite: false,
+            moods: [] as any[],
+            dateAdded: Date.now(),
+            dateModified: item.date * 1000,
+          },
+          addedAt: Date.now(),
+          source: 'streaming' as const,
+        });
+      }
 
       await audioService.playQueue(queueItems, 0);
     } catch (err: any) {

@@ -39,7 +39,8 @@ export default function CustomAlert() {
 
   const getButtonTextColor = (style?: string) => {
     if (style === 'cancel') return colors.textSecondary;
-    return '#FFFFFF';
+    if (style === 'destructive') return '#FFFFFF';
+    return colors.background; // contrast with primary (white bg → dark text, black bg → light text)
   };
 
   const getButtonBorder = (style?: string) => {
