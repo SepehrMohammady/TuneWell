@@ -12,6 +12,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -27,6 +28,7 @@ import MiniPlayer from '../components/player/MiniPlayer';
 import RNFS from 'react-native-fs';
 
 const CACHE_DIR = `${RNFS.CachesDirectoryPath}/telegram_audio`;
+const OFFLINE_DIR = `${RNFS.DocumentDirectoryPath}/TelegramMusic`;
 
 function formatDuration(seconds: number): string {
   if (!seconds) return '--:--';
@@ -47,8 +49,12 @@ export default function TelegramChannelDetailScreen() {
   const { chatId, title } = route.params;
   const { colors } = useThemeStore();
   const { currentTrack } = usePlayerStore();
-  const { audioFiles } = useTelegramStore();
+  const { audioFiles, channels } = useTelegramStore();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [isSavingOffline, setIsSavingOffline] = useState(false);
+  const [offlineProgress, setOfflineProgress] = useState({ done: 0, total: 0 });
+
+  const channel = useMemo(() => channels.find((c) => c.id === chatId), [channels, chatId]);
 
   const items = useMemo(() => {
     const files = audioFiles[chatId] || [];
@@ -166,6 +172,58 @@ export default function TelegramChannelDetailScreen() {
     }
   }, [items, title]);
 
+  // Save all audio offline
+  const handleSaveOffline = useCallback(async () => {
+    if (items.length === 0) {
+      showAlert('No Audio', 'No audio files to download.');
+      return;
+    }
+
+    const safeTitle = (title || 'Unknown').replace(/[<>:"/\\|?*]/g, '_');
+    const channelDir = `${OFFLINE_DIR}/${safeTitle}`;
+
+    setIsSavingOffline(true);
+    setOfflineProgress({ done: 0, total: items.length });
+
+    try {
+      await RNFS.mkdir(channelDir);
+
+      let saved = 0;
+      let skipped = 0;
+
+      for (const item of items) {
+        const safeName = item.fileName.replace(/[<>:"/\\|?*]/g, '_');
+        const destPath = `${channelDir}/${safeName}`;
+
+        // Skip if already downloaded
+        if (await RNFS.exists(destPath)) {
+          skipped++;
+          saved++;
+          setOfflineProgress({ done: saved, total: items.length });
+          continue;
+        }
+
+        await telegramService.downloadAudio(item.fileId, channelDir, safeName);
+        saved++;
+        setOfflineProgress({ done: saved, total: items.length });
+      }
+
+      if (skipped === items.length) {
+        showAlert('Already Saved', 'All files are already available offline.');
+      } else {
+        showAlert(
+          'Saved Offline',
+          `${saved - skipped} new file${saved - skipped !== 1 ? 's' : ''} downloaded to:\n${channelDir}`,
+        );
+      }
+    } catch (err: any) {
+      showAlert('Download Error', err.message || 'Failed to save offline.');
+    } finally {
+      setIsSavingOffline(false);
+      setOfflineProgress({ done: 0, total: 0 });
+    }
+  }, [items, title]);
+
   const renderItem = useCallback(
     ({ item }: { item: TelegramAudioItem }) => {
       const isDownloading = downloadingId === item.fileId;
@@ -204,6 +262,17 @@ export default function TelegramChannelDetailScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
+        {channel?.photoPath ? (
+          <Image source={{ uri: `file://${channel.photoPath}` }} style={styles.headerPhoto} />
+        ) : (
+          <View style={[styles.headerPhotoFallback, { backgroundColor: '#0088cc' }]}>
+            <MaterialCommunityIcons
+              name={channel?.type === 'channel' ? 'bullhorn' : 'account-group'}
+              size={18}
+              color="#fff"
+            />
+          </View>
+        )}
         <View style={styles.headerInfo}>
           <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
             {title}
@@ -220,10 +289,29 @@ export default function TelegramChannelDetailScreen() {
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#0088cc' }]}
             onPress={handlePlayAll}
-            disabled={!!downloadingId}
+            disabled={!!downloadingId || isSavingOffline}
           >
             <MaterialIcons name="play-arrow" size={20} color="#fff" />
             <Text style={styles.actionText}>Play All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+            onPress={handleSaveOffline}
+            disabled={!!downloadingId || isSavingOffline}
+          >
+            {isSavingOffline ? (
+              <>
+                <ActivityIndicator size="small" color={colors.text} />
+                <Text style={[styles.actionText, { color: colors.text }]}>
+                  {offlineProgress.done}/{offlineProgress.total}
+                </Text>
+              </>
+            ) : (
+              <>
+                <MaterialIcons name="download" size={20} color={colors.text} />
+                <Text style={[styles.actionText, { color: colors.text }]}>Save Offline</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -257,6 +345,20 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backBtn: { marginRight: 12 },
+  headerPhoto: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+  },
+  headerPhotoFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
   headerInfo: { flex: 1 },
   headerTitle: { fontSize: 20, fontWeight: '700' },
   headerSub: { fontSize: 13, marginTop: 2 },

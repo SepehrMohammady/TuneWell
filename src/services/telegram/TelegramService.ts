@@ -32,6 +32,10 @@ export interface TelegramChat {
   title?: string;
   username?: string;
   description?: string;
+  photo?: {
+    small_file_id: string;
+    big_file_id: string;
+  };
 }
 
 export interface TelegramAudio {
@@ -296,6 +300,36 @@ class TelegramService {
     }
 
     return destPath;
+  }
+
+  /**
+   * Download chat photo to local cache.
+   * Returns local path or null if no photo.
+   */
+  async downloadChatPhoto(chatId: number, destDir: string): Promise<string | null> {
+    try {
+      const chat = await this.getChat(chatId);
+      if (!chat.photo) return null;
+
+      const RNFS = require('react-native-fs');
+      const dirExists = await RNFS.exists(destDir);
+      if (!dirExists) await RNFS.mkdir(destDir);
+
+      const destPath = `${destDir}/chat_${chatId}.jpg`;
+      const fileExists = await RNFS.exists(destPath);
+      if (fileExists) return destPath;
+
+      const { downloadUrl } = await this.getFile(chat.photo.small_file_id);
+      const result = await RNFS.downloadFile({
+        fromUrl: downloadUrl,
+        toFile: destPath,
+      }).promise;
+
+      if (result.statusCode === 200) return destPath;
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**

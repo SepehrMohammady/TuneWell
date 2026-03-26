@@ -17,6 +17,7 @@ import {
   StatusBar,
   TextInput,
   Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -440,7 +441,7 @@ export default function PlaylistsScreen() {
         {/* Telegram Playlists */}
         {isConnected && channels.length > 0 && (
           <>
-            {renderSectionHeader('telegram', 'Telegram', channels.length)}
+            {renderSectionHeader('telegram', 'Groups/Channels', channels.length)}
             {expandedSection === 'telegram' && (
               <View style={styles.sectionContent}>
                 {isSyncing && (
@@ -456,13 +457,20 @@ export default function PlaylistsScreen() {
                       style={[styles.playlistItem, { borderBottomColor: colors.border }]}
                       onPress={() => (navigation as any).navigate(ROUTES.TELEGRAM_CHANNEL_DETAIL, { chatId: ch.id, title: ch.title })}
                     >
-                      <View style={[styles.playlistIcon, { backgroundColor: '#0088cc' }]}>
-                        <MaterialCommunityIcons
-                          name={ch.type === 'channel' ? 'bullhorn' : 'account-group'}
-                          size={20}
-                          color="#FFFFFF"
+                      {ch.photoPath ? (
+                        <Image
+                          source={{ uri: `file://${ch.photoPath}` }}
+                          style={[styles.playlistIcon, { borderRadius: 24 }]}
                         />
-                      </View>
+                      ) : (
+                        <View style={[styles.playlistIcon, { backgroundColor: '#0088cc' }]}>
+                          <MaterialCommunityIcons
+                            name={ch.type === 'channel' ? 'bullhorn' : 'account-group'}
+                            size={20}
+                            color="#FFFFFF"
+                          />
+                        </View>
+                      )}
                       <View style={styles.playlistInfo}>
                         <Text style={[styles.playlistName, { color: colors.text }]}>{ch.title}</Text>
                         <Text style={[styles.playlistMeta, { color: colors.textSecondary }]}>

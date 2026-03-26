@@ -2,8 +2,9 @@
  * TuneWell Telegram Screen
  * 
  * Manage Telegram integration:
- * - Auto-connects using built-in TuneWell bot
+ * - Connect via built-in TuneWellBot or custom bot
  * - Add channels/groups where bot is admin
+ * - Auto-discover groups from sync
  * - Sync and browse audio files
  */
 
@@ -16,17 +17,22 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import RNFS from 'react-native-fs';
 import { useThemeStore } from '../store/themeStore';
 import { useTelegramStore } from '../store/telegramStore';
+import type { BotMode } from '../store/telegramStore';
 import { telegramService, TUNEWELL_BOT_TOKEN } from '../services/telegram';
 import { showAlert } from '../store/alertStore';
 import MiniPlayer from '../components/player/MiniPlayer';
 import { usePlayerStore } from '../store';
+
+const PHOTO_DIR = `${RNFS.CachesDirectoryPath}/telegram_photos`;
 
 export default function TelegramScreen() {
   const navigation = useNavigation<any>();
@@ -34,63 +40,89 @@ export default function TelegramScreen() {
   const { currentTrack } = usePlayerStore();
   const {
     botUser, isConnected, channels, audioFiles,
-    isSyncing,
-    setBotToken, setBotUser, setConnected,
-    addChannel, removeChannel, updateChannelSync,
+    isSyncing, botMode,
+    setBotToken, setBotUser, setConnected, setBotMode,
+    addChannel, removeChannel, updateChannelSync, setChannelPhoto,
     addAudioFiles, setLastUpdateOffset, setSyncing,
     disconnect, lastUpdateOffset,
   } = useTelegramStore();
 
   const [channelInput, setChannelInput] = useState('');
+  const [customTokenInput, setCustomTokenInput] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isAddingChannel, setIsAddingChannel] = useState(false);
+  const [showCustomBot, setShowCustomBot] = useState(false);
 
-  // Connect using built-in TuneWell bot
-  const handleConnect = useCallback(async () => {
+  // Connect with a token (TuneWellBot or custom)
+  const connectWithToken = useCallback(async (token: string, mode: BotMode) => {
     setIsConnecting(true);
     try {
-      telegramService.setBotToken(TUNEWELL_BOT_TOKEN);
+      telegramService.setBotToken(token);
       const bot = await telegramService.verifyToken();
-      setBotToken(TUNEWELL_BOT_TOKEN);
+      setBotToken(token);
       setBotUser(bot);
+      setBotMode(mode);
       setConnected(true);
-      showAlert('Connected', `Bot @${bot.username} is ready!\n\nNow add it to your Telegram channels or groups as admin.`);
+      showAlert('Connected', `Bot @${bot.username} is ready!\n\nNow add it to your channels or groups as admin.`);
     } catch (err: any) {
       telegramService.setBotToken(null);
-      showAlert('Connection Failed', err.message || 'Could not connect to TuneWell bot. Check your internet connection.');
+      showAlert('Connection Failed', err.message || 'Could not connect. Check your internet connection.');
     } finally {
       setIsConnecting(false);
     }
-  }, [setBotToken, setBotUser, setConnected]);
+  }, [setBotToken, setBotUser, setBotMode, setConnected]);
+
+  const handleConnectTuneWell = useCallback(() => {
+    connectWithToken(TUNEWELL_BOT_TOKEN, 'tunewell');
+  }, [connectWithToken]);
+
+  const handleConnectCustom = useCallback(() => {
+    const token = customTokenInput.trim();
+    if (!token) {
+      showAlert('Error', 'Please enter a bot token.');
+      return;
+    }
+    if (!/^\d+:[A-Za-z0-9_-]+$/.test(token)) {
+      showAlert('Invalid Token', 'Token format should be like:\n123456789:ABCdefGHIjklMNOpqrSTUvwxYZ');
+      return;
+    }
+    connectWithToken(token, 'custom');
+    setCustomTokenInput('');
+  }, [customTokenInput, connectWithToken]);
 
   // Auto-restore connection on mount
   React.useEffect(() => {
-    if (!isConnected) {
-      // Auto-connect with built-in token
-      telegramService.setBotToken(TUNEWELL_BOT_TOKEN);
+    const { botToken, isConnected: connected, botMode: mode } = useTelegramStore.getState();
+    const token = mode === 'custom' && botToken ? botToken : TUNEWELL_BOT_TOKEN;
+
+    if (!connected) {
+      telegramService.setBotToken(token);
       telegramService.verifyToken()
         .then((bot) => {
-          setBotToken(TUNEWELL_BOT_TOKEN);
+          setBotToken(token);
           setBotUser(bot);
           setConnected(true);
         })
-        .catch(() => {
-          setConnected(false);
-        });
+        .catch(() => setConnected(false));
     } else {
-      telegramService.setBotToken(TUNEWELL_BOT_TOKEN);
+      telegramService.setBotToken(token);
     }
   }, []);
+
+  // Fetch and cache channel photo
+  const fetchChannelPhoto = useCallback(async (chatId: number) => {
+    const path = await telegramService.downloadChatPhoto(chatId, PHOTO_DIR);
+    if (path) setChannelPhoto(chatId, path);
+  }, [setChannelPhoto]);
 
   // Add channel/group
   const handleAddChannel = useCallback(async () => {
     const input = channelInput.trim();
     if (!input) {
-      showAlert('Error', 'Please enter a channel username or ID.');
+      showAlert('Error', 'Enter a @username or numeric chat ID.');
       return;
     }
 
-    // Parse input: @username, username, or numeric ID
     let chatId: string | number = input;
     if (/^-?\d+$/.test(input)) {
       chatId = parseInt(input, 10);
@@ -107,7 +139,6 @@ export default function TelegramScreen() {
         return;
       }
 
-      // Check bot is a member
       if (botUser) {
         const member = await telegramService.getChatMember(chat.id, botUser.id);
         if (member.status === 'left' || member.status === 'kicked') {
@@ -127,16 +158,25 @@ export default function TelegramScreen() {
         audioCount: 0,
         lastSyncAt: 0,
       });
+
+      // Fetch photo in background
+      fetchChannelPhoto(chat.id);
+
       setChannelInput('');
-      showAlert('Added', `"${chat.title}" added. Tap Sync to fetch audio.`);
+      const cachedCount = audioFiles[chat.id]?.length || 0;
+      if (cachedCount > 0) {
+        showAlert('Restored', `"${chat.title}" restored with ${cachedCount} cached audio file${cachedCount !== 1 ? 's' : ''}.`);
+      } else {
+        showAlert('Added', `"${chat.title}" added. Tap Sync to fetch audio.`);
+      }
     } catch (err: any) {
       showAlert('Error', err.message || 'Could not find channel/group.');
     } finally {
       setIsAddingChannel(false);
     }
-  }, [channelInput, botUser, addChannel]);
+  }, [channelInput, botUser, addChannel, audioFiles, fetchChannelPhoto]);
 
-  // Sync all channels
+  // Sync all channels + auto-discover new groups
   const handleSync = useCallback(async () => {
     if (isSyncing) return;
     setSyncing(true);
@@ -158,6 +198,30 @@ export default function TelegramScreen() {
           byChat[item.chatId].push(item);
         }
 
+        // Auto-discover: add channels we don't have yet
+        const knownIds = new Set(channels.map((c) => c.id));
+        for (const chatIdStr of Object.keys(byChat)) {
+          const chatId = parseInt(chatIdStr, 10);
+          if (!knownIds.has(chatId)) {
+            try {
+              const chat = await telegramService.getChat(chatId);
+              if (chat.type !== 'private') {
+                addChannel({
+                  id: chat.id,
+                  title: chat.title || `Chat ${chat.id}`,
+                  username: chat.username,
+                  type: chat.type as 'channel' | 'group' | 'supergroup',
+                  audioCount: 0,
+                  lastSyncAt: 0,
+                });
+                fetchChannelPhoto(chat.id);
+              }
+            } catch {
+              // Ignore if we can't get chat info
+            }
+          }
+        }
+
         for (const [chatIdStr, items] of Object.entries(byChat)) {
           const chatId = parseInt(chatIdStr, 10);
           addAudioFiles(chatId, items);
@@ -165,6 +229,11 @@ export default function TelegramScreen() {
           updateChannelSync(chatId, existing + items.length);
           totalNew += items.length;
         }
+      }
+
+      // Fetch missing photos
+      for (const ch of channels) {
+        if (!ch.photoPath) fetchChannelPhoto(ch.id);
       }
 
       if (totalNew > 0) {
@@ -177,7 +246,7 @@ export default function TelegramScreen() {
     } finally {
       setSyncing(false);
     }
-  }, [isSyncing, lastUpdateOffset, audioFiles, channels, addAudioFiles, updateChannelSync, setLastUpdateOffset, setSyncing]);
+  }, [isSyncing, lastUpdateOffset, audioFiles, channels, addChannel, addAudioFiles, updateChannelSync, setLastUpdateOffset, setSyncing, fetchChannelPhoto]);
 
   // Clear all data
   const handleDisconnect = useCallback(() => {
@@ -186,9 +255,7 @@ export default function TelegramScreen() {
       {
         text: 'Clear',
         style: 'destructive',
-        onPress: () => {
-          disconnect();
-        },
+        onPress: () => disconnect(),
       },
     ]);
   }, [disconnect]);
@@ -196,7 +263,7 @@ export default function TelegramScreen() {
   // Remove channel
   const handleRemoveChannel = useCallback(
     (chatId: number, title: string) => {
-      showAlert('Remove Channel', `Remove "${title}" and its audio?`, [
+      showAlert('Remove', `Remove "${title}" from list?\n\nAudio data is kept — re-add to restore.`, [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
@@ -207,6 +274,27 @@ export default function TelegramScreen() {
     },
     [removeChannel],
   );
+
+  // Channel photo component
+  const ChannelPhoto = ({ ch }: { ch: typeof channels[0] }) => {
+    if (ch.photoPath) {
+      return (
+        <Image
+          source={{ uri: `file://${ch.photoPath}` }}
+          style={styles.channelPhoto}
+        />
+      );
+    }
+    return (
+      <View style={[styles.channelPhotoFallback, { backgroundColor: '#0088cc' }]}>
+        <MaterialCommunityIcons
+          name={ch.type === 'channel' ? 'bullhorn' : 'account-group'}
+          size={18}
+          color="#fff"
+        />
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -229,24 +317,70 @@ export default function TelegramScreen() {
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {/* Setup */}
         {!isConnected ? (
-          <View style={[styles.card, { backgroundColor: colors.surface }]}>
-            <MaterialCommunityIcons name="send" size={40} color="#0088cc" style={styles.telegramIcon} />
-            <Text style={[styles.cardTitle, { color: colors.text }]}>TuneWell Telegram</Text>
-            <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
-              Listen to audio from your Telegram channels and groups right inside TuneWell.
-            </Text>
-            <TouchableOpacity
-              style={[styles.primaryBtn, { backgroundColor: '#0088cc' }]}
-              onPress={handleConnect}
-              disabled={isConnecting}
-            >
-              {isConnecting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.primaryBtnText}>Connect</Text>
+          <>
+            <View style={[styles.card, { backgroundColor: colors.surface }]}>
+              <MaterialCommunityIcons name="send" size={40} color="#0088cc" style={styles.telegramIcon} />
+              <Text style={[styles.cardTitle, { color: colors.text }]}>TuneWell Telegram</Text>
+              <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
+                Listen to audio from your Telegram channels and groups right inside TuneWell.
+              </Text>
+              <TouchableOpacity
+                style={[styles.primaryBtn, { backgroundColor: '#0088cc' }]}
+                onPress={handleConnectTuneWell}
+                disabled={isConnecting}
+              >
+                {isConnecting && !showCustomBot ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Connect with @TuneWellBot</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.customToggle}
+                onPress={() => setShowCustomBot(!showCustomBot)}
+              >
+                <Text style={[styles.customToggleText, { color: colors.textSecondary }]}>
+                  {showCustomBot ? 'Hide custom bot' : 'Use your own bot instead'}
+                </Text>
+                <MaterialIcons
+                  name={showCustomBot ? 'expand-less' : 'expand-more'}
+                  size={18}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+
+              {showCustomBot && (
+                <View style={styles.customBotSection}>
+                  <Text style={[styles.hint, { color: colors.textMuted }]}>
+                    Create a bot via @BotFather on Telegram, then paste the token below.
+                  </Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.surfaceLight, color: colors.text, borderColor: colors.border }]}
+                    placeholder="Paste bot token here..."
+                    placeholderTextColor={colors.textMuted}
+                    value={customTokenInput}
+                    onChangeText={setCustomTokenInput}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+                    onPress={handleConnectCustom}
+                    disabled={isConnecting}
+                  >
+                    {isConnecting && showCustomBot ? (
+                      <ActivityIndicator size="small" color={colors.background} />
+                    ) : (
+                      <Text style={[styles.primaryBtnText, { color: colors.background }]}>
+                        Connect Custom Bot
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               )}
-            </TouchableOpacity>
-          </View>
+            </View>
+          </>
         ) : (
           <>
             {/* Bot Info */}
@@ -257,14 +391,16 @@ export default function TelegramScreen() {
                   <Text style={[styles.botName, { color: colors.text }]}>
                     @{botUser?.username || 'TuneWellBot'}
                   </Text>
-                  <Text style={[styles.botStatus, { color: colors.success }]}>Connected</Text>
+                  <Text style={[styles.botStatus, { color: colors.success }]}>
+                    Connected{botMode === 'custom' ? ' (Custom Bot)' : ''}
+                  </Text>
                 </View>
                 <TouchableOpacity onPress={handleDisconnect}>
                   <MaterialIcons name="delete-outline" size={22} color={colors.error} />
                 </TouchableOpacity>
               </View>
               <Text style={[styles.hint, { color: colors.textMuted, marginTop: 10 }]}>
-                Add the bot to your Telegram channel or group as admin, then add it below to browse audio.
+                Add the bot to your channel or group as admin, then add it below.
               </Text>
             </View>
 
@@ -272,12 +408,15 @@ export default function TelegramScreen() {
             <View style={[styles.card, { backgroundColor: colors.surface }]}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Add Channel / Group</Text>
               <Text style={[styles.hint, { color: colors.textMuted }]}>
-                Enter the @username or numeric ID of a channel/group where the bot is admin.
+                Enter the @username (public) or numeric ID of a channel/group where the bot is admin.
+                {'\n\n'}
+                <Text style={{ fontWeight: '600', color: colors.textSecondary }}>Private groups:</Text>
+                {' '}Invite links are not supported. Add the bot to the group, then tap Sync — private groups are auto-discovered.
               </Text>
               <View style={styles.addRow}>
                 <TextInput
                   style={[styles.input, styles.addInput, { backgroundColor: colors.surfaceLight, color: colors.text, borderColor: colors.border }]}
-                  placeholder="@channel_username"
+                  placeholder="@username or -1001234567890"
                   placeholderTextColor={colors.textMuted}
                   value={channelInput}
                   onChangeText={setChannelInput}
@@ -302,7 +441,7 @@ export default function TelegramScreen() {
             {channels.length > 0 ? (
               <View style={[styles.card, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  Your Channels ({channels.length})
+                  Your Groups/Channels ({channels.length})
                 </Text>
                 {channels.map((ch) => {
                   const count = audioFiles[ch.id]?.length || 0;
@@ -317,11 +456,7 @@ export default function TelegramScreen() {
                         })
                       }
                     >
-                      <MaterialCommunityIcons
-                        name={ch.type === 'channel' ? 'bullhorn' : 'account-group'}
-                        size={22}
-                        color="#0088cc"
-                      />
+                      <ChannelPhoto ch={ch} />
                       <View style={styles.channelInfo}>
                         <Text style={[styles.channelTitle, { color: colors.text }]} numberOfLines={1}>
                           {ch.title}
@@ -330,7 +465,7 @@ export default function TelegramScreen() {
                           {count} audio file{count !== 1 ? 's' : ''}
                           {ch.lastSyncAt > 0
                             ? ` · Synced ${new Date(ch.lastSyncAt).toLocaleDateString()}`
-                            : ' · Not synced'}
+                            : count > 0 ? ' · Cached' : ' · Not synced'}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -347,7 +482,7 @@ export default function TelegramScreen() {
               <View style={styles.emptyState}>
                 <MaterialCommunityIcons name="music-note-plus" size={48} color={colors.textMuted} />
                 <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                  No channels added yet.{'\n'}Add a channel or group to get started.
+                  No groups or channels added yet.{'\n'}Add one or tap Sync to auto-discover.
                 </Text>
               </View>
             )}
@@ -380,7 +515,7 @@ const styles = StyleSheet.create({
   },
   telegramIcon: { alignSelf: 'center', marginBottom: 12 },
   cardTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
-  cardDesc: { fontSize: 14, lineHeight: 22, marginBottom: 16 },
+  cardDesc: { fontSize: 14, lineHeight: 22, marginBottom: 16, textAlign: 'center' },
   input: {
     borderWidth: 1,
     borderRadius: 10,
@@ -395,6 +530,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  customToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    gap: 4,
+  },
+  customToggleText: { fontSize: 13 },
+  customBotSection: { marginTop: 14 },
   botRow: { flexDirection: 'row', alignItems: 'center' },
   botInfo: { flex: 1, marginLeft: 12 },
   botName: { fontSize: 16, fontWeight: '600' },
@@ -416,6 +560,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
+  },
+  channelPhoto: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  channelPhotoFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   channelInfo: { flex: 1 },
   channelTitle: { fontSize: 15, fontWeight: '500' },

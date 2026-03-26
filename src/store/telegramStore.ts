@@ -17,13 +17,17 @@ export interface TelegramChannel {
   type: 'channel' | 'group' | 'supergroup';
   audioCount: number;
   lastSyncAt: number;
+  photoPath?: string; // cached local path to chat photo
 }
+
+export type BotMode = 'tunewell' | 'custom';
 
 interface TelegramState {
   // Bot config
   botToken: string | null;
   botUser: TelegramBotUser | null;
   isConnected: boolean;
+  botMode: BotMode;
 
   // Channels/groups
   channels: TelegramChannel[];
@@ -41,10 +45,12 @@ interface TelegramState {
   setBotToken: (token: string | null) => void;
   setBotUser: (user: TelegramBotUser | null) => void;
   setConnected: (connected: boolean) => void;
+  setBotMode: (mode: BotMode) => void;
 
   addChannel: (channel: TelegramChannel) => void;
   removeChannel: (chatId: number) => void;
   updateChannelSync: (chatId: number, audioCount: number) => void;
+  setChannelPhoto: (chatId: number, photoPath: string) => void;
 
   setAudioFiles: (chatId: number, files: TelegramAudioItem[]) => void;
   addAudioFiles: (chatId: number, files: TelegramAudioItem[]) => void;
@@ -61,6 +67,7 @@ export const useTelegramStore = create<TelegramState>()(
       botToken: null,
       botUser: null,
       isConnected: false,
+      botMode: 'tunewell' as BotMode,
       channels: [],
       audioFiles: {},
       lastUpdateOffset: 0,
@@ -69,21 +76,20 @@ export const useTelegramStore = create<TelegramState>()(
       setBotToken: (token) => set({ botToken: token }),
       setBotUser: (user) => set({ botUser: user }),
       setConnected: (connected) => set({ isConnected: connected }),
+      setBotMode: (mode) => set({ botMode: mode }),
 
       addChannel: (channel) => {
         const existing = get().channels;
         if (existing.find((c) => c.id === channel.id)) return;
-        set({ channels: [...existing, channel] });
+        // Restore audio count if we have cached audio from a previous add
+        const cachedAudio = get().audioFiles[channel.id]?.length || 0;
+        set({ channels: [...existing, { ...channel, audioCount: cachedAudio || channel.audioCount }] });
       },
 
       removeChannel: (chatId) => {
+        // Only remove from channels list — keep audioFiles so re-adding restores data
         set({
           channels: get().channels.filter((c) => c.id !== chatId),
-          audioFiles: (() => {
-            const files = { ...get().audioFiles };
-            delete files[chatId];
-            return files;
-          })(),
         });
       },
 
@@ -92,6 +98,13 @@ export const useTelegramStore = create<TelegramState>()(
           c.id === chatId
             ? { ...c, audioCount, lastSyncAt: Date.now() }
             : c,
+        );
+        set({ channels });
+      },
+
+      setChannelPhoto: (chatId, photoPath) => {
+        const channels = get().channels.map((c) =>
+          c.id === chatId ? { ...c, photoPath } : c,
         );
         set({ channels });
       },
@@ -122,6 +135,7 @@ export const useTelegramStore = create<TelegramState>()(
           botToken: null,
           botUser: null,
           isConnected: false,
+          botMode: 'tunewell' as BotMode,
           channels: [],
           audioFiles: {},
           lastUpdateOffset: 0,
