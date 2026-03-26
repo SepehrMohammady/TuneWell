@@ -49,6 +49,7 @@ interface TelegramState {
 
   addChannel: (channel: TelegramChannel) => void;
   removeChannel: (chatId: number) => void;
+  removeChannelWithAudio: (chatId: number) => void;
   updateChannelSync: (chatId: number, audioCount: number) => void;
   setChannelPhoto: (chatId: number, photoPath: string) => void;
 
@@ -90,6 +91,14 @@ export const useTelegramStore = create<TelegramState>()(
         // Only remove from channels list — keep audioFiles so re-adding restores data
         set({
           channels: get().channels.filter((c) => c.id !== chatId),
+        });
+      },
+
+      removeChannelWithAudio: (chatId) => {
+        const { [chatId]: _, ...rest } = get().audioFiles;
+        set({
+          channels: get().channels.filter((c) => c.id !== chatId),
+          audioFiles: rest,
         });
       },
 

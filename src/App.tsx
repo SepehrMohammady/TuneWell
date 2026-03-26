@@ -6,8 +6,8 @@
  * @repository https://github.com/SepehrMohammady/TuneWell
  */
 
-import React, { useEffect, useState } from 'react';
-import { StatusBar, LogBox, View, Text, StyleSheet, ActivityIndicator, Linking } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { StatusBar, LogBox, View, Text, StyleSheet, ActivityIndicator, Linking, AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -130,6 +130,79 @@ export default function App() {
     });
 
     return () => subscription.remove();
+  }, []);
+
+  // Background sync: rescan library + sync Telegram when app returns to foreground
+  const appState = useRef(AppState.currentState);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (appState.current.match(/inactive|background/) && nextState === 'active') {
+        try {
+          // Rescan library folders
+          const storeModule = await import('./store');
+          const { scanFolders, isScanning, startScan } = storeModule.useLibraryStore.getState();
+          if (scanFolders.length > 0 && !isScanning) {
+            startScan();
+          }
+
+          // Sync Telegram
+          const { useTelegramStore } = await import('./store/telegramStore');
+          const { telegramService, TUNEWELL_BOT_TOKEN } = await import('./services/telegram');
+          const tgState = useTelegramStore.getState();
+          if (tgState.isConnected && !tgState.isSyncing) {
+            const token = tgState.botMode === 'custom' && tgState.botToken ? tgState.botToken : TUNEWELL_BOT_TOKEN;
+            telegramService.setBotToken(token);
+            tgState.setSyncing(true);
+            try {
+              let offset = tgState.lastUpdateOffset || undefined;
+              let hasMore = true;
+              while (hasMore) {
+                const { updates, nextOffset } = await telegramService.getUpdates(offset);
+                offset = nextOffset;
+                tgState.setLastUpdateOffset(nextOffset);
+                if (updates.length === 0) break;
+                const audioItems = telegramService.extractAudioFromUpdates(updates);
+                const byChat: Record<number, typeof audioItems> = {};
+                for (const item of audioItems) {
+                  if (!byChat[item.chatId]) byChat[item.chatId] = [];
+                  byChat[item.chatId].push(item);
+                }
+                // Auto-add unknown channels
+                const known = new Set(useTelegramStore.getState().channels.map((c) => c.id));
+                for (const chatIdStr of Object.keys(byChat)) {
+                  const cid = parseInt(chatIdStr, 10);
+                  if (!known.has(cid)) {
+                    try {
+                      const chat = await telegramService.getChat(cid);
+                      if (chat.type !== 'private') {
+                        tgState.addChannel({
+                          id: chat.id,
+                          title: chat.title || `Chat ${chat.id}`,
+                          username: chat.username,
+                          type: chat.type as 'channel' | 'group' | 'supergroup',
+                          audioCount: 0,
+                          lastSyncAt: 0,
+                        });
+                      }
+                    } catch { /* ignore */ }
+                  }
+                }
+                for (const [chatIdStr, items] of Object.entries(byChat)) {
+                  const chatId = parseInt(chatIdStr, 10);
+                  tgState.addAudioFiles(chatId, items);
+                  const actualCount = useTelegramStore.getState().audioFiles[chatId]?.length || 0;
+                  tgState.updateChannelSync(chatId, actualCount);
+                }
+                if (updates.length < 100) hasMore = false;
+              }
+            } catch { /* silent */ }
+            finally { tgState.setSyncing(false); }
+          }
+        } catch { /* silent */ }
+      }
+      appState.current = nextState;
+    });
+    return () => sub.remove();
   }, []);
 
   // Lazy-load CustomAlert to avoid eager import

@@ -127,11 +127,31 @@ export default function PlaylistsScreen() {
                 if (!byChat[item.chatId]) byChat[item.chatId] = [];
                 byChat[item.chatId].push(item);
               }
+              // Auto-add unknown channels that have audio
+              const knownChatIds = new Set(useTelegramStore.getState().channels.map((c: any) => c.id));
+              for (const chatIdStr of Object.keys(byChat)) {
+                const cid = parseInt(chatIdStr, 10);
+                if (!knownChatIds.has(cid)) {
+                  try {
+                    const chat = await telegramService.getChat(cid);
+                    if (chat.type !== 'private') {
+                      addChannel({
+                        id: chat.id,
+                        title: chat.title || `Chat ${chat.id}`,
+                        username: chat.username,
+                        type: chat.type as 'channel' | 'group' | 'supergroup',
+                        audioCount: 0,
+                        lastSyncAt: 0,
+                      });
+                    }
+                  } catch { /* ignore */ }
+                }
+              }
               for (const [chatIdStr, items] of Object.entries(byChat)) {
                 const chatId = parseInt(chatIdStr, 10);
                 addAudioFiles(chatId, items);
-                const existing = audioFiles[chatId]?.length || 0;
-                updateChannelSync(chatId, existing + items.length);
+                const actualCount = useTelegramStore.getState().audioFiles[chatId]?.length || 0;
+                updateChannelSync(chatId, actualCount);
               }
 
               if (updates.length < 100) {

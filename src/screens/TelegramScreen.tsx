@@ -43,7 +43,7 @@ export default function TelegramScreen() {
     botUser, isConnected, channels, audioFiles,
     isSyncing, botMode,
     setBotToken, setBotUser, setConnected, setBotMode,
-    addChannel, removeChannel, updateChannelSync, setChannelPhoto,
+    addChannel, removeChannel, removeChannelWithAudio, updateChannelSync, setChannelPhoto,
     addAudioFiles, setLastUpdateOffset, setSyncing,
     disconnect, lastUpdateOffset,
   } = useTelegramStore();
@@ -253,11 +253,37 @@ export default function TelegramScreen() {
           byChat[item.chatId].push(item);
         }
 
+        // Auto-add channels for any audio found from unknown chats
+        const currentChannelIds = new Set(useTelegramStore.getState().channels.map((c) => c.id));
+        for (const chatIdStr of Object.keys(byChat)) {
+          const cid = parseInt(chatIdStr, 10);
+          if (!currentChannelIds.has(cid)) {
+            try {
+              const chat = await telegramService.getChat(cid);
+              if (chat.type !== 'private') {
+                addChannel({
+                  id: chat.id,
+                  title: chat.title || `Chat ${chat.id}`,
+                  username: chat.username,
+                  type: chat.type as 'channel' | 'group' | 'supergroup',
+                  audioCount: 0,
+                  lastSyncAt: 0,
+                });
+                currentChannelIds.add(cid);
+                fetchChannelPhoto(chat.id);
+              }
+            } catch {
+              // Can't resolve chat — will still store audio
+            }
+          }
+        }
+
         for (const [chatIdStr, items] of Object.entries(byChat)) {
           const chatId = parseInt(chatIdStr, 10);
           addAudioFiles(chatId, items);
-          const existing = audioFiles[chatId]?.length || 0;
-          updateChannelSync(chatId, existing + items.length);
+          // Read actual count from store (after dedup) instead of stale closure
+          const actualCount = useTelegramStore.getState().audioFiles[chatId]?.length || 0;
+          updateChannelSync(chatId, actualCount);
           totalNew += items.length;
         }
 
@@ -336,16 +362,35 @@ export default function TelegramScreen() {
   // Remove channel
   const handleRemoveChannel = useCallback(
     (chatId: number, title: string) => {
-      showAlert('Remove', `Remove "${title}" from list?\n\nAudio data is kept — re-add to restore.`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => removeChannel(chatId),
-        },
-      ]);
+      const audioCount = audioFiles[chatId]?.length || 0;
+      showAlert(
+        'Remove Channel',
+        `Remove "${title}" from the list?${audioCount > 0 ? `\n\n${audioCount} audio file${audioCount !== 1 ? 's' : ''} synced.` : ''}`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          ...(audioCount > 0
+            ? [
+                {
+                  text: 'Keep Audio',
+                  onPress: () => removeChannel(chatId),
+                },
+                {
+                  text: 'Delete All',
+                  style: 'destructive' as const,
+                  onPress: () => removeChannelWithAudio(chatId),
+                },
+              ]
+            : [
+                {
+                  text: 'Remove',
+                  style: 'destructive' as const,
+                  onPress: () => removeChannel(chatId),
+                },
+              ]),
+        ],
+      );
     },
-    [removeChannel],
+    [removeChannel, removeChannelWithAudio, audioFiles],
   );
 
   // Channel photo component

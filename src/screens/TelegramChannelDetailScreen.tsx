@@ -53,6 +53,7 @@ export default function TelegramChannelDetailScreen() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isSavingOffline, setIsSavingOffline] = useState(false);
   const [offlineProgress, setOfflineProgress] = useState({ done: 0, total: 0 });
+  const [hasOfflineFiles, setHasOfflineFiles] = useState(false);
 
   const channel = useMemo(() => channels.find((c) => c.id === chatId), [channels, chatId]);
 
@@ -231,6 +232,40 @@ export default function TelegramChannelDetailScreen() {
     }
   }, [items, title]);
 
+  // Check for offline files on mount
+  React.useEffect(() => {
+    const safeTitle = (title || 'Unknown').replace(/[<>:"/\\|?*]/g, '_');
+    const channelDir = `${OFFLINE_DIR}/${safeTitle}`;
+    RNFS.exists(channelDir).then(async (exists) => {
+      if (exists) {
+        const files = await RNFS.readDir(channelDir);
+        setHasOfflineFiles(files.length > 0);
+      }
+    }).catch(() => {});
+  }, [title]);
+
+  // Delete offline files
+  const handleDeleteOffline = useCallback(() => {
+    const safeTitle = (title || 'Unknown').replace(/[<>:"/\\|?*]/g, '_');
+    const channelDir = `${OFFLINE_DIR}/${safeTitle}`;
+    showAlert('Delete Offline Files', `Delete all downloaded files for "${title}"?\n\nThis won't remove synced audio data, only local offline copies.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await RNFS.unlink(channelDir);
+            setHasOfflineFiles(false);
+            showAlert('Deleted', 'Offline files removed.');
+          } catch {
+            showAlert('Error', 'Could not delete offline files.');
+          }
+        },
+      },
+    ]);
+  }, [title]);
+
   const renderItem = useCallback(
     ({ item }: { item: TelegramAudioItem }) => {
       const isDownloading = downloadingId === item.fileId;
@@ -320,6 +355,15 @@ export default function TelegramChannelDetailScreen() {
               </>
             )}
           </TouchableOpacity>
+          {hasOfflineFiles && (
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.error }]}
+              onPress={handleDeleteOffline}
+              disabled={!!downloadingId || isSavingOffline}
+            >
+              <MaterialIcons name="delete-outline" size={20} color={colors.error} />
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
