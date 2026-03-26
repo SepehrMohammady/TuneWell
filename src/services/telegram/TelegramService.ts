@@ -15,9 +15,8 @@
 
 const TELEGRAM_API = 'https://api.telegram.org';
 
-// Built-in TuneWell bot token — shared across all app users
-// Created via @BotFather for the TuneWell project
-export const TUNEWELL_BOT_TOKEN = 'REDACTED_PLACEHOLDER_TOKEN';
+// Re-export for consumers (actual value lives in gitignored secrets.ts)
+export { TUNEWELL_BOT_TOKEN } from '../../config/secrets';
 
 // Telegram Bot API types
 export interface TelegramBotUser {
