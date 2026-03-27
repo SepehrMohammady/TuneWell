@@ -167,7 +167,7 @@ export default function MiniPlayer() {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 60, // Above tab bar
+    bottom: 0, // Flush with tab bar
     left: 0,
     right: 0,
     backgroundColor: THEME.colors.surface,

@@ -32,6 +32,9 @@ interface TelegramState {
   // Channels/groups
   channels: TelegramChannel[];
 
+  // Dismissed channels (won't be auto-discovered again)
+  dismissedChannelIds: number[];
+
   // Audio index: chatId -> audio items
   audioFiles: Record<number, TelegramAudioItem[]>;
 
@@ -50,6 +53,7 @@ interface TelegramState {
   addChannel: (channel: TelegramChannel) => void;
   removeChannel: (chatId: number) => void;
   removeChannelWithAudio: (chatId: number) => void;
+  isDismissed: (chatId: number) => boolean;
   updateChannelSync: (chatId: number, audioCount: number) => void;
   setChannelPhoto: (chatId: number, photoPath: string) => void;
 
@@ -70,6 +74,7 @@ export const useTelegramStore = create<TelegramState>()(
       isConnected: false,
       botMode: 'tunewell' as BotMode,
       channels: [],
+      dismissedChannelIds: [],
       audioFiles: {},
       lastUpdateOffset: 0,
       isSyncing: false,
@@ -88,19 +93,25 @@ export const useTelegramStore = create<TelegramState>()(
       },
 
       removeChannel: (chatId) => {
-        // Only remove from channels list — keep audioFiles so re-adding restores data
+        // Remove from channels list + dismiss so auto-discover won't re-add
+        const dismissed = get().dismissedChannelIds;
         set({
           channels: get().channels.filter((c) => c.id !== chatId),
+          dismissedChannelIds: dismissed.includes(chatId) ? dismissed : [...dismissed, chatId],
         });
       },
 
       removeChannelWithAudio: (chatId) => {
         const { [chatId]: _, ...rest } = get().audioFiles;
+        const dismissed = get().dismissedChannelIds;
         set({
           channels: get().channels.filter((c) => c.id !== chatId),
           audioFiles: rest,
+          dismissedChannelIds: dismissed.includes(chatId) ? dismissed : [...dismissed, chatId],
         });
       },
+
+      isDismissed: (chatId) => get().dismissedChannelIds.includes(chatId),
 
       updateChannelSync: (chatId, audioCount) => {
         const channels = get().channels.map((c) =>
@@ -149,6 +160,7 @@ export const useTelegramStore = create<TelegramState>()(
           isConnected: false,
           botMode: 'tunewell' as BotMode,
           channels: [],
+          dismissedChannelIds: [],
           audioFiles: {},
           lastUpdateOffset: 0,
           isSyncing: false,

@@ -2,9 +2,8 @@
  * TuneWell Telegram Screen
  * 
  * Manage Telegram integration:
- * - Quick Connect with @TuneWellBot (public channels only, no auto-discover)
- * - Custom bot for full features (auto-discover private groups)
- * - Add channels/groups where bot is admin
+ * - Quick Connect with @TuneWellBot (auto-discovers all channels/groups)
+ * - Custom bot for advanced users
  * - Sync and browse audio files
  */
 
@@ -27,7 +26,6 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import RNFS from 'react-native-fs';
 import { useThemeStore } from '../store/themeStore';
 import { useTelegramStore } from '../store/telegramStore';
-import type { BotMode } from '../store/telegramStore';
 import { telegramService, TUNEWELL_BOT_TOKEN } from '../services/telegram';
 import { showAlert } from '../store/alertStore';
 import MiniPlayer from '../components/player/MiniPlayer';
@@ -45,20 +43,18 @@ export default function TelegramScreen() {
     setBotToken, setBotUser, setConnected, setBotMode,
     addChannel, removeChannel, removeChannelWithAudio, updateChannelSync, setChannelPhoto,
     addAudioFiles, setLastUpdateOffset, setSyncing,
-    disconnect, lastUpdateOffset,
+    disconnect, lastUpdateOffset, dismissedChannelIds,
   } = useTelegramStore();
 
-  const [channelInput, setChannelInput] = useState('');
   const [customTokenInput, setCustomTokenInput] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isAddingChannel, setIsAddingChannel] = useState(false);
   const [showCustomBot, setShowCustomBot] = useState(false);
   const syncAfterAddRef = React.useRef(false);
 
   const isCustomBot = botMode === 'custom';
 
   // Connect with a token
-  const connectWithToken = useCallback(async (token: string, mode: BotMode) => {
+  const connectWithToken = useCallback(async (token: string, mode: import('../store/telegramStore').BotMode) => {
     setIsConnecting(true);
     try {
       telegramService.setBotToken(token);
@@ -70,7 +66,7 @@ export default function TelegramScreen() {
       // Reset update offset — each bot has its own update queue
       setLastUpdateOffset(0);
       if (mode === 'tunewell') {
-        showAlert('Connected', `@TuneWellBot is ready!\n\nAdd the bot to your public channels as admin, then add them by @username.`);
+        showAlert('Connected', `@TuneWellBot is ready!\n\nAdd the bot as ADMIN to your channels/groups, then tap Sync to discover audio.`);
       } else {
         showAlert('Connected', `Bot @${bot.username} is ready!\n\nAdd it to your groups as admin, then tap Sync to auto-discover them.`);
       }
@@ -125,89 +121,13 @@ export default function TelegramScreen() {
     if (path) setChannelPhoto(chatId, path);
   }, [setChannelPhoto]);
 
-  // Add channel/group
-  const handleAddChannel = useCallback(async () => {
-    const input = channelInput.trim();
-    if (!input) {
-      showAlert('Error', isCustomBot ? 'Enter a @username or numeric chat ID.' : 'Enter the @username of a public channel or group.');
-      return;
-    }
-
-    // TuneWellBot: only public @username allowed (no numeric IDs)
-    if (!isCustomBot && /^-?\d+$/.test(input)) {
-      showAlert('Public Only', 'TuneWellBot only supports public channels via @username.\n\nFor private groups, set up your own bot in the Custom Bot section.');
-      return;
-    }
-
-    let chatId: string | number = input;
-    if (/^-?\d+$/.test(input)) {
-      chatId = parseInt(input, 10);
-    } else {
-      chatId = input.startsWith('@') ? input : `@${input}`;
-    }
-
-    setIsAddingChannel(true);
-    try {
-      const chat = await telegramService.getChat(chatId);
-
-      if (chat.type === 'private') {
-        showAlert('Not Supported', 'Private chats are not supported. Please add a channel or group.');
-        return;
-      }
-
-      if (botUser) {
-        const member = await telegramService.getChatMember(chat.id, botUser.id);
-        if (member.status === 'left' || member.status === 'kicked') {
-          showAlert(
-            'Bot Not in Chat',
-            `Please add @${botUser.username} as admin to "${chat.title}" first, then try again.`,
-          );
-          return;
-        }
-        // Bot must be admin to see messages in groups
-        if (member.status !== 'administrator' && member.status !== 'creator') {
-          showAlert(
-            'Admin Required',
-            `@${botUser.username} must be an admin in "${chat.title}" to see audio messages.\n\nGo to the group in Telegram → Members → tap the bot → Promote to Admin.`,
-          );
-          return;
-        }
-      }
-
-      addChannel({
-        id: chat.id,
-        title: chat.title || `Chat ${chat.id}`,
-        username: chat.username,
-        type: chat.type as 'channel' | 'group' | 'supergroup',
-        audioCount: 0,
-        lastSyncAt: 0,
-      });
-
-      // Fetch photo in background
-      fetchChannelPhoto(chat.id);
-
-      setChannelInput('');
-      const cachedCount = audioFiles[chat.id]?.length || 0;
-      if (cachedCount > 0) {
-        showAlert('Restored', `"${chat.title}" restored with ${cachedCount} cached audio file${cachedCount !== 1 ? 's' : ''}.`);
-      } else {
-        showAlert('Added', `"${chat.title}" added. Syncing audio now...`);
-        // Auto-trigger sync after adding channel
-        syncAfterAddRef.current = true;
-      }
-    } catch (err: any) {
-      showAlert('Error', err.message || 'Could not find channel/group.');
-    } finally {
-      setIsAddingChannel(false);
-    }
-  }, [channelInput, isCustomBot, botUser, addChannel, audioFiles, fetchChannelPhoto]);
-
-  // Sync all channels + auto-discover new groups (custom bot only)
+  // Sync all channels + auto-discover new groups
   const handleSync = useCallback(async () => {
     if (isSyncing) return;
     setSyncing(true);
     let totalNew = 0;
     let restored = 0;
+    const dismissed = new Set(dismissedChannelIds);
 
     try {
       // Loop to consume ALL pending updates (getUpdates returns max 100 at a time)
@@ -224,23 +144,21 @@ export default function TelegramScreen() {
           break;
         }
 
-        // Auto-discover: only for custom bot mode
-        if (isCustomBot) {
-          const discoveredChats = telegramService.extractChatsFromUpdates(updates);
-          const knownIds = new Set(channels.map((c) => c.id));
-          for (const chat of discoveredChats) {
-            if (!knownIds.has(chat.id) && chat.type !== 'private') {
-              addChannel({
-                id: chat.id,
-                title: chat.title || `Chat ${chat.id}`,
-                username: chat.username,
-                type: chat.type as 'channel' | 'group' | 'supergroup',
-                audioCount: 0,
-                lastSyncAt: 0,
-              });
-              knownIds.add(chat.id);
-              fetchChannelPhoto(chat.id);
-            }
+        // Auto-discover chats from updates (both bot modes)
+        const discoveredChats = telegramService.extractChatsFromUpdates(updates);
+        const knownIds = new Set(useTelegramStore.getState().channels.map((c) => c.id));
+        for (const chat of discoveredChats) {
+          if (!knownIds.has(chat.id) && !dismissed.has(chat.id) && chat.type !== 'private') {
+            addChannel({
+              id: chat.id,
+              title: chat.title || `Chat ${chat.id}`,
+              username: chat.username,
+              type: chat.type as 'channel' | 'group' | 'supergroup',
+              audioCount: 0,
+              lastSyncAt: 0,
+            });
+            knownIds.add(chat.id);
+            fetchChannelPhoto(chat.id);
           }
         }
 
@@ -257,7 +175,7 @@ export default function TelegramScreen() {
         const currentChannelIds = new Set(useTelegramStore.getState().channels.map((c) => c.id));
         for (const chatIdStr of Object.keys(byChat)) {
           const cid = parseInt(chatIdStr, 10);
-          if (!currentChannelIds.has(cid)) {
+          if (!currentChannelIds.has(cid) && !dismissed.has(cid)) {
             try {
               const chat = await telegramService.getChat(cid);
               if (chat.type !== 'private') {
@@ -293,30 +211,28 @@ export default function TelegramScreen() {
         }
       }
 
-      // Auto-restore orphaned groups (custom bot only)
-      if (isCustomBot) {
-        const currentIds = new Set(channels.map((c) => c.id));
-        const orphanedIds = Object.keys(audioFiles)
-          .map(Number)
-          .filter((id) => !currentIds.has(id) && audioFiles[id]?.length > 0);
-        for (const orphanId of orphanedIds) {
-          try {
-            const chat = await telegramService.getChat(orphanId);
-            if (chat.type !== 'private') {
-              addChannel({
-                id: chat.id,
-                title: chat.title || `Chat ${chat.id}`,
-                username: chat.username,
-                type: chat.type as 'channel' | 'group' | 'supergroup',
-                audioCount: 0,
-                lastSyncAt: 0,
-              });
-              fetchChannelPhoto(chat.id);
-              restored++;
-            }
-          } catch {
-            // Bot may no longer be in this chat
+      // Auto-restore orphaned groups
+      const currentIds = new Set(useTelegramStore.getState().channels.map((c) => c.id));
+      const orphanedIds = Object.keys(audioFiles)
+        .map(Number)
+        .filter((id) => !currentIds.has(id) && !dismissed.has(id) && audioFiles[id]?.length > 0);
+      for (const orphanId of orphanedIds) {
+        try {
+          const chat = await telegramService.getChat(orphanId);
+          if (chat.type !== 'private') {
+            addChannel({
+              id: chat.id,
+              title: chat.title || `Chat ${chat.id}`,
+              username: chat.username,
+              type: chat.type as 'channel' | 'group' | 'supergroup',
+              audioCount: 0,
+              lastSyncAt: 0,
+            });
+            fetchChannelPhoto(chat.id);
+            restored++;
           }
+        } catch {
+          // Bot may no longer be in this chat
         }
       }
 
@@ -337,7 +253,7 @@ export default function TelegramScreen() {
     } finally {
       setSyncing(false);
     }
-  }, [isSyncing, isCustomBot, lastUpdateOffset, audioFiles, channels, addChannel, addAudioFiles, updateChannelSync, setLastUpdateOffset, setSyncing, fetchChannelPhoto]);
+  }, [isSyncing, lastUpdateOffset, audioFiles, channels, dismissedChannelIds, addChannel, addAudioFiles, updateChannelSync, setLastUpdateOffset, setSyncing, fetchChannelPhoto]);
 
   // Auto-sync after adding a channel
   React.useEffect(() => {
@@ -456,7 +372,7 @@ export default function TelegramScreen() {
                 )}
               </TouchableOpacity>
               <Text style={[styles.hint, { color: colors.textMuted, textAlign: 'center', marginBottom: 12 }]}>
-                Uses @TuneWellBot for public channels.{'\n'}Add the bot to your channel as admin, then add by @username.
+                Uses @TuneWellBot — add it as ADMIN to your channels/groups.{'\n'}Audio is discovered automatically when you sync.
               </Text>
 
               {/* Custom Bot toggle */}
@@ -543,41 +459,9 @@ export default function TelegramScreen() {
               </View>
               <Text style={[styles.hint, { color: colors.textMuted, marginTop: 10 }]}>
                 {isCustomBot
-                  ? 'Add the bot as admin to your channel or group. Tap Sync to auto-discover private groups.'
-                  : 'Add @TuneWellBot as ADMIN to your public channel/group, then add it by @username below.'}
+                  ? 'Add the bot as ADMIN to your channel or group. Tap Sync to auto-discover them.'
+                  : 'Add @TuneWellBot as ADMIN to your channel/group. Tap Sync to discover audio automatically.'}
               </Text>
-            </View>
-
-            {/* Add Channel */}
-            <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Add Channel / Group</Text>
-              <Text style={[styles.hint, { color: colors.textMuted }]}>
-                {isCustomBot
-                  ? 'For public channels/groups, enter the @username. For private groups, just add the bot as admin and tap Sync — they appear automatically.'
-                  : 'Enter the @username of a public channel or group where @TuneWellBot is admin.'}
-              </Text>
-              <View style={styles.addRow}>
-                <TextInput
-                  style={[styles.input, styles.addInput, { backgroundColor: colors.surfaceLight, color: colors.text, borderColor: colors.border }]}
-                  placeholder="@channel_username"
-                  placeholderTextColor={colors.textMuted}
-                  value={channelInput}
-                  onChangeText={setChannelInput}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <TouchableOpacity
-                  style={[styles.addBtn, { backgroundColor: '#0088cc' }]}
-                  onPress={handleAddChannel}
-                  disabled={isAddingChannel}
-                >
-                  {isAddingChannel ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <MaterialIcons name="add" size={24} color="#fff" />
-                  )}
-                </TouchableOpacity>
-              </View>
             </View>
 
             {/* Channels List */}
@@ -625,9 +509,7 @@ export default function TelegramScreen() {
               <View style={styles.emptyState}>
                 <MaterialCommunityIcons name="music-note-plus" size={48} color={colors.textMuted} />
                 <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                  {isCustomBot
-                    ? 'No groups or channels added yet.\nAdd one or tap Sync to auto-discover.'
-                    : 'No channels added yet.\nAdd a public channel by @username above.'}
+                  No channels discovered yet.{'\n'}Add the bot as ADMIN to your channels/groups in Telegram, then tap Sync.
                 </Text>
               </View>
             )}

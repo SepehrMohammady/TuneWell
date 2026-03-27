@@ -161,6 +161,25 @@ export default function App() {
                 offset = nextOffset;
                 tgState.setLastUpdateOffset(nextOffset);
                 if (updates.length === 0) break;
+
+                const dismissed = new Set(useTelegramStore.getState().dismissedChannelIds);
+
+                // Auto-discover chats from updates
+                const discoveredChats = telegramService.extractChatsFromUpdates(updates);
+                const knownDiscover = new Set(useTelegramStore.getState().channels.map((c) => c.id));
+                for (const chat of discoveredChats) {
+                  if (!knownDiscover.has(chat.id) && !dismissed.has(chat.id) && chat.type !== 'private') {
+                    tgState.addChannel({
+                      id: chat.id,
+                      title: chat.title || `Chat ${chat.id}`,
+                      username: chat.username,
+                      type: chat.type as 'channel' | 'group' | 'supergroup',
+                      audioCount: 0,
+                      lastSyncAt: 0,
+                    });
+                  }
+                }
+
                 const audioItems = telegramService.extractAudioFromUpdates(updates);
                 const byChat: Record<number, typeof audioItems> = {};
                 for (const item of audioItems) {
@@ -171,7 +190,7 @@ export default function App() {
                 const known = new Set(useTelegramStore.getState().channels.map((c) => c.id));
                 for (const chatIdStr of Object.keys(byChat)) {
                   const cid = parseInt(chatIdStr, 10);
-                  if (!known.has(cid)) {
+                  if (!known.has(cid) && !dismissed.has(cid)) {
                     try {
                       const chat = await telegramService.getChat(cid);
                       if (chat.type !== 'private') {

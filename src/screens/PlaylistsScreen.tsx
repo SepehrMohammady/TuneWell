@@ -103,21 +103,20 @@ export default function PlaylistsScreen() {
                 break;
               }
 
-              // Auto-discover new chats (custom bot only)
-              if (botMode === 'custom') {
-                const discoveredChats = telegramService.extractChatsFromUpdates(updates);
-                const knownIds = new Set(channels.map((c: any) => c.id));
-                for (const chat of discoveredChats) {
-                  if (!knownIds.has(chat.id) && chat.type !== 'private') {
-                    addChannel({
-                      id: chat.id,
-                      title: chat.title || `Chat ${chat.id}`,
-                      username: chat.username,
-                      type: chat.type as 'channel' | 'group' | 'supergroup',
-                      audioCount: 0,
-                      lastSyncAt: 0,
-                    });
-                  }
+              // Auto-discover new chats (both bot modes)
+              const dismissed = new Set(useTelegramStore.getState().dismissedChannelIds);
+              const discoveredChats = telegramService.extractChatsFromUpdates(updates);
+              const knownIds = new Set(useTelegramStore.getState().channels.map((c: any) => c.id));
+              for (const chat of discoveredChats) {
+                if (!knownIds.has(chat.id) && !dismissed.has(chat.id) && chat.type !== 'private') {
+                  addChannel({
+                    id: chat.id,
+                    title: chat.title || `Chat ${chat.id}`,
+                    username: chat.username,
+                    type: chat.type as 'channel' | 'group' | 'supergroup',
+                    audioCount: 0,
+                    lastSyncAt: 0,
+                  });
                 }
               }
 
@@ -131,7 +130,7 @@ export default function PlaylistsScreen() {
               const knownChatIds = new Set(useTelegramStore.getState().channels.map((c: any) => c.id));
               for (const chatIdStr of Object.keys(byChat)) {
                 const cid = parseInt(chatIdStr, 10);
-                if (!knownChatIds.has(cid)) {
+                if (!knownChatIds.has(cid) && !dismissed.has(cid)) {
                   try {
                     const chat = await telegramService.getChat(cid);
                     if (chat.type !== 'private') {

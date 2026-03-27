@@ -89,8 +89,6 @@ function MainTabs() {
         tabBarStyle: {
           backgroundColor: THEME.colors.surface,
           borderTopColor: THEME.colors.border,
-          height: 60,
-          paddingBottom: 8,
           paddingTop: 8,
         },
         tabBarActiveTintColor: THEME.colors.primary,

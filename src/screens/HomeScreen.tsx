@@ -30,6 +30,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { showAlert } from '../store/alertStore';
 import { THEME, ROUTES, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore, useStreamingStore } from '../store';
+import { useTelegramStore } from '../store/telegramStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { audioService } from '../services/audio';
 import MiniPlayer from '../components/player/MiniPlayer';
@@ -45,6 +46,7 @@ export default function HomeScreen() {
   // Streaming hidden for now — no unrestricted streaming API available
   // const { spotifyPlaylists, spotifyConnected } = useStreamingStore();
   const { homeSections, toggleHomeSection, moveHomeSection, resetHomeSections } = useSettingsStore();
+  const { isConnected: telegramConnected, channels: telegramChannels, audioFiles: telegramAudioFiles } = useTelegramStore();
   const [customizeVisible, setCustomizeVisible] = useState(false);
   
   // Recently played tracks (last 5)
@@ -352,31 +354,79 @@ export default function HomeScreen() {
   // Streaming hidden — renderSpotifyPlaylists disabled
   const renderSpotifyPlaylists = () => null;
 
-  const renderTelegram = () => (
-    <View style={styles.section} key="telegram">
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Telegram Music</Text>
-      </View>
-      <TouchableOpacity
-        style={[styles.statsCard, { backgroundColor: colors.surface }]}
-        onPress={() => navigation.navigate('TelegramScreen')}
-        activeOpacity={0.7}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}>
-          <MaterialCommunityIcons name="telegram" size={32} color="#0088cc" />
-          <View style={{ marginLeft: 12, flex: 1 }}>
-            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 2 }]}>
-              Manage Telegram Bot
-            </Text>
-            <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
-              Play music from your Telegram channels &amp; groups
-            </Text>
-          </View>
-          <MaterialIcons name="chevron-right" size={24} color={colors.textMuted} />
+  const renderTelegram = () => {
+    const hasChannels = telegramConnected && telegramChannels.length > 0;
+    const totalTelegramAudio = hasChannels
+      ? telegramChannels.reduce((sum, ch) => sum + (telegramAudioFiles[ch.id]?.length || 0), 0)
+      : 0;
+
+    return (
+      <View style={styles.section} key="telegram">
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Telegram Music</Text>
+          {hasChannels && (
+            <TouchableOpacity onPress={() => navigation.navigate('TelegramScreen')}>
+              <Text style={[styles.seeAll, { color: colors.primary }]}>Manage</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      </TouchableOpacity>
-    </View>
-  );
+        {hasChannels ? (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+              {telegramChannels.map((ch) => {
+                const count = telegramAudioFiles[ch.id]?.length || 0;
+                return (
+                  <TouchableOpacity
+                    key={ch.id}
+                    style={[styles.playlistCard, { backgroundColor: colors.surface }]}
+                    onPress={() => navigation.navigate('TelegramChannelDetail', { chatId: ch.id, title: ch.title })}
+                    activeOpacity={0.7}
+                  >
+                    {ch.photoPath ? (
+                      <Image source={{ uri: `file://${ch.photoPath}` }} style={styles.playlistCardImage} />
+                    ) : (
+                      <View style={[styles.playlistCardImage, { backgroundColor: '#0088cc22', justifyContent: 'center', alignItems: 'center' }]}>
+                        <MaterialCommunityIcons
+                          name={ch.type === 'channel' ? 'bullhorn' : 'account-group'}
+                          size={36}
+                          color="#0088cc"
+                        />
+                      </View>
+                    )}
+                    <Text style={[styles.playlistCardName, { color: colors.text }]} numberOfLines={1}>
+                      {ch.title}
+                    </Text>
+                    <Text style={[styles.playlistCardCount, { color: colors.textSecondary }]}>
+                      {count} audio file{count !== 1 ? 's' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
+        ) : (
+          <TouchableOpacity
+            style={[styles.statsCard, { backgroundColor: colors.surface }]}
+            onPress={() => navigation.navigate('TelegramScreen')}
+            activeOpacity={0.7}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}>
+              <MaterialCommunityIcons name="telegram" size={32} color="#0088cc" />
+              <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 2 }]}>
+                  {telegramConnected ? 'Tap Sync to discover channels' : 'Connect Telegram Bot'}
+                </Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                  Play music from your Telegram channels & groups
+                </Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   const sectionMap: Record<string, () => React.ReactNode> = {
     library: renderLibrary,
