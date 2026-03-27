@@ -179,6 +179,18 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       storage: createJSONStorage(() => zustandStorage),
+      merge: (persistedState: any, currentState: SettingsState) => {
+        const merged = { ...currentState, ...persistedState };
+        // Ensure any new defaultHomeSections entries are added to persisted homeSections
+        if (persistedState && Array.isArray(persistedState.homeSections)) {
+          const persistedIds = new Set(persistedState.homeSections.map((s: HomeSectionConfig) => s.id));
+          const missing = defaultHomeSections.filter(s => !persistedIds.has(s.id));
+          if (missing.length > 0) {
+            merged.homeSections = [...persistedState.homeSections, ...missing];
+          }
+        }
+        return merged;
+      },
     }
   )
 );

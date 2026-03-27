@@ -33,6 +33,7 @@ import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore, useSt
 import { useTelegramStore } from '../store/telegramStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { audioService } from '../services/audio';
+import { resolveTrackId } from '../utils/trackResolver';
 import MiniPlayer from '../components/player/MiniPlayer';
 import type { Track, QueueItem } from '../types';
 import type { ScannedTrack } from '../services/libraryScanner';
@@ -52,19 +53,19 @@ export default function HomeScreen() {
   // Recently played tracks (last 5)
   const recentlyPlayedTracks = useMemo(() => {
     return recentlyPlayed.slice(0, 5).map(trackId => {
-      const track = tracks.find(t => t.id === trackId);
+      const track = resolveTrackId(trackId, tracks, telegramAudioFiles, telegramChannels);
       return track ? { id: trackId, track } : null;
     }).filter(Boolean) as { id: string; track: ScannedTrack }[];
-  }, [recentlyPlayed, tracks]);
+  }, [recentlyPlayed, tracks, telegramAudioFiles, telegramChannels]);
 
   // Favorite tracks (last 5 added favorites)
   const favoriteTracks = useMemo(() => {
     const favIds = getFavoriteIds();
     return favIds.slice(0, 5).map(trackId => {
-      const track = tracks.find(t => t.id === trackId);
+      const track = resolveTrackId(trackId, tracks, telegramAudioFiles, telegramChannels);
       return track ? { id: trackId, track } : null;
     }).filter(Boolean) as { id: string; track: ScannedTrack }[];
-  }, [trackMeta, tracks]);
+  }, [trackMeta, tracks, telegramAudioFiles, telegramChannels]);
 
   const favoritesCount = useMemo(() => {
     return Object.values(trackMeta).filter(m => m.isFavorite).length;
@@ -133,7 +134,7 @@ export default function HomeScreen() {
     if (count === 0) {
       showAlert('Empty Playlist', `No tracks in ${moodName} yet.\nAdd moods to tracks from the player screen.`);
     } else {
-      navigation.navigate(ROUTES.PLAYLIST_DETAIL, { playlistId: moodId });
+      navigation.navigate('MoodPlaylistDetail', { mood: moodId });
     }
   };
 

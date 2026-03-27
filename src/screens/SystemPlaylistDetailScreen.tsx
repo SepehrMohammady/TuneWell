@@ -20,8 +20,10 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { THEME } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
+import { useTelegramStore } from '../store/telegramStore';
 import { audioService } from '../services/audio';
 import { scannedTrackToTrack } from '../services/metadata';
+import { resolveTrackId } from '../utils/trackResolver';
 import MiniPlayer from '../components/player/MiniPlayer';
 
 export type SystemPlaylistType = 'favorites' | 'mostPlayed' | 'recentlyAdded' | 'recentlyPlayed';
@@ -66,6 +68,7 @@ export default function SystemPlaylistDetailScreen() {
   const { currentTrack } = usePlayerStore();
   const { colors, mode: themeMode } = useThemeStore();
   const { tracks } = useLibraryStore();
+  const { audioFiles: telegramAudioFiles, channels: telegramChannels } = useTelegramStore();
   const {
     getFavoriteIds,
     getRecentlyPlayedIds,
@@ -98,9 +101,9 @@ export default function SystemPlaylistDetailScreen() {
   // Resolve track IDs to full track objects
   const playlistTracks = useMemo(() => {
     return trackIds
-      .map(id => tracks.find(t => t.id === id))
+      .map(id => resolveTrackId(id, tracks, telegramAudioFiles, telegramChannels))
       .filter((t): t is NonNullable<typeof t> => t !== undefined);
-  }, [trackIds, tracks]);
+  }, [trackIds, tracks, telegramAudioFiles, telegramChannels]);
 
   // Play all tracks
   const handlePlayAll = useCallback(async (shuffle = false) => {

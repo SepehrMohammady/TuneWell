@@ -24,8 +24,10 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { showAlert } from '../store/alertStore';
 import { THEME, MOOD_CATEGORIES, MoodId } from '../config';
 import { usePlayerStore, usePlaylistStore, useLibraryStore, useThemeStore } from '../store';
+import { useTelegramStore } from '../store/telegramStore';
 import { audioService } from '../services/audio';
 import { scannedTrackToTrack } from '../services/metadata';
+import { resolveTrackId } from '../utils/trackResolver';
 import MiniPlayer from '../components/player/MiniPlayer';
 import { PlaylistsStackParamList } from '../types';
 
@@ -39,6 +41,7 @@ export default function PlaylistDetailScreen() {
   const { currentTrack } = usePlayerStore();
   const { colors, mode: themeMode } = useThemeStore();
   const { tracks } = useLibraryStore();
+  const { audioFiles: telegramAudioFiles, channels: telegramChannels } = useTelegramStore();
   const { getTracksByMood, removeMoodFromTrack, trackMeta } = usePlaylistStore();
   
   // Get mood info
@@ -50,9 +53,9 @@ export default function PlaylistDetailScreen() {
   const playlistTracks = useMemo(() => {
     const trackIds = getTracksByMood(mood);
     return trackIds
-      .map(id => tracks.find(t => t.id === id))
+      .map(id => resolveTrackId(id, tracks, telegramAudioFiles, telegramChannels))
       .filter((t): t is NonNullable<typeof t> => t !== undefined);
-  }, [mood, getTracksByMood, tracks, trackMeta]);
+  }, [mood, getTracksByMood, tracks, telegramAudioFiles, telegramChannels, trackMeta]);
   
   // Play all tracks
   const handlePlayAll = useCallback(async (shuffle = false) => {
