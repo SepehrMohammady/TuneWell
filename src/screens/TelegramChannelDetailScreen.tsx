@@ -131,64 +131,68 @@ export default function TelegramChannelDetailScreen() {
   }, [title]);
 
   // Play All / Shuffle
+  // Starts playback as soon as the first track is downloaded, then keeps
+  // downloading the rest in the background and appends them to the queue —
+  // so playback begins almost immediately instead of waiting for every file.
   const handlePlayAll = useCallback(async (shuffle = false) => {
     if (items.length === 0) {
       showAlert('No Audio', 'No audio files in this channel.');
       return;
     }
 
+    const ordered = shuffle ? [...items].sort(() => Math.random() - 0.5) : items;
+    // Telegram bots can only download files up to 20 MB.
+    const playable = ordered.filter(
+      (it) => !(it.fileSize && it.fileSize > TG_MAX_DOWNLOAD_BYTES),
+    );
+
+    if (playable.length === 0) {
+      showAlert(
+        'Playback Error',
+        'All tracks exceed the 20 MB Telegram bot download limit and cannot be played.',
+      );
+      return;
+    }
+
+    const safeName = (it: TelegramAudioItem) => it.fileName.replace(/[<>:"/\\|?*]/g, '_');
+
     try {
       setDownloadingId('__all__');
 
-      const ordered = shuffle ? [...items].sort(() => Math.random() - 0.5) : items;
-
-      // Download tracks first, skipping any that are too big or fail.
-      const queueItems = [];
-      let skipped = 0;
-      for (const item of ordered) {
-        // Telegram bots can only download files up to 20 MB.
-        if (item.fileSize && item.fileSize > TG_MAX_DOWNLOAD_BYTES) {
-          skipped++;
-          continue;
-        }
-        try {
-          const localPath = await telegramService.downloadAudio(
-            item.fileId,
-            CACHE_DIR,
-            item.fileName.replace(/[<>:"/\\|?*]/g, '_'),
-          );
-          queueItems.push({
-            id: `tg_${item.fileUniqueId}`,
-            track: buildTrack(item, localPath, title),
+      // Download + play the first track right away.
+      const first = playable[0];
+      const firstPath = await telegramService.downloadAudio(first.fileId, CACHE_DIR, safeName(first));
+      await audioService.playQueue(
+        [
+          {
+            id: `tg_${first.fileUniqueId}`,
+            track: buildTrack(first, firstPath, title),
             addedAt: Date.now(),
             source: 'streaming' as const,
-          });
-        } catch {
-          skipped++;
-        }
-      }
-
-      if (queueItems.length === 0) {
-        showAlert(
-          'Playback Error',
-          'None of the tracks could be downloaded. Files over 20 MB cannot be downloaded through the Telegram bot.',
-        );
-        return;
-      }
-
-      await audioService.playQueue(queueItems, 0);
-
-      if (skipped > 0) {
-        showAlert(
-          'Some Tracks Skipped',
-          `${skipped} track${skipped !== 1 ? 's' : ''} couldn't be downloaded (files over 20 MB aren't supported by the Telegram bot).`,
-        );
-      }
+          },
+        ],
+        0,
+      );
     } catch (err: any) {
       showAlert('Playback Error', err.message || 'Failed to play');
-    } finally {
       setDownloadingId(null);
+      return;
     }
+
+    setDownloadingId(null);
+
+    // Download the remaining tracks in the background and append to the queue.
+    void (async () => {
+      for (let i = 1; i < playable.length; i++) {
+        const it = playable[i];
+        try {
+          const p = await telegramService.downloadAudio(it.fileId, CACHE_DIR, safeName(it));
+          await audioService.addToQueue([buildTrack(it, p, title)], 'last');
+        } catch {
+          // Skip tracks that fail to download; keep going.
+        }
+      }
+    })();
   }, [items, title]);
 
   // Save all audio offline
@@ -370,12 +374,12 @@ export default function TelegramChannelDetailScreen() {
           {/* Playback row */}
           <View style={styles.actionRow}>
             <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnFlex, { backgroundColor: '#0088cc' }]}
+              style={[styles.actionBtn, styles.actionBtnFlex, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
               onPress={() => handlePlayAll(false)}
               disabled={!!downloadingId || isSavingOffline}
             >
-              <MaterialIcons name="play-arrow" size={20} color="#fff" />
-              <Text style={styles.actionText}>Play All</Text>
+              <MaterialIcons name="play-arrow" size={20} color={colors.text} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Play All</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnFlex, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}

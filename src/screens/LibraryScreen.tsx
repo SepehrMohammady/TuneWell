@@ -32,6 +32,7 @@ import { useLibraryStore, usePlayerStore, useThemeStore } from '../store';
 import { audioService } from '../services/audio';
 import { listSubfolders, getFolderName, SubfolderInfo } from '../native/FolderBrowser';
 import MiniPlayer from '../components/player/MiniPlayer';
+import { shareTrack } from '../utils/shareTrack';
 import type { Track } from '../types';
 import type { ScannedTrack } from '../services/libraryScanner';
 
@@ -521,6 +522,25 @@ export default function LibraryScreen() {
     dateModified: scannedTrack.modifiedAt,
   });
 
+  // Per-track context menu (Share, etc.)
+  const handleTrackMenu = useCallback((scannedTrack: ScannedTrack) => {
+    const name = scannedTrack.title || scannedTrack.filename;
+    showAlert(name, scannedTrack.artist || 'Unknown Artist', [
+      {
+        text: 'Share',
+        onPress: () =>
+          shareTrack({
+            title: scannedTrack.title || scannedTrack.filename,
+            artist: scannedTrack.artist,
+            album: scannedTrack.album,
+            filePath: scannedTrack.path,
+            format: scannedTrack.extension,
+          }),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, []);
+
   const handlePlayTrack = useCallback(async (scannedTrack: ScannedTrack, index: number) => {
     // Check for DSD formats - these use native decoder
     const ext = scannedTrack.extension.toLowerCase();
@@ -869,6 +889,13 @@ export default function LibraryScreen() {
               <View style={[styles.playIcon, { backgroundColor: colors.primary }]}>
                 <MaterialIcons name="play-arrow" size={24} color={colors.background} />
               </View>
+              <TouchableOpacity
+                style={styles.trackMenuButton}
+                onPress={() => handleTrackMenu(item)}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+              >
+                <MaterialIcons name="more-vert" size={22} color={THEME.colors.textMuted} />
+              </TouchableOpacity>
             </TouchableOpacity>
           )}
           contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
@@ -1912,6 +1939,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: THEME.spacing.sm,
+  },
+  trackMenuButton: {
+    width: 32,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: THEME.spacing.xs,
   },
   playIconText: {
     color: THEME.colors.text,

@@ -28,6 +28,7 @@ import { useTelegramStore } from '../store/telegramStore';
 import { audioService } from '../services/audio';
 import { scannedTrackToTrack } from '../services/metadata';
 import { resolveTrackId } from '../utils/trackResolver';
+import { shareTrack } from '../utils/shareTrack';
 import MiniPlayer from '../components/player/MiniPlayer';
 import { PlaylistsStackParamList } from '../types';
 
@@ -143,8 +144,25 @@ export default function PlaylistDetailScreen() {
         </Text>
       </View>
       
+      {/* Share Button */}
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() =>
+          shareTrack({
+            title: item.title,
+            artist: item.artist,
+            album: item.album,
+            filePath: item.path,
+            format: item.extension,
+          })
+        }
+        hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+      >
+        <MaterialIcons name="share" size={22} color={colors.textSecondary} />
+      </TouchableOpacity>
+
       {/* Remove Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.removeButton}
         onPress={() => handleRemoveTrack(item.id, item.title || 'Unknown')}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

@@ -24,6 +24,7 @@ import { useTelegramStore } from '../store/telegramStore';
 import { audioService } from '../services/audio';
 import { scannedTrackToTrack } from '../services/metadata';
 import { resolveTrackId } from '../utils/trackResolver';
+import { shareTrack } from '../utils/shareTrack';
 import MiniPlayer from '../components/player/MiniPlayer';
 
 export type SystemPlaylistType = 'favorites' | 'mostPlayed' | 'recentlyAdded' | 'recentlyPlayed';
@@ -167,6 +168,23 @@ export default function SystemPlaylistDetailScreen() {
           {item.artist || 'Unknown'} • {formatDuration(item.duration || 0)}
         </Text>
       </View>
+
+      <TouchableOpacity
+        style={styles.trackShareButton}
+        onPress={() => {
+          const t = scannedTrackToTrack(item);
+          shareTrack({
+            title: t.title,
+            artist: t.artist,
+            album: t.album,
+            filePath: t.filePath,
+            format: t.format,
+          });
+        }}
+        hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+      >
+        <MaterialIcons name="share" size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
 
       <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
     </TouchableOpacity>
@@ -314,6 +332,10 @@ const styles = StyleSheet.create({
   trackInfo: {
     flex: 1,
     marginLeft: THEME.spacing.sm,
+  },
+  trackShareButton: {
+    paddingHorizontal: THEME.spacing.sm,
+    paddingVertical: THEME.spacing.xs,
   },
   trackTitle: {
     fontSize: 15,
