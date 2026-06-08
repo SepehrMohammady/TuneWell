@@ -24,6 +24,7 @@ import { telegramService, TelegramAudioItem } from '../services/telegram';
 import { audioService } from '../services/audio';
 import { showAlert } from '../store/alertStore';
 import { usePlayerStore } from '../store';
+import { shareTrack } from '../utils/shareTrack';
 import MiniPlayer from '../components/player/MiniPlayer';
 import RNFS from 'react-native-fs';
 
@@ -80,7 +81,7 @@ export default function TelegramChannelDetailScreen() {
   const { chatId, title } = route.params;
   const { colors } = useThemeStore();
   const { currentTrack } = usePlayerStore();
-  const { audioFiles, channels } = useTelegramStore();
+  const { audioFiles, channels, removeAudioFile } = useTelegramStore();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isSavingOffline, setIsSavingOffline] = useState(false);
   const [offlineProgress, setOfflineProgress] = useState({ done: 0, total: 0 });
@@ -309,9 +310,50 @@ export default function TelegramChannelDetailScreen() {
     ]);
   }, [title]);
 
+  // Share a Telegram track. Uses the cached download if present, else shares text.
+  const handleShareItem = useCallback((item: TelegramAudioItem) => {
+    const safeName = item.fileName.replace(/[<>:"/\\|?*]/g, '_');
+    shareTrack({
+      title: item.title,
+      artist: item.performer,
+      album: title || 'Telegram',
+      filePath: `${CACHE_DIR}/${safeName}`,
+      format: item.mimeType.includes('flac') ? 'flac' : 'mp3',
+    });
+  }, [title]);
+
+  // Remove a track from this channel's synced list.
+  const handleRemoveItem = useCallback((item: TelegramAudioItem) => {
+    showAlert('Remove Track', `Remove "${item.title}" from this list?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => removeAudioFile(chatId, item.fileUniqueId),
+      },
+    ]);
+  }, [chatId, removeAudioFile]);
+
+  // Explain the 20 MB limit for oversized tracks and offer to remove them.
+  const handleOversizeWarning = useCallback((item: TelegramAudioItem) => {
+    showAlert(
+      'File Too Big',
+      `"${item.title}" is ${formatSize(item.fileSize)}. Telegram bots can only download files up to 20 MB, so it can't be played or saved offline.`,
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => removeAudioFile(chatId, item.fileUniqueId),
+        },
+      ],
+    );
+  }, [chatId, removeAudioFile]);
+
   const renderItem = useCallback(
     ({ item }: { item: TelegramAudioItem }) => {
       const isDownloading = downloadingId === item.fileId;
+      const isOversized = !!item.fileSize && item.fileSize > TG_MAX_DOWNLOAD_BYTES;
       return (
         <TouchableOpacity
           style={[styles.trackRow, { borderBottomColor: colors.border }]}
@@ -335,10 +377,33 @@ export default function TelegramChannelDetailScreen() {
               {item.fileSize ? ` · ${formatSize(item.fileSize)}` : ''}
             </Text>
           </View>
+          {isOversized && (
+            <TouchableOpacity
+              style={styles.trackActionButton}
+              onPress={() => handleOversizeWarning(item)}
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            >
+              <MaterialIcons name="warning" size={20} color="#E0A030" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.trackActionButton}
+            onPress={() => handleShareItem(item)}
+            hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+          >
+            <MaterialIcons name="share" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.trackActionButton}
+            onPress={() => handleRemoveItem(item)}
+            hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+          >
+            <MaterialIcons name="remove-circle-outline" size={22} color={colors.error} />
+          </TouchableOpacity>
         </TouchableOpacity>
       );
     },
-    [colors, downloadingId, handlePlay],
+    [colors, downloadingId, handlePlay, handleShareItem, handleRemoveItem, handleOversizeWarning],
   );
 
   return (
@@ -507,6 +572,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   trackInfo: { flex: 1 },
+  trackActionButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
   trackTitle: { fontSize: 15, fontWeight: '500' },
   trackMeta: { fontSize: 12, marginTop: 2 },
   emptyState: { alignItems: 'center', marginTop: 80 },

@@ -28,7 +28,7 @@ import { pickDirectory } from '@react-native-documents/picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { showAlert } from '../store/alertStore';
 import { THEME, SORT_OPTIONS } from '../config';
-import { useLibraryStore, usePlayerStore, useThemeStore } from '../store';
+import { useLibraryStore, usePlayerStore, useThemeStore, usePlaylistStore } from '../store';
 import { audioService } from '../services/audio';
 import { listSubfolders, getFolderName, SubfolderInfo } from '../native/FolderBrowser';
 import MiniPlayer from '../components/player/MiniPlayer';
@@ -97,6 +97,12 @@ export default function LibraryScreen() {
   const [parentFolderName, setParentFolderName] = useState<string>('');
   const { currentTrack } = usePlayerStore();
   const { colors, mode: themeMode } = useThemeStore();
+  const {
+    toggleFavorite,
+    isFavorite,
+    addToPlaylist,
+    customPlaylists,
+  } = usePlaylistStore();
 
   // Handle navigation with tab parameter
   useFocusEffect(
@@ -522,9 +528,28 @@ export default function LibraryScreen() {
     dateModified: scannedTrack.modifiedAt,
   });
 
-  // Per-track context menu (Share, etc.)
+  // Add a track to a custom playlist (shows a picker of existing playlists).
+  const handleAddToPlaylist = useCallback((trackId: string) => {
+    if (customPlaylists.length === 0) {
+      showAlert('No Playlists', 'Create a playlist first in the Playlists tab, then add tracks to it.');
+      return;
+    }
+    showAlert('Add to Playlist', 'Choose a playlist:', [
+      ...customPlaylists.map((p) => ({
+        text: p.name,
+        onPress: () => {
+          addToPlaylist(p.id, [trackId]);
+          showAlert('Added', `Added to "${p.name}".`);
+        },
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, [customPlaylists, addToPlaylist]);
+
+  // Per-track context menu (Share, Add to Playlist, Favorite).
   const handleTrackMenu = useCallback((scannedTrack: ScannedTrack) => {
     const name = scannedTrack.title || scannedTrack.filename;
+    const fav = isFavorite(scannedTrack.id);
     showAlert(name, scannedTrack.artist || 'Unknown Artist', [
       {
         text: 'Share',
@@ -537,9 +562,17 @@ export default function LibraryScreen() {
             format: scannedTrack.extension,
           }),
       },
+      {
+        text: 'Add to Playlist',
+        onPress: () => handleAddToPlaylist(scannedTrack.id),
+      },
+      {
+        text: fav ? 'Remove from Favorites' : 'Add to Favorites',
+        onPress: () => toggleFavorite(scannedTrack.id),
+      },
       { text: 'Cancel', style: 'cancel' },
     ]);
-  }, []);
+  }, [isFavorite, toggleFavorite, handleAddToPlaylist]);
 
   const handlePlayTrack = useCallback(async (scannedTrack: ScannedTrack, index: number) => {
     // Check for DSD formats - these use native decoder

@@ -74,6 +74,7 @@ export default function SystemPlaylistDetailScreen() {
     getFavoriteIds,
     getRecentlyPlayedIds,
     getMostPlayedIds,
+    toggleFavorite,
     trackMeta,
   } = usePlaylistStore();
 
@@ -170,7 +171,7 @@ export default function SystemPlaylistDetailScreen() {
       </View>
 
       <TouchableOpacity
-        style={styles.trackShareButton}
+        style={styles.trackActionButton}
         onPress={() => {
           const t = scannedTrackToTrack(item);
           shareTrack({
@@ -186,7 +187,16 @@ export default function SystemPlaylistDetailScreen() {
         <MaterialIcons name="share" size={20} color={colors.textSecondary} />
       </TouchableOpacity>
 
-      <MaterialIcons name="play-arrow" size={24} color={colors.textSecondary} />
+      {/* Favorites is the only system list with real membership → allow removal. */}
+      {type === 'favorites' && (
+        <TouchableOpacity
+          style={styles.trackActionButton}
+          onPress={() => toggleFavorite(item.id)}
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+        >
+          <MaterialIcons name="remove-circle-outline" size={22} color={colors.error || '#FF6B6B'} />
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 
@@ -333,7 +343,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: THEME.spacing.sm,
   },
-  trackShareButton: {
+  trackActionButton: {
     paddingHorizontal: THEME.spacing.sm,
     paddingVertical: THEME.spacing.xs,
   },

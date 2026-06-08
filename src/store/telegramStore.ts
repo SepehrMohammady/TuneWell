@@ -59,6 +59,7 @@ interface TelegramState {
 
   setAudioFiles: (chatId: number, files: TelegramAudioItem[]) => void;
   addAudioFiles: (chatId: number, files: TelegramAudioItem[]) => void;
+  removeAudioFile: (chatId: number, fileUniqueId: string) => void;
 
   setLastUpdateOffset: (offset: number) => void;
   setSyncing: (syncing: boolean) => void;
@@ -147,6 +148,18 @@ export const useTelegramStore = create<TelegramState>()(
             ...get().audioFiles,
             [chatId]: [...existing, ...unique],
           },
+        });
+      },
+
+      removeAudioFile: (chatId, fileUniqueId) => {
+        const list = get().audioFiles[chatId] || [];
+        const filtered = list.filter((f) => f.fileUniqueId !== fileUniqueId);
+        const channels = get().channels.map((c) =>
+          c.id === chatId ? { ...c, audioCount: filtered.length } : c,
+        );
+        set({
+          audioFiles: { ...get().audioFiles, [chatId]: filtered },
+          channels,
         });
       },
 
