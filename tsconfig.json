@@ -13,11 +13,7 @@
     "resolveJsonModule": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    }
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["**/*.ts", "**/*.tsx", "src/**/*"],
   "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js"]
