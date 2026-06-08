@@ -66,6 +66,9 @@ yarn-error.log
 # Secrets — never commit real tokens
 src/config/secrets.ts
 
+# Claude Code — local settings (machine-specific paths) and runtime files
+.claude/
+
 # testing
 /coverage
 
