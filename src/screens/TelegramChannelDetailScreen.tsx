@@ -30,6 +30,37 @@ import RNFS from 'react-native-fs';
 const CACHE_DIR = `${RNFS.CachesDirectoryPath}/telegram_audio`;
 const OFFLINE_DIR = `${RNFS.DocumentDirectoryPath}/TelegramMusic`;
 
+// Telegram Bot API can only download files up to 20 MB via getFile.
+const TG_MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
+
+// Build a Track-like object from a Telegram audio item + its downloaded path.
+function buildTrack(item: TelegramAudioItem, localPath: string, albumTitle?: string) {
+  return {
+    id: `tg_${item.fileUniqueId}`,
+    uri: `file://${localPath}`,
+    filePath: localPath,
+    fileName: item.fileName,
+    folderPath: CACHE_DIR,
+    folderName: 'Telegram',
+    title: item.title,
+    artist: item.performer,
+    album: albumTitle || 'Telegram',
+    duration: item.duration,
+    sampleRate: 44100,
+    bitDepth: 16,
+    channels: 2,
+    format: item.mimeType.includes('flac') ? 'flac' : 'mp3',
+    isLossless: item.mimeType.includes('flac'),
+    isHighRes: false,
+    isDSD: false,
+    playCount: 0,
+    isFavorite: false,
+    moods: [] as any[],
+    dateAdded: Date.now(),
+    dateModified: item.date * 1000,
+  };
+}
+
 function formatDuration(seconds: number): string {
   if (!seconds) return '--:--';
   const m = Math.floor(seconds / 60);
@@ -82,30 +113,7 @@ export default function TelegramChannelDetailScreen() {
         item.fileName.replace(/[<>:"/\\|?*]/g, '_'),
       );
 
-      const track = {
-        id: `tg_${item.fileUniqueId}`,
-        uri: `file://${localPath}`,
-        filePath: localPath,
-        fileName: item.fileName,
-        folderPath: CACHE_DIR,
-        folderName: 'Telegram',
-        title: item.title,
-        artist: item.performer,
-        album: title || 'Telegram',
-        duration: item.duration,
-        sampleRate: 44100,
-        bitDepth: 16,
-        channels: 2,
-        format: item.mimeType.includes('flac') ? 'flac' : 'mp3',
-        isLossless: item.mimeType.includes('flac'),
-        isHighRes: false,
-        isDSD: false,
-        playCount: 0,
-        isFavorite: false,
-        moods: [] as any[],
-        dateAdded: Date.now(),
-        dateModified: item.date * 1000,
-      };
+      const track = buildTrack(item, localPath, title);
 
       const queueItem = {
         id: track.id,
@@ -122,8 +130,8 @@ export default function TelegramChannelDetailScreen() {
     }
   }, [title]);
 
-  // Play All
-  const handlePlayAll = useCallback(async () => {
+  // Play All / Shuffle
+  const handlePlayAll = useCallback(async (shuffle = false) => {
     if (items.length === 0) {
       showAlert('No Audio', 'No audio files in this channel.');
       return;
@@ -132,47 +140,50 @@ export default function TelegramChannelDetailScreen() {
     try {
       setDownloadingId('__all__');
 
-      // Download all tracks first
-      const queueItems = [];
-      for (const item of items) {
-        const localPath = await telegramService.downloadAudio(
-          item.fileId,
-          CACHE_DIR,
-          item.fileName.replace(/[<>:"/\\|?*]/g, '_'),
-        );
+      const ordered = shuffle ? [...items].sort(() => Math.random() - 0.5) : items;
 
-        queueItems.push({
-          id: `tg_${item.fileUniqueId}`,
-          track: {
+      // Download tracks first, skipping any that are too big or fail.
+      const queueItems = [];
+      let skipped = 0;
+      for (const item of ordered) {
+        // Telegram bots can only download files up to 20 MB.
+        if (item.fileSize && item.fileSize > TG_MAX_DOWNLOAD_BYTES) {
+          skipped++;
+          continue;
+        }
+        try {
+          const localPath = await telegramService.downloadAudio(
+            item.fileId,
+            CACHE_DIR,
+            item.fileName.replace(/[<>:"/\\|?*]/g, '_'),
+          );
+          queueItems.push({
             id: `tg_${item.fileUniqueId}`,
-            uri: `file://${localPath}`,
-            filePath: localPath,
-            fileName: item.fileName,
-            folderPath: CACHE_DIR,
-            folderName: 'Telegram',
-            title: item.title,
-            artist: item.performer,
-            album: title || 'Telegram',
-            duration: item.duration,
-            sampleRate: 44100,
-            bitDepth: 16,
-            channels: 2,
-            format: item.mimeType.includes('flac') ? 'flac' : 'mp3',
-            isLossless: item.mimeType.includes('flac'),
-            isHighRes: false,
-            isDSD: false,
-            playCount: 0,
-            isFavorite: false,
-            moods: [] as any[],
-            dateAdded: Date.now(),
-            dateModified: item.date * 1000,
-          },
-          addedAt: Date.now(),
-          source: 'streaming' as const,
-        });
+            track: buildTrack(item, localPath, title),
+            addedAt: Date.now(),
+            source: 'streaming' as const,
+          });
+        } catch {
+          skipped++;
+        }
+      }
+
+      if (queueItems.length === 0) {
+        showAlert(
+          'Playback Error',
+          'None of the tracks could be downloaded. Files over 20 MB cannot be downloaded through the Telegram bot.',
+        );
+        return;
       }
 
       await audioService.playQueue(queueItems, 0);
+
+      if (skipped > 0) {
+        showAlert(
+          'Some Tracks Skipped',
+          `${skipped} track${skipped !== 1 ? 's' : ''} couldn't be downloaded (files over 20 MB aren't supported by the Telegram bot).`,
+        );
+      }
     } catch (err: any) {
       showAlert('Playback Error', err.message || 'Failed to play');
     } finally {
@@ -196,33 +207,61 @@ export default function TelegramChannelDetailScreen() {
     try {
       await RNFS.mkdir(channelDir);
 
-      let saved = 0;
-      let skipped = 0;
+      let downloaded = 0;
+      let alreadySaved = 0;
+      let tooBig = 0;
+      let failed = 0;
+      let processed = 0;
 
       for (const item of items) {
         const safeName = item.fileName.replace(/[<>:"/\\|?*]/g, '_');
         const destPath = `${channelDir}/${safeName}`;
+        processed++;
 
         // Skip if already downloaded
         if (await RNFS.exists(destPath)) {
-          skipped++;
-          saved++;
-          setOfflineProgress({ done: saved, total: items.length });
+          alreadySaved++;
+          setOfflineProgress({ done: processed, total: items.length });
           continue;
         }
 
-        await telegramService.downloadAudio(item.fileId, channelDir, safeName);
-        saved++;
-        setOfflineProgress({ done: saved, total: items.length });
+        // Telegram bots can only download files up to 20 MB — skip and keep going.
+        if (item.fileSize && item.fileSize > TG_MAX_DOWNLOAD_BYTES) {
+          tooBig++;
+          setOfflineProgress({ done: processed, total: items.length });
+          continue;
+        }
+
+        try {
+          await telegramService.downloadAudio(item.fileId, channelDir, safeName);
+          downloaded++;
+        } catch (e: any) {
+          // "file is too big" or transient errors — don't abort the whole batch.
+          if ((e?.message || '').toLowerCase().includes('too big')) {
+            tooBig++;
+          } else {
+            failed++;
+          }
+        }
+        setOfflineProgress({ done: processed, total: items.length });
       }
 
-      if (skipped === items.length) {
+      if (downloaded > 0 || alreadySaved > 0) setHasOfflineFiles(true);
+
+      if (downloaded === 0 && tooBig === 0 && failed === 0) {
         showAlert('Already Saved', 'All files are already available offline.');
-      } else {
+      } else if (downloaded === 0 && alreadySaved === 0 && failed === 0 && tooBig > 0) {
         showAlert(
-          'Saved Offline',
-          `${saved - skipped} new file${saved - skipped !== 1 ? 's' : ''} downloaded to:\n${channelDir}`,
+          'Files Too Big',
+          `Telegram bots can only download files up to 20 MB.\n\n${tooBig} file${tooBig !== 1 ? 's' : ''} couldn't be saved.`,
         );
+      } else {
+        const parts = [];
+        if (downloaded > 0) parts.push(`${downloaded} downloaded`);
+        if (alreadySaved > 0) parts.push(`${alreadySaved} already saved`);
+        if (tooBig > 0) parts.push(`${tooBig} skipped (over 20 MB)`);
+        if (failed > 0) parts.push(`${failed} failed`);
+        showAlert('Save Offline Complete', `${parts.join('\n')}\n\nSaved to:\n${channelDir}`);
       }
     } catch (err: any) {
       showAlert('Download Error', err.message || 'Failed to save offline.');
@@ -328,42 +367,56 @@ export default function TelegramChannelDetailScreen() {
       {/* Action buttons */}
       {items.length > 0 && (
         <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#0088cc' }]}
-            onPress={handlePlayAll}
-            disabled={!!downloadingId || isSavingOffline}
-          >
-            <MaterialIcons name="play-arrow" size={20} color="#fff" />
-            <Text style={styles.actionText}>Play All</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
-            onPress={handleSaveOffline}
-            disabled={!!downloadingId || isSavingOffline}
-          >
-            {isSavingOffline ? (
-              <>
-                <ActivityIndicator size="small" color={colors.text} />
-                <Text style={[styles.actionText, { color: colors.text }]}>
-                  {offlineProgress.done}/{offlineProgress.total}
-                </Text>
-              </>
-            ) : (
-              <>
-                <MaterialIcons name="download" size={20} color={colors.text} />
-                <Text style={[styles.actionText, { color: colors.text }]}>Save Offline</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          {hasOfflineFiles && (
+          {/* Playback row */}
+          <View style={styles.actionRow}>
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.error }]}
-              onPress={handleDeleteOffline}
+              style={[styles.actionBtn, styles.actionBtnFlex, { backgroundColor: '#0088cc' }]}
+              onPress={() => handlePlayAll(false)}
               disabled={!!downloadingId || isSavingOffline}
             >
-              <MaterialIcons name="delete-outline" size={20} color={colors.error} />
+              <MaterialIcons name="play-arrow" size={20} color="#fff" />
+              <Text style={styles.actionText}>Play All</Text>
             </TouchableOpacity>
-          )}
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnFlex, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+              onPress={() => handlePlayAll(true)}
+              disabled={!!downloadingId || isSavingOffline}
+            >
+              <MaterialIcons name="shuffle" size={20} color={colors.text} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Shuffle</Text>
+            </TouchableOpacity>
+          </View>
+          {/* Management row */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnFlex, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+              onPress={handleSaveOffline}
+              disabled={!!downloadingId || isSavingOffline}
+            >
+              {isSavingOffline ? (
+                <>
+                  <ActivityIndicator size="small" color={colors.text} />
+                  <Text style={[styles.actionText, { color: colors.text }]}>
+                    {offlineProgress.done}/{offlineProgress.total}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <MaterialIcons name="download" size={20} color={colors.text} />
+                  <Text style={[styles.actionText, { color: colors.text }]}>Save Offline</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            {hasOfflineFiles && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.error }]}
+                onPress={handleDeleteOffline}
+                disabled={!!downloadingId || isSavingOffline}
+              >
+                <MaterialIcons name="delete-outline" size={20} color={colors.error} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       )}
 
@@ -414,19 +467,24 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: '700' },
   headerSub: { fontSize: 13, marginTop: 2 },
   actions: {
-    flexDirection: 'row',
     paddingHorizontal: 16,
     paddingBottom: 12,
+    gap: 10,
+  },
+  actionRow: {
+    flexDirection: 'row',
     gap: 12,
   },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 24,
     gap: 6,
   },
+  actionBtnFlex: { flex: 1 },
   actionText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   list: { paddingBottom: 100 },
   trackRow: {
