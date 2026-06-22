@@ -100,6 +100,11 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
     private var currentPosition: Double = 0.0  // in seconds
     private var currentDuration: Double = 0.0  // in seconds
 
+    // Pending seek target in seconds; consumed by the active decode loop.
+    // -1 means "no seek pending". @Volatile so the seekTo() thread and the
+    // decode coroutine see a consistent value.
+    @Volatile private var pendingSeekSeconds: Double = -1.0
+
     override fun getName(): String = "NativeAudioDecoderModule"
     
     /**
@@ -343,19 +348,15 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             
             // Clamp position to valid range
             val clampedPosition = positionSeconds.coerceIn(0.0, currentDuration)
-            
-            // Update position immediately for UI feedback
+
+            // Signal the active decode loop to actually reposition the stream.
+            // The WAV loops (raw PCM + MediaCodec) consume this and seek; any
+            // engine that doesn't still gets the displayed position updated.
+            pendingSeekSeconds = clampedPosition
             currentPosition = clampedPosition
             sendProgressEvent(currentPosition, currentDuration, currentPosition)
-            
-            // For DSD/WAV, we need to restart playback from the new position
-            // This is a simplified approach - a more sophisticated implementation
-            // would calculate the exact byte offset and seek within the stream
-            Log.d(TAG, "Seek requested to $clampedPosition seconds (not fully implemented for DSD)")
-            
-            // For now, just update the position for visual feedback
-            // Full seek implementation would require stopping, calculating byte offset,
-            // and restarting decoding from that position
+            Log.d(TAG, "Seek requested to $clampedPosition s")
+
             promise.resolve(true)
         } catch (e: Exception) {
             Log.e(TAG, "Seek error: ${e.message}")
@@ -391,7 +392,8 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
         currentUri = null
         currentPosition = 0.0
         currentDuration = 0.0
-        
+        pendingSeekSeconds = -1.0
+
         sendStateEvent("stopped")
     }
     
@@ -1202,21 +1204,38 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
             
+            pendingSeekSeconds = -1.0
             audioTrack?.play()
-            
+
             // Decode and play
             decoderJob = CoroutineScope(Dispatchers.IO).launch {
                 val inputBuffers = decoder.inputBuffers
                 val outputBuffers = decoder.outputBuffers
                 val bufferInfo = MediaCodec.BufferInfo()
                 var isEOS = false
-                
+
                 while (isPlaying && !isEOS) {
                     if (isPaused) {
                         delay(100)
                         continue
                     }
-                    
+
+                    // Honor a pending seek via the extractor + codec flush.
+                    val seekReq = pendingSeekSeconds
+                    if (seekReq >= 0) {
+                        pendingSeekSeconds = -1.0
+                        try {
+                            extractor.seekTo((seekReq * 1_000_000).toLong(), MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+                            decoder.flush()
+                            isEOS = false
+                            audioTrack?.let {
+                                try { it.pause(); it.flush(); if (!isPaused) it.play() } catch (_: Exception) {}
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "WAV seek failed: ${e.message}")
+                        }
+                    }
+
                     // Feed input
                     val inputIndex = decoder.dequeueInputBuffer(10000)
                     if (inputIndex >= 0) {
@@ -1242,7 +1261,13 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         
                         audioTrack?.write(chunk, 0, chunk.size)
                         decoder.releaseOutputBuffer(outputIndex, false)
-                        
+
+                        // Track position from the decoded buffer's timestamp so the
+                        // progress bar advances (and reflects seeks) for standard WAV.
+                        if (bufferInfo.presentationTimeUs > 0) {
+                            currentPosition = bufferInfo.presentationTimeUs / 1_000_000.0
+                        }
+
                         if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                             isEOS = true
                         }
@@ -1299,7 +1324,8 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             
             // Reopen and skip to data
             inputStream.close()
-            val dataStream = openUri(uri) ?: throw Exception("Cannot reopen WAV file")
+            pendingSeekSeconds = -1.0
+            var dataStream = openUri(uri) ?: throw Exception("Cannot reopen WAV file")
             dataStream.skip(dataOffset.toLong())
             
             // Determine output format - Android supports up to 192kHz, 
@@ -1357,10 +1383,39 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                             delay(100)
                             continue
                         }
-                        
+
+                        // Honor a pending seek by repositioning the input stream.
+                        // PCM is constant-bitrate, so the byte offset is exact.
+                        val seekReq = pendingSeekSeconds
+                        if (seekReq >= 0) {
+                            pendingSeekSeconds = -1.0
+                            val frameSize = bytesPerInputSample * channels
+                            var targetByte = if (currentDuration > 0)
+                                ((seekReq / currentDuration) * totalDataSize).toLong() else 0L
+                            targetByte = targetByte.coerceIn(0L, totalDataSize)
+                            if (frameSize > 0) targetByte -= targetByte % frameSize
+                            try {
+                                dataStream.close()
+                                dataStream = openUri(uri) ?: break
+                                var toSkip = dataOffset.toLong() + targetByte
+                                while (toSkip > 0) {
+                                    val skipped = dataStream.skip(toSkip)
+                                    if (skipped <= 0) break
+                                    toSkip -= skipped
+                                }
+                                totalBytesRead = targetByte
+                                audioTrack?.let {
+                                    try { it.pause(); it.flush(); if (!isPaused) it.play() } catch (_: Exception) {}
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "WAV raw seek failed: ${e.message}")
+                            }
+                            continue
+                        }
+
                         val bytesRead = dataStream.read(inputBuffer)
                         if (bytesRead <= 0) break
-                        
+
                         totalBytesRead += bytesRead
                         
                         // Update position

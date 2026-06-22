@@ -19,6 +19,11 @@ const AUDIO_EXTENSIONS = [
   '.mp3', '.aac', '.m4a', '.ogg', '.opus', '.wma',
 ];
 
+// Formats Android's MediaStore does NOT index as audio (no recognized MIME),
+// so a MediaStore-only scan silently drops them. We supplement the scan with a
+// direct folder walk for just these extensions.
+const DIRECT_SCAN_EXTENSIONS = ['.dff', '.dsf', '.dsd'];
+
 export interface ScannedTrack {
   id: string;
   uri: string; // content:// URI for Android, file:// for others
@@ -325,7 +330,29 @@ export const scanLibrary = async (
         }
       }
 
-      // Calculate statistics
+      // Supplement: MediaStore does not index DSD (.dsf/.dff/.dsd) as audio, so
+      // walk the selected folders directly and add only those missing formats.
+      onProgress?.('Scanning for DSD files...', result.tracks.length);
+      const seenPaths = new Set(result.tracks.map((t) => t.path));
+      for (const folder of resolvedFolders) {
+        try {
+          // extractMeta=false: DSD tags aren't readable here and we discard non-DSD results anyway
+          const fsTracks = await scanDirectoryRecursive(folder, onProgress, result.tracks.length, false);
+          for (const t of fsTracks) {
+            if (!DIRECT_SCAN_EXTENSIONS.includes(t.extension)) continue;
+            if (seenPaths.has(t.path)) continue;
+            seenPaths.add(t.path);
+            result.tracks.push(t);
+            if (t.folder && !result.folders.includes(t.folder)) {
+              result.folders.push(t.folder);
+            }
+          }
+        } catch (e) {
+          // Ignore per-folder errors in the supplemental pass
+        }
+      }
+
+      // Calculate statistics (after the supplement so DSD files are counted)
       result.totalTracks = result.tracks.length;
       result.totalSize = result.tracks.reduce((sum, track) => sum + track.size, 0);
 

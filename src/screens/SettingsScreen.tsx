@@ -271,7 +271,15 @@ export default function SettingsScreen() {
                 <Text style={[styles.aboutLinkIcon, { color: colors.primary }]}>↗</Text>
               </View>
             </TouchableOpacity>
-            
+
+            {/* Audiophile Advisor */}
+            <View style={styles.aboutRow}>
+              <Text style={[styles.aboutLabel, { color: colors.text }]}>Audiophile Advisor</Text>
+              <Text style={[styles.aboutValue, { color: colors.textSecondary }]}>
+                Sahab Mohammady
+              </Text>
+            </View>
+
             {/* Source Code */}
             <TouchableOpacity 
               style={styles.aboutRow}

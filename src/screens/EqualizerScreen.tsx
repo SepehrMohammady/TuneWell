@@ -216,10 +216,17 @@ export default function EqualizerScreen() {
       if (typeof presetData.preamp === 'number') {
         setPreamp(presetData.preamp);
       }
-      
+
+      // Persist the imported preset so it shows up under "Saved Presets",
+      // then load it so it becomes the active selection. (saveCustomPreset reads
+      // the bands/preamp we just set into the store.)
+      const importedName = presetData.name || `Imported_${Date.now() % 10000}`;
+      const newPresetId = saveCustomPreset(importedName);
+      loadCustomPreset(newPresetId);
+
       showAlert(
         '✅ Imported Successfully',
-        `EQ preset "${presetData.name || 'Unknown'}" has been applied.`,
+        `EQ preset "${importedName}" has been applied and saved to your presets.`,
         [{ text: 'OK' }]
       );
     } catch (error: any) {
@@ -229,7 +236,7 @@ export default function EqualizerScreen() {
       console.error('[EQ Import] Error:', error);
       showAlert('Import Error', error?.message || 'Failed to import preset. Make sure the file is a valid TuneWell EQ preset.');
     }
-  }, [bands, setBands, setPreamp]);
+  }, [bands, setBands, setPreamp, saveCustomPreset, loadCustomPreset]);
 
   const renderBandSlider = (frequency: number, gain: number, index: number) => {
     // Visual representation of the slider
