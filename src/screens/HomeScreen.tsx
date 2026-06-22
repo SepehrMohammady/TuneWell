@@ -412,7 +412,7 @@ export default function HomeScreen() {
             activeOpacity={0.7}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}>
-              <MaterialCommunityIcons name="telegram" size={32} color="#0088cc" />
+              <MaterialIcons name="telegram" size={32} color="#0088cc" />
               <View style={{ marginLeft: 12, flex: 1 }}>
                 <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 2 }]}>
                   {telegramConnected ? 'Tap Sync to discover channels' : 'Connect Telegram Bot'}

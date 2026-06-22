@@ -22,11 +22,10 @@ import {
   PanResponder,
   Animated,
   LayoutChangeEvent,
-  PermissionsAndroid,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RNFS from 'react-native-fs';
+import Share from 'react-native-share';
 import { showAlert } from '../store/alertStore';
 import { pick, types } from '@react-native-documents/picker';
 import { THEME, EQ_FREQUENCIES, EQ_PRESETS } from '../config';
@@ -60,6 +59,7 @@ export default function EqualizerScreen() {
     toggleEnabled,
     setPreset,
     setBandGain,
+    setBands,
     setPreamp,
     resetToFlat,
     customPresets,
@@ -142,20 +142,29 @@ export default function EqualizerScreen() {
       // Generate filename with preset name
       const safeName = presetDisplayName.replace(/[^a-zA-Z0-9_-]/g, '_');
       const fileName = `TuneWell_${safeName}.json`;
-      
-      // Save to Downloads folder
-      const downloadPath = Platform.OS === 'android' 
-        ? `${RNFS.DownloadDirectoryPath}/${fileName}`
-        : `${RNFS.DocumentDirectoryPath}/${fileName}`;
-      
-      await RNFS.writeFile(downloadPath, JSON.stringify(presetData, null, 2), 'utf8');
-      
-      showAlert(
-        '✅ Exported Successfully',
-        `EQ preset "${presetDisplayName}" saved to:\n${downloadPath}`,
-        [{ text: 'OK' }]
-      );
+
+      // Write to a temp cache file, then let the user choose where to save/share it
+      // (Files, Drive, a chat app, etc.) instead of forcing it into Downloads.
+      const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+      await RNFS.writeFile(cachePath, JSON.stringify(presetData, null, 2), 'utf8');
+
+      await Share.open({
+        url: `file://${cachePath}`,
+        type: 'application/json',
+        filename: fileName,
+        title: `Export EQ preset "${presetDisplayName}"`,
+        subject: `TuneWell EQ Preset: ${presetDisplayName}`,
+        failOnCancel: false,
+      });
+
+      // Clean up the temp file after the share sheet has had time to use it.
+      setTimeout(() => {
+        RNFS.unlink(cachePath).catch(() => {});
+      }, 30000);
     } catch (error: any) {
+      if (error?.message?.includes('cancel') || error?.message?.includes('dismiss')) {
+        return; // User dismissed the share sheet
+      }
       console.error('[EQ Export] Error:', error);
       showAlert('Export Error', error?.message || 'Failed to export preset');
     }
@@ -194,17 +203,16 @@ export default function EqualizerScreen() {
         throw new Error('Invalid preset format: missing bands array');
       }
       
-      // Apply the preset
+      // Apply the preset — match imported gains to current bands by frequency.
       const newBands = bands.map(band => {
         const importedBand = presetData.bands.find((b: any) => b.frequency === band.frequency);
         return importedBand ? { ...band, gain: importedBand.gain } : band;
       });
-      
-      // Update store
-      newBands.forEach((band, index) => {
-        setBandGain(index, band.gain);
-      });
-      
+
+      // Update the store in one shot (setBandGain expects a frequency, not an index,
+      // so applying per-index silently matched nothing — this applies all bands).
+      setBands(newBands);
+
       if (typeof presetData.preamp === 'number') {
         setPreamp(presetData.preamp);
       }
@@ -221,7 +229,7 @@ export default function EqualizerScreen() {
       console.error('[EQ Import] Error:', error);
       showAlert('Import Error', error?.message || 'Failed to import preset. Make sure the file is a valid TuneWell EQ preset.');
     }
-  }, [bands, setBandGain, setPreamp]);
+  }, [bands, setBands, setPreamp]);
 
   const renderBandSlider = (frequency: number, gain: number, index: number) => {
     // Visual representation of the slider
