@@ -83,7 +83,13 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
         private const val LPF_ALPHA4 = 0.30  // Stage 4: detail preservation
         private const val LPF_ALPHA5 = 0.40  // Stage 5: final smoothing
         private const val LPF_ALPHA6 = 0.50  // Stage 6: minimal filtering for final output
-        
+
+        // DSD decodes well below PCM 0 dBFS reference (the bit-density->amplitude
+        // mapping plus the LPF cascade leave it quiet), so it played much softer
+        // than FLAC/MP3. Apply ~+6 dB makeup. Hard clamp still guards rare overs.
+        // (Full passband/quality is a separate decimation-filter follow-up.)
+        private const val DSD_GAIN = 60000.0
+
         // Progress event interval
         private const val PROGRESS_UPDATE_INTERVAL_MS = 1000L
     }
@@ -688,9 +694,9 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                             leftF6 = LPF_ALPHA6 * leftF5 + (1.0 - LPF_ALPHA6) * leftF6
                             rightF6 = LPF_ALPHA6 * rightF5 + (1.0 - LPF_ALPHA6) * rightF6
                             
-                            // Scale to 16-bit PCM with some headroom
-                            val leftPcm = (leftF6 * 30000).toInt().coerceIn(-32768, 32767)
-                            val rightPcm = (rightF6 * 30000).toInt().coerceIn(-32768, 32767)
+                            // Scale to 16-bit PCM with +6 dB DSD makeup gain (see DSD_GAIN)
+                            val leftPcm = (leftF6 * DSD_GAIN).toInt().coerceIn(-32768, 32767)
+                            val rightPcm = (rightF6 * DSD_GAIN).toInt().coerceIn(-32768, 32767)
                             
                             if (channelCount == 2) {
                                 pcmBuffer[pcmIndex++] = leftPcm.toShort()
@@ -976,9 +982,9 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                             leftF6 = LPF_ALPHA6 * leftF5 + (1.0 - LPF_ALPHA6) * leftF6
                             rightF6 = LPF_ALPHA6 * rightF5 + (1.0 - LPF_ALPHA6) * rightF6
                             
-                            // Scale to 16-bit PCM with some headroom
-                            val leftPcm = (leftF6 * 30000).toInt().coerceIn(-32768, 32767)
-                            val rightPcm = (rightF6 * 30000).toInt().coerceIn(-32768, 32767)
+                            // Scale to 16-bit PCM with +6 dB DSD makeup gain (see DSD_GAIN)
+                            val leftPcm = (leftF6 * DSD_GAIN).toInt().coerceIn(-32768, 32767)
+                            val rightPcm = (rightF6 * DSD_GAIN).toInt().coerceIn(-32768, 32767)
                             
                             if (channelCount == 2) {
                                 pcmBuffer[pcmIndex++] = leftPcm.toShort()
