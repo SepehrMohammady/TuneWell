@@ -30,7 +30,7 @@ import { showAlert } from '../store/alertStore';
 import { THEME, SORT_OPTIONS } from '../config';
 import { useLibraryStore, usePlayerStore, useThemeStore, usePlaylistStore } from '../store';
 import { audioService } from '../services/audio';
-import { listSubfolders, getFolderName, SubfolderInfo } from '../native/FolderBrowser';
+import { listSubfolders, getFolderName, SubfolderInfo, hasAllFilesAccess, requestAllFilesAccess } from '../native/FolderBrowser';
 import MiniPlayer from '../components/player/MiniPlayer';
 import { shareTrack } from '../utils/shareTrack';
 import type { Track } from '../types';
@@ -486,11 +486,28 @@ export default function LibraryScreen() {
         return;
       }
     }
-    
+
     if (scanFolders.length === 0) {
       showAlert('No Folders', 'Please add at least one folder to scan.');
       return;
     }
+
+    // DSD (.dsf/.dff) and some other formats aren't indexed by Android's
+    // MediaStore, so they require raw file access ("All files access"). Without
+    // it the scan silently skips them. Prompt the user to grant it once.
+    const allFiles = await hasAllFilesAccess();
+    if (!allFiles) {
+      showAlert(
+        'Allow All Files Access',
+        'To find every format (including DSD/.dsf/.dff and other high-res files), TuneWell needs "All files access". You\'ll be taken to Settings — enable it, then come back and tap Scan again.',
+        [
+          { text: 'Not Now', style: 'cancel', onPress: () => startScan() },
+          { text: 'Open Settings', onPress: () => requestAllFilesAccess() },
+        ],
+      );
+      return;
+    }
+
     startScan();
   }, [scanFolders, startScan, hasPermission]);
 

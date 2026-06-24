@@ -65,28 +65,41 @@ export async function PlaybackService(): Promise<void> {
 
   TrackPlayer.addEventListener(Event.PlaybackError, async (event) => {
     console.error('[TrackPlayer] Playback error:', JSON.stringify(event, null, 2));
-    // Get current track info for debugging
-    let errorDetails = `Code: ${(event as any).code || 'unknown'}\nMessage: ${(event as any).message || 'unknown'}`;
+    const code = String((event as any).code || '');
+    const message = String((event as any).message || '');
+
+    let track: any = null;
     try {
-      const track = await TrackPlayer.getActiveTrack();
-      if (track) {
-        console.error('[TrackPlayer] Error on track:', {
-          title: track.title,
-          url: track.url,
-          contentType: (track as any).contentType,
-          format: (track as any).format,
-        });
-        errorDetails += `\n\nTrack: ${track.title}\nURL: ${String(track.url).substring(0, 100)}...`;
-      }
+      track = await TrackPlayer.getActiveTrack();
     } catch (e) {
       // Ignore if we can't get track info
     }
-    // Show error alert for debugging
-    showAlert(
-      'Playback Error (Debug)',
-      errorDetails,
-      [{ text: 'OK' }]
+
+    // An unsupported/undecodable codec (e.g. Dolby Digital Plus / E-AC-3 in an
+    // .m4a, or APE/WavPack) — give the user a clear, specific message instead of
+    // the raw debug dump or silent failure.
+    const looksUnsupported = /unsupported|decoder|codec|parsing|eac3|ac-3|ac3|dolby/i.test(
+      `${code} ${message}`,
     );
+    if (looksUnsupported) {
+      const name = track?.title ? `"${track.title}"` : 'This track';
+      showAlert(
+        'Unsupported Audio',
+        `${name} uses an audio codec this device can't decode (for example Dolby Digital Plus / E-AC-3). It can't be played here.`,
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+
+    // Other errors: show the debug detail only in development; stay quiet in
+    // release builds so transient errors don't hijack the UI.
+    if (__DEV__) {
+      let errorDetails = `Code: ${code || 'unknown'}\nMessage: ${message || 'unknown'}`;
+      if (track) {
+        errorDetails += `\n\nTrack: ${track.title}\nURL: ${String(track.url).substring(0, 100)}...`;
+      }
+      showAlert('Playback Error (Debug)', errorDetails, [{ text: 'OK' }]);
+    }
   });
 
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {

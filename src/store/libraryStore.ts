@@ -11,7 +11,7 @@ import { zustandStorage } from '../utils/storage';
 import type { SortOption } from '../config/constants';
 import { SORT_OPTIONS } from '../config/constants';
 import type { LibraryScanResult, LibraryStats } from '../types';
-import { scanLibrary, scanWithMediaStore, ScannedTrack } from '../services/libraryScanner';
+import { scanLibrary, ScannedTrack } from '../services/libraryScanner';
 
 interface LibraryState {
   // Scan folders

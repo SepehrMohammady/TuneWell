@@ -8,6 +8,4 @@ export * from './metadata';
 export { spotifyService, playlistImportService } from './streaming';
 export { telegramService } from './telegram';
 
-// Note: libraryScannerService is available but not currently used
-// The app uses libraryScanner.ts directly via libraryStore
-// The scanner service is kept for potential future modular architecture
+// The library scan is done by libraryScanner.ts directly via libraryStore.

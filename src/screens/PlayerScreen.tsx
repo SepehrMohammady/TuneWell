@@ -30,6 +30,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { showAlert } from '../store/alertStore';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
+import { getAudioFormat, AudioFormatInfo } from '../native/MetadataExtractor';
 import { useCombinedProgress } from '../hooks';
 import { THEME, ROUTES } from '../config';
 import { usePlayerStore, useEQStore, usePlaylistStore, useThemeStore } from '../store';
@@ -74,6 +75,25 @@ export default function PlayerScreen() {
   const [dragPosition, setDragPosition] = useState(0);
   const [dynamicFileSize, setDynamicFileSize] = useState<number | null>(null);
   const [isSharing, setIsSharing] = useState(false);
+  const [realFormat, setRealFormat] = useState<AudioFormatInfo | null>(null);
+
+  // Read the REAL audio format (sample rate / channels / bit depth) for the
+  // current track instead of showing the hardcoded placeholders.
+  useEffect(() => {
+    let cancelled = false;
+    setRealFormat(null);
+    const src = currentTrack?.uri || currentTrack?.filePath;
+    if (src && !currentTrack?.streamingSource) {
+      getAudioFormat(src).then((info) => {
+        if (!cancelled && info && (info.sampleRate > 0 || info.channels > 0 || info.bitsPerSample > 0)) {
+          setRealFormat(info);
+        }
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack?.id, currentTrack?.uri, currentTrack?.filePath, currentTrack?.streamingSource]);
 
   // Fetch file size when track changes or info modal opens
   useEffect(() => {
@@ -306,10 +326,17 @@ export default function PlayerScreen() {
     );
   }
 
+  // Prefer real, file-derived audio properties; fall back to stored values.
+  // bitsPerSample stays 0 ("unknown") rather than a fabricated 16.
+  const dispSampleRate = realFormat?.sampleRate || currentTrack.sampleRate || 0;
+  const dispChannels = realFormat?.channels || currentTrack.channels || 0;
+  const dispBits = realFormat?.bitsPerSample || 0;
+  const dispHiRes = currentTrack.isDSD || dispSampleRate > 48000;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.background} />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
@@ -317,7 +344,7 @@ export default function PlayerScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Now Playing</Text>
-          {currentTrack.isHighRes && (
+          {dispHiRes && (
             <View style={[styles.qualityBadge, { backgroundColor: colors.primary }]}>
               <Text style={[styles.qualityBadgeText, { color: colors.background }]}>Hi-Res</Text>
             </View>
@@ -369,7 +396,9 @@ export default function PlayerScreen() {
             </View>
           ) : (
             <Text style={[styles.audioInfoText, { color: colors.textMuted }]}>
-              {currentTrack.format.toUpperCase()} • {currentTrack.sampleRate / 1000}kHz • {currentTrack.bitDepth}-bit
+              {currentTrack.format.toUpperCase()}
+              {dispSampleRate ? ` • ${(dispSampleRate / 1000).toFixed(dispSampleRate % 1000 === 0 ? 0 : 1)}kHz` : ''}
+              {dispBits ? ` • ${dispBits}-bit` : ''}
             </Text>
           )}
           {eqEnabled && !currentTrack.streamingSource && (
@@ -640,11 +669,11 @@ export default function PlayerScreen() {
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Sample Rate</Text>
-                  <Text style={styles.infoValue}>{currentTrack.sampleRate ? `${(currentTrack.sampleRate / 1000).toFixed(1)} kHz` : 'Unknown'}</Text>
+                  <Text style={styles.infoValue}>{dispSampleRate ? `${(dispSampleRate / 1000).toFixed(1)} kHz` : 'Unknown'}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Bit Depth</Text>
-                  <Text style={styles.infoValue}>{currentTrack.bitDepth ? `${currentTrack.bitDepth}-bit` : 'Unknown'}</Text>
+                  <Text style={styles.infoValue}>{dispBits ? `${dispBits}-bit` : 'Unknown'}</Text>
                 </View>
                 {currentTrack.bitRate && (
                   <View style={styles.infoRow}>
@@ -654,7 +683,7 @@ export default function PlayerScreen() {
                 )}
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Channels</Text>
-                  <Text style={styles.infoValue}>{currentTrack.channels === 2 ? 'Stereo' : currentTrack.channels === 1 ? 'Mono' : `${currentTrack.channels || 2} channels`}</Text>
+                  <Text style={styles.infoValue}>{dispChannels === 2 ? 'Stereo' : dispChannels === 1 ? 'Mono' : dispChannels ? `${dispChannels} channels` : 'Unknown'}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>File Size</Text>
@@ -685,7 +714,7 @@ export default function PlayerScreen() {
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Quality</Text>
                   <Text style={styles.infoValue}>
-                    {currentTrack.isDSD ? 'DSD' : currentTrack.isHighRes ? 'Hi-Res' : currentTrack.isLossless ? 'Lossless' : 'Lossy'}
+                    {currentTrack.isDSD ? 'DSD' : dispHiRes ? 'Hi-Res' : currentTrack.isLossless ? 'Lossless' : 'Lossy'}
                   </Text>
                 </View>
                 <View style={styles.infoRow}>

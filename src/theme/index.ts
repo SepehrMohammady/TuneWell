@@ -58,9 +58,3 @@ export const getMoodColor = (mood: string): string => {
   const moodLower = mood.toLowerCase() as keyof typeof Colors.mood;
   return Colors.mood[moodLower] || Colors.text.secondary;
 };
-
-// Helper function to get EQ band color
-export const getEQBandColor = (bandIndex: number): string => {
-  const bandKey = `band${bandIndex + 1}` as keyof typeof Colors.eq;
-  return Colors.eq[bandKey] || Colors.primary;
-};

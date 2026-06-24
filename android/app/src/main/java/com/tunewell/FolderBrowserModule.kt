@@ -1,13 +1,64 @@
 package com.tunewell
 
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
+import android.provider.Settings
 import com.facebook.react.bridge.*
 
-class FolderBrowserModule(reactContext: ReactApplicationContext) : 
+class FolderBrowserModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
     override fun getName(): String = "FolderBrowserModule"
+
+    /**
+     * Whether the app has "All files access" (MANAGE_EXTERNAL_STORAGE).
+     * Required to read raw file paths (e.g. DSD files) under scoped storage.
+     * Always true below API 30 where READ_EXTERNAL_STORAGE suffices.
+     */
+    @ReactMethod
+    fun hasAllFilesAccess(promise: Promise) {
+        try {
+            val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Environment.isExternalStorageManager()
+            } else {
+                true
+            }
+            promise.resolve(granted)
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    /**
+     * Open the system "All files access" settings page for this app.
+     */
+    @ReactMethod
+    fun requestAllFilesAccess(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val activity = reactApplicationContext.currentActivity
+                val launcher = activity ?: reactApplicationContext
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + reactApplicationContext.packageName),
+                ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                try {
+                    launcher.startActivity(intent)
+                } catch (e: Exception) {
+                    // Some OEMs don't support the per-app intent; open the general list.
+                    val fallback = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                    launcher.startActivity(fallback)
+                }
+            }
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("REQUEST_FAILED", e.message, e)
+        }
+    }
 
     /**
      * List subfolders within a SAF (Storage Access Framework) URI

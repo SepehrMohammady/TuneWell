@@ -7,7 +7,7 @@
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 import { extractMetadata, AudioMetadata } from '../native/MetadataExtractor';
-import { getAllAudioFiles, getAudioFilesInFolder, MediaStoreAudioFile } from '../native/MediaStore';
+import { getAllAudioFiles } from '../native/MediaStore';
 
 // Supported audio formats
 const AUDIO_EXTENSIONS = [
@@ -347,8 +347,9 @@ export const scanLibrary = async (
               result.folders.push(t.folder);
             }
           }
-        } catch (e) {
-          // Ignore per-folder errors in the supplemental pass
+        } catch (e: any) {
+          // Surface instead of silently swallowing (e.g. EACCES without All Files Access)
+          result.errors.push(`DSD scan failed for ${folder}: ${e?.message || e}`);
         }
       }
 
@@ -395,112 +396,7 @@ export const scanLibrary = async (
   return result;
 };
 
-/**
- * Scan using MediaStore API (recommended for Android 11+)
- * This returns content:// URIs that work with ExoPlayer
- */
-export const scanWithMediaStore = async (
-  onProgress?: (message: string, count: number) => void
-): Promise<ScanResult> => {
-  const result: ScanResult = {
-    tracks: [],
-    totalTracks: 0,
-    totalSize: 0,
-    formats: {},
-    folders: [],
-    errors: [],
-  };
-
-  if (Platform.OS !== 'android') {
-    result.errors.push('MediaStore is only available on Android');
-    return result;
-  }
-
-  onProgress?.('Querying MediaStore...', 0);
-
-  try {
-    const audioFiles = await getAllAudioFiles();
-    
-    onProgress?.(`Found ${audioFiles.length} audio files`, audioFiles.length);
-
-    for (const file of audioFiles) {
-      const track: ScannedTrack = {
-        id: `mediastore_${file.id}`,
-        uri: file.uri, // content:// URI
-        filename: file.filename,
-        path: file.path,
-        folder: file.folder,
-        extension: file.extension,
-        size: file.size,
-        modifiedAt: file.dateModified,
-        title: file.title || file.filename.replace(/\.[^/.]+$/, ''),
-        artist: file.artist || undefined,
-        album: file.album || undefined,
-        albumArtUri: file.albumArtUri,
-        duration: file.duration,
-        mimeType: file.mimeType,
-      };
-
-      result.tracks.push(track);
-
-      // Track folders
-      if (file.folder && !result.folders.includes(file.folder)) {
-        result.folders.push(file.folder);
-      }
-    }
-
-    // Calculate statistics
-    result.totalTracks = result.tracks.length;
-    result.totalSize = result.tracks.reduce((sum, track) => sum + track.size, 0);
-
-    // Count formats
-    for (const track of result.tracks) {
-      const ext = track.extension.replace('.', '').toUpperCase();
-      result.formats[ext] = (result.formats[ext] || 0) + 1;
-    }
-
-    onProgress?.(`Scan complete: ${result.totalTracks} tracks found`, result.totalTracks);
-  } catch (error: any) {
-    console.error('MediaStore scan error:', error);
-    result.errors.push(`MediaStore error: ${error.message}`);
-  }
-
-  return result;
-};
-
-/**
- * Quick scan - just count files without full metadata extraction
- */
-export const quickScan = async (
-  folders: string[]
-): Promise<{ count: number; formats: Record<string, number> }> => {
-  let count = 0;
-  const formats: Record<string, number> = {};
-  
-  for (const folder of folders) {
-    try {
-      const resolved = await resolveContentUri(folder);
-      if (resolved) {
-        // Pass false for extractMeta to skip metadata extraction for quick scan
-        const tracks = await scanDirectoryRecursive(resolved, undefined, 0, false);
-        count += tracks.length;
-        
-        for (const track of tracks) {
-          const ext = track.extension.replace('.', '').toUpperCase();
-          formats[ext] = (formats[ext] || 0) + 1;
-        }
-      }
-    } catch (error) {
-      console.log('Quick scan error:', error);
-    }
-  }
-  
-  return { count, formats };
-};
-
 export default {
   scanLibrary,
-  scanWithMediaStore,
-  quickScan,
   AUDIO_EXTENSIONS,
 };

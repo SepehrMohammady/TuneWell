@@ -2,12 +2,18 @@ package com.tunewell
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioFormat
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Base64
 import com.facebook.react.bridge.*
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class MetadataExtractorModule(reactContext: ReactApplicationContext) : 
     ReactContextBaseJavaModule(reactContext) {
@@ -100,6 +106,117 @@ class MetadataExtractorModule(reactContext: ReactApplicationContext) :
         }
     }
     
+    /**
+     * Read REAL audio format (sample rate, channels, bit depth) for one track.
+     * Accepts a content:// URI, file:// URI, or raw path. Uses MediaExtractor for
+     * container formats; falls back to parsing the WAV header (authoritative for
+     * bit depth and hi-res rates MediaExtractor may not handle). Returns zeros for
+     * fields it can't determine (callers must treat 0 as "unknown", not fake it).
+     */
+    @ReactMethod
+    fun getAudioFormat(uriOrPath: String, promise: Promise) {
+        val result = Arguments.createMap()
+        var sampleRate = 0
+        var channels = 0
+        var bitsPerSample = 0
+        var mime = ""
+
+        // 1) MediaExtractor for container formats (flac/mp3/m4a/ogg/standard wav)
+        val extractor = MediaExtractor()
+        try {
+            setDataSourceFlexible(extractor, uriOrPath)
+            for (i in 0 until extractor.trackCount) {
+                val f = extractor.getTrackFormat(i)
+                val m = f.getString(MediaFormat.KEY_MIME) ?: ""
+                if (m.startsWith("audio/")) {
+                    mime = m
+                    if (f.containsKey(MediaFormat.KEY_SAMPLE_RATE)) sampleRate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                    if (f.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                    if (f.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
+                        bitsPerSample = when (f.getInteger(MediaFormat.KEY_PCM_ENCODING)) {
+                            AudioFormat.ENCODING_PCM_8BIT -> 8
+                            AudioFormat.ENCODING_PCM_16BIT -> 16
+                            AudioFormat.ENCODING_PCM_24BIT_PACKED -> 24
+                            AudioFormat.ENCODING_PCM_32BIT, AudioFormat.ENCODING_PCM_FLOAT -> 32
+                            else -> 0
+                        }
+                    }
+                    break
+                }
+            }
+        } catch (e: Exception) {
+            // ignore — fall through to WAV header parse
+        } finally {
+            try { extractor.release() } catch (_: Exception) {}
+        }
+
+        // 2) WAV header is authoritative (covers hi-res 24/32-bit and >192k that
+        //    MediaExtractor may not surface). Parse it for .wav files.
+        if (uriOrPath.lowercase().substringBefore('?').endsWith(".wav") || mime == "audio/raw" || bitsPerSample == 0 && sampleRate == 0) {
+            try {
+                openStream(uriOrPath)?.use { stream ->
+                    val header = ByteArray(4096)
+                    val read = stream.read(header)
+                    if (read > 44) {
+                        val wav = parseWavHeader(header, read)
+                        if (wav != null) {
+                            if (wav[0] > 0) sampleRate = wav[0]
+                            if (wav[1] > 0) channels = wav[1]
+                            if (wav[2] > 0) bitsPerSample = wav[2]
+                            if (mime.isEmpty()) mime = "audio/wav"
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+
+        result.putInt("sampleRate", sampleRate)
+        result.putInt("channels", channels)
+        result.putInt("bitsPerSample", bitsPerSample)
+        result.putString("mimeType", mime)
+        promise.resolve(result)
+    }
+
+    private fun setDataSourceFlexible(extractor: MediaExtractor, uriOrPath: String) {
+        when {
+            uriOrPath.startsWith("content://") ->
+                extractor.setDataSource(reactApplicationContext, Uri.parse(uriOrPath), null)
+            uriOrPath.startsWith("file://") -> extractor.setDataSource(uriOrPath.removePrefix("file://"))
+            else -> extractor.setDataSource(uriOrPath)
+        }
+    }
+
+    private fun openStream(uriOrPath: String): InputStream? {
+        return when {
+            uriOrPath.startsWith("content://") ->
+                reactApplicationContext.contentResolver.openInputStream(Uri.parse(uriOrPath))
+            uriOrPath.startsWith("file://") -> File(uriOrPath.removePrefix("file://")).inputStream()
+            else -> File(uriOrPath).inputStream()
+        }
+    }
+
+    /** Returns [sampleRate, channels, bitsPerSample] or null if not a valid WAV. */
+    private fun parseWavHeader(buf: ByteArray, len: Int): IntArray? {
+        if (len < 44) return null
+        if (String(buf, 0, 4) != "RIFF" || String(buf, 8, 4) != "WAVE") return null
+        var off = 12
+        while (off + 8 <= len) {
+            val chunkId = String(buf, off, 4)
+            val chunkSize = ByteBuffer.wrap(buf, off + 4, 4).order(ByteOrder.LITTLE_ENDIAN).int
+            if (chunkId == "fmt ") {
+                if (off + 24 > len) return null
+                val channels = ByteBuffer.wrap(buf, off + 10, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+                val sampleRate = ByteBuffer.wrap(buf, off + 12, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                val bits = ByteBuffer.wrap(buf, off + 22, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+                return intArrayOf(sampleRate, channels, bits)
+            }
+            off += 8 + chunkSize + (chunkSize and 1)
+        }
+        return null
+    }
+
     @ReactMethod
     fun extractMetadataBatch(filePaths: ReadableArray, promise: Promise) {
         try {

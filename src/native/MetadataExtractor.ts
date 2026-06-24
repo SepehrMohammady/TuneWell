@@ -14,11 +14,36 @@ export interface AudioMetadata {
   artwork: string | null; // Base64 encoded image
 }
 
+export interface AudioFormatInfo {
+  sampleRate: number; // Hz, 0 if unknown
+  channels: number; // 0 if unknown
+  bitsPerSample: number; // 0 if unknown (e.g. encoded/lossy or undeterminable)
+  mimeType: string;
+}
+
 interface MetadataExtractorModule {
   extractMetadata(filePath: string): Promise<AudioMetadata>;
+  getAudioFormat(uriOrPath: string): Promise<AudioFormatInfo>;
 }
 
 const { MetadataExtractor } = NativeModules;
+
+/**
+ * Read the REAL audio format (sample rate, channels, bit depth) for one track.
+ * Returns zeros for fields that can't be determined — callers must treat 0 as
+ * "unknown" and not display a fabricated value.
+ */
+export async function getAudioFormat(uriOrPath: string): Promise<AudioFormatInfo | null> {
+  if (Platform.OS !== 'android' || !MetadataExtractor?.getAudioFormat) {
+    return null;
+  }
+  try {
+    return await (MetadataExtractor as MetadataExtractorModule).getAudioFormat(uriOrPath);
+  } catch (error) {
+    console.error('Failed to read audio format:', error);
+    return null;
+  }
+}
 
 /**
  * Extract metadata from an audio file using native APIs

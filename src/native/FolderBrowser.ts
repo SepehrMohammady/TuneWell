@@ -16,9 +16,42 @@ export interface SubfolderInfo {
 interface FolderBrowserModuleInterface {
   listSubfolders(folderUri: string): Promise<SubfolderInfo[]>;
   getFolderName(folderUri: string): Promise<string>;
+  hasAllFilesAccess(): Promise<boolean>;
+  requestAllFilesAccess(): Promise<boolean>;
 }
 
 const { FolderBrowserModule } = NativeModules;
+
+/**
+ * Whether the app holds "All files access" (MANAGE_EXTERNAL_STORAGE).
+ * Needed to read raw file paths (DSD and other formats MediaStore won't index)
+ * under scoped storage. Returns true on non-Android / pre-API-30.
+ */
+export async function hasAllFilesAccess(): Promise<boolean> {
+  if (Platform.OS !== 'android' || !FolderBrowserModule?.hasAllFilesAccess) {
+    return true;
+  }
+  try {
+    return await (FolderBrowserModule as FolderBrowserModuleInterface).hasAllFilesAccess();
+  } catch (error) {
+    console.error('Failed to check All Files Access:', error);
+    return false;
+  }
+}
+
+/**
+ * Open the system "All files access" settings page for this app.
+ */
+export async function requestAllFilesAccess(): Promise<void> {
+  if (Platform.OS !== 'android' || !FolderBrowserModule?.requestAllFilesAccess) {
+    return;
+  }
+  try {
+    await (FolderBrowserModule as FolderBrowserModuleInterface).requestAllFilesAccess();
+  } catch (error) {
+    console.error('Failed to open All Files Access settings:', error);
+  }
+}
 
 /**
  * List subfolders within a SAF URI

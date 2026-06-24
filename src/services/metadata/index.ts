@@ -1,7 +1,4 @@
 export {
-  isSupportedAudioFile,
-  parseAudioMetadata,
-  createTrackFromMetadata,
   formatDuration,
   formatSampleRate,
   formatBitDepth,
