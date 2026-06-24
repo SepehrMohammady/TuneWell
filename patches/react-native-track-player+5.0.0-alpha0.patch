@@ -1,0 +1,38 @@
+diff --git a/node_modules/react-native-track-player/android/build.gradle b/node_modules/react-native-track-player/android/build.gradle
+index 763583c..61b441b 100644
+--- a/node_modules/react-native-track-player/android/build.gradle
++++ b/node_modules/react-native-track-player/android/build.gradle
+@@ -94,6 +94,10 @@ dependencies {
+   implementation("androidx.media3:media3-exoplayer-smoothstreaming:1.8.0")
+   implementation("androidx.media3:media3-common:1.8.0")
+ 
++  // TuneWell: FFmpeg software decoders (ALAC, AC3, E-AC-3, DTS, TrueHD, ...) used
++  // by NextRenderersFactory in BaseAudioPlayer. Must be on this module's classpath.
++  implementation("io.github.anilbeesetti:nextlib-media3ext:1.8.0-0.9.0")
++
+   implementation "com.google.guava:guava:33.0.0-android"
+   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.8.0"
+   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
+diff --git a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/kotlinaudio/players/BaseAudioPlayer.kt b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/kotlinaudio/players/BaseAudioPlayer.kt
+index a0f995c..74deb2a 100644
+--- a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/kotlinaudio/players/BaseAudioPlayer.kt
++++ b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/kotlinaudio/players/BaseAudioPlayer.kt
+@@ -21,6 +21,7 @@ import androidx.media3.common.util.UnstableApi
+ import androidx.media3.datasource.cache.SimpleCache
+ import androidx.media3.exoplayer.DefaultRenderersFactory
+ import androidx.media3.exoplayer.ExoPlayer
++import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
+ import androidx.media3.session.legacy.RatingCompat
+ import com.doublesymmetry.kotlinaudio.event.PlayerEventHolder
+ import com.doublesymmetry.kotlinaudio.models.AudioItem
+@@ -161,7 +162,9 @@ abstract class BaseAudioPlayer internal constructor(
+         }
+         playerEventHolder.updateAudioPlayerState(AudioPlayerState.IDLE)
+ 
+-        val renderer = DefaultRenderersFactory(context)
++        // TuneWell: use NextLib's FFmpeg-backed factory so ExoPlayer can decode
++        // ALAC, AC3, E-AC-3, DTS, TrueHD, etc. (e.g. Dolby Digital Plus .m4a).
++        val renderer = NextRenderersFactory(context)
+         renderer.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+         exoPlayer = ExoPlayer
+             .Builder(context)
