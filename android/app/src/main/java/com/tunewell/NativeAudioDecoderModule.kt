@@ -560,8 +560,9 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             
             // Skip to data chunk
             inputStream.close()
-            val dataStream = openUri(uri) ?: return
+            var dataStream = openUri(uri) ?: return
             dataStream.skip(dataChunkOffset.toLong())
+            pendingSeekSeconds = -1.0
             
             // Read data chunk header
             val dataHeader = ByteArray(12)
@@ -642,7 +643,34 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         delay(100)
                         continue
                     }
-                    
+
+                    // Honor a pending seek: reposition the DSD stream (block-aligned,
+                    // since DSF interleaves L/R in blockSizePerChannel-byte blocks).
+                    val seekReq = pendingSeekSeconds
+                    if (seekReq >= 0) {
+                        pendingSeekSeconds = -1.0
+                        val frameSize = dsdBuffer.size  // one L block + one R block
+                        var targetByte = if (currentDuration > 0)
+                            ((seekReq / currentDuration) * totalDataBytes).toLong() else 0L
+                        targetByte = targetByte.coerceIn(0L, totalDataBytes)
+                        if (frameSize > 0) targetByte -= targetByte % frameSize
+                        try {
+                            dataStream.close()
+                            dataStream = openUri(uri) ?: break
+                            var toSkip = dataChunkOffset.toLong() + 12L + targetByte
+                            while (toSkip > 0) { val s = dataStream.skip(toSkip); if (s <= 0) break; toSkip -= s }
+                            totalBytesProcessed = targetByte
+                            leftSum = 0; rightSum = 0; byteCount = 0; pcmIndex = 0
+                            leftF1 = 0.0; rightF1 = 0.0; leftF2 = 0.0; rightF2 = 0.0; leftF3 = 0.0; rightF3 = 0.0
+                            leftF4 = 0.0; rightF4 = 0.0; leftF5 = 0.0; rightF5 = 0.0; leftF6 = 0.0; rightF6 = 0.0
+                            audioTrack?.let { try { it.pause(); it.flush(); if (!isPaused) it.play() } catch (_: Exception) {} }
+                            currentPosition = if (totalDataBytes > 0) (targetByte.toDouble() / totalDataBytes.toDouble()) * currentDuration else 0.0
+                        } catch (e: Exception) {
+                            Log.e(TAG, "DSF seek failed: ${e.message}")
+                        }
+                        continue
+                    }
+
                     totalBytesProcessed += bytesRead
                     // Update position based on bytes processed
                     if (totalDataBytes > 0) {
@@ -863,7 +891,14 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
             }
             
             Log.d(TAG, "DFF: $channelCount channels, ${sampleRate}Hz DSD")
-            
+
+            // Duration: DSD data bytes / (bytes-per-second). sampleRate is DSD bits/s
+            // per channel, so total bytes/s = sampleRate/8 * channelCount.
+            currentDuration = if (sampleRate > 0 && channelCount > 0)
+                dataSize.toDouble() / (sampleRate.toDouble() / 8.0 * channelCount.toDouble()) else 0.0
+            currentPosition = 0.0
+            Log.d(TAG, "DFF duration: $currentDuration seconds")
+
             // Setup AudioTrack for PCM output
             val outputSampleRate = PCM_SAMPLE_RATE_44100
             val channelConfig = if (channelCount == 1) 
@@ -900,11 +935,14 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                 .build()
             
             audioTrack?.play()
-            
+            sendStateEvent("playing")
+            startProgressReporting()
+
             // Re-open file and skip to data
             inputStream.close()
-            val dataStream = openUri(uri) ?: return
+            var dataStream = openUri(uri) ?: return
             dataStream.skip(dataOffset)
+            pendingSeekSeconds = -1.0
             
             // Calculate bytes per PCM sample (DFF uses interleaved channel data)
             val bytesPerPcmSample = sampleRate / outputSampleRate / 8  // 8 bits per byte
@@ -939,9 +977,40 @@ class NativeAudioDecoderModule(private val reactContext: ReactApplicationContext
                         delay(100)
                         continue
                     }
-                    
+
+                    // Honor a pending seek: reposition the DSD stream (DFF interleaves
+                    // L/R per byte, so align to channelCount).
+                    val seekReq = pendingSeekSeconds
+                    if (seekReq >= 0) {
+                        pendingSeekSeconds = -1.0
+                        val frameSize = if (channelCount > 0) channelCount else 1
+                        var targetByte = if (currentDuration > 0)
+                            ((seekReq / currentDuration) * dataSize).toLong() else 0L
+                        targetByte = targetByte.coerceIn(0L, dataSize)
+                        targetByte -= targetByte % frameSize
+                        try {
+                            dataStream.close()
+                            dataStream = openUri(uri) ?: break
+                            var toSkip = dataOffset + targetByte
+                            while (toSkip > 0) { val s = dataStream.skip(toSkip); if (s <= 0) break; toSkip -= s }
+                            totalRead = targetByte
+                            leftSum = 0; rightSum = 0; byteCount = 0; pcmIndex = 0
+                            leftF1 = 0.0; rightF1 = 0.0; leftF2 = 0.0; rightF2 = 0.0; leftF3 = 0.0; rightF3 = 0.0
+                            leftF4 = 0.0; rightF4 = 0.0; leftF5 = 0.0; rightF5 = 0.0; leftF6 = 0.0; rightF6 = 0.0
+                            audioTrack?.let { try { it.pause(); it.flush(); if (!isPaused) it.play() } catch (_: Exception) {} }
+                            currentPosition = if (dataSize > 0) (targetByte.toDouble() / dataSize.toDouble()) * currentDuration else 0.0
+                        } catch (e: Exception) {
+                            Log.e(TAG, "DFF seek failed: ${e.message}")
+                        }
+                        continue
+                    }
+
                     totalRead += bytesRead
-                    
+                    // Update position based on bytes processed
+                    if (dataSize > 0) {
+                        currentPosition = (totalRead.toDouble() / dataSize.toDouble()) * currentDuration
+                    }
+
                     // DFF uses interleaved channel data: L R L R L R...
                     // and MSB-first bit order (opposite of DSF)
                     for (byteIdx in 0 until bytesRead step channelCount) {
